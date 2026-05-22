@@ -62,6 +62,13 @@
       />
     </template>
 
+    <!-- THE WIRE — daily news carousel below the hero. Magazine's
+         daily-cadence section: yesterday's matchup swings, streak
+         events, cadence beats, plus honest "coming soon" placeholders
+         for player + transaction stories until those data pipelines
+         ship in a future tier. -->
+    <TheWire :stories="selectedStories" :data="issueData" />
+
     <!-- ─────────────────────────────────────────────────────────────
          1. LEGACY HERO — kept for fallback only. The composition
          pipeline above emits its own hero (faceoff/solo/quiet/etc)
@@ -834,6 +841,7 @@ import HeroFaceoff from '@/components/issue/HeroFaceoff.vue'
 import MatchupOfWeek from '@/components/issue/MatchupOfWeek.vue'
 import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
+import TheWire from '@/components/issue/TheWire.vue'
 import { useShareStory } from '@/composables/useShareStory'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
@@ -1068,7 +1076,11 @@ const liveError = ref<string | null>(null)
    gradually replaces them as the rendered sections grow more
    comprehensive in future tiers.
 ───────────────────────────────────────────────────────────────── */
-const issueSections = computed<IssueSection[]>(() => {
+/** Raw selected stories — kept around because The Wire needs to
+ *  pick its OWN subset (daily-cadence stories that don't make the
+ *  composition's hero/supporting slots) and rendering with the same
+ *  selection output keeps everything synchronized. */
+const selectedStories = computed(() => {
   const source = liveData.value ?? categoriesFixtureToLeagueData()
   const context = {
     currentWeek: source.currentWeek,
@@ -1086,8 +1098,27 @@ const issueSections = computed<IssueSection[]>(() => {
       : undefined,
   }
   const candidates = detectAll(source, context)
-  const stories = selectStoriesForIssue(candidates, context)
-  return composeIssue(stories, context)
+  return selectStoriesForIssue(candidates, context)
+})
+
+const issueSections = computed<IssueSection[]>(() => {
+  const source = liveData.value ?? categoriesFixtureToLeagueData()
+  const context = {
+    currentWeek: source.currentWeek,
+    seasonStage: deriveSeasonStage(
+      source.currentWeek,
+      source.regularSeasonEndWeek,
+    ),
+    issueDate: new Date(),
+    viewer: source.teams.find((t) => t.isMyTeam)
+      ? {
+          userId: 'viewer',
+          myTeamId: source.teams.find((t) => t.isMyTeam)?.id,
+          myDivisionId: source.teams.find((t) => t.isMyTeam)?.divisionId,
+        }
+      : undefined,
+  }
+  return composeIssue(selectedStories.value, context)
 })
 
 /** Section types the new pipeline owns (rendered via the dynamic

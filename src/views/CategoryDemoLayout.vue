@@ -61,6 +61,11 @@
       </div>
     </nav>
 
+    <!-- Magazine masthead — fixed demo issue. Same shape as the live
+         layout, just driven by the fixture's week + season since the
+         demo doesn't have a real league row. -->
+    <IssueMasthead :issue="demoIssue" />
+
     <main class="demo-main">
       <router-view @open-signup="$emit('open-signup')" />
     </main>
@@ -70,8 +75,24 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import TLBFooter from '@/components/TLBFooter.vue'
+import IssueMasthead from '@/components/issue/IssueMasthead.vue'
+import { currentWeek as fixtureWeek } from '@/fixtures/categoriesLeague'
+
 defineEmits<{ (e: 'open-signup'): void }>()
+
+/** Demo issue meta — pulled from the fixture so the masthead reads
+ *  consistently with the rest of the demo content. */
+const demoIssue = computed(() => {
+  const year = new Date().getFullYear()
+  return {
+    volume: Math.max(1, year - 2025),
+    issueNumber: fixtureWeek,
+    weekNumber: fixtureWeek,
+    year,
+  }
+})
 </script>
 
 <style scoped>

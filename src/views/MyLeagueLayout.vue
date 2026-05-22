@@ -114,6 +114,16 @@
       </div>
     </nav>
 
+    <!-- Magazine masthead — sits between the league chrome and the
+         issue content. Establishes "you're reading this week's issue."
+         Only renders when we have league data to derive the issue
+         meta from. -->
+    <IssueMasthead
+      v-if="mastheadIssue"
+      :issue="mastheadIssue"
+      :last-updated="mastheadUpdatedAt"
+    />
+
     <main class="league-main">
       <router-view @open-signup="$emit('open-signup')" />
     </main>
@@ -127,6 +137,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
+import IssueMasthead from '@/components/issue/IssueMasthead.vue'
 import TLBFooter from '@/components/TLBFooter.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
@@ -147,6 +158,46 @@ const routeLeagueId = computed(
 const activeLeague = computed(() =>
   leaguesStore.leagues.find((l) => l.id === routeLeagueId.value) ?? null,
 )
+
+/* ─────────────────────────────────────────────────────────────────
+   Masthead issue metadata — derived from the active league row.
+   This renders BEFORE the view runs its adapter fetch, so we work
+   from the cheap fields on the league row (season + settings) rather
+   than the full CategoryLeagueData. View-level masthead overrides
+   (with finer week math) are a future polish.
+───────────────────────────────────────────────────────────────── */
+const mastheadIssue = computed(() => {
+  const league = activeLeague.value
+  if (!league) return null
+  const year = parseSeasonYear(league.season)
+  const settings = (league.settings ?? {}) as Record<string, unknown>
+  const weekNumber = Math.max(1, Number(settings.current_week ?? 1) || 1)
+  return {
+    volume: Math.max(1, year - 2025),
+    issueNumber: weekNumber,
+    weekNumber,
+    year,
+  }
+})
+
+/** Use the league row's `last_synced_at` if present so the
+ *  "UPDATED X AGO" timestamp reflects real freshness; otherwise
+ *  fall back to now (every visit reads as just-published). */
+const mastheadUpdatedAt = computed(() => {
+  const ts = activeLeague.value?.last_synced_at
+  if (!ts) return new Date()
+  const parsed = new Date(ts)
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+})
+
+function parseSeasonYear(season: unknown): number {
+  if (typeof season === 'number') return season
+  if (typeof season === 'string') {
+    const n = parseInt(season, 10)
+    if (!Number.isNaN(n)) return n
+  }
+  return new Date().getFullYear()
+}
 
 onMounted(async () => {
   // Pull the connected-leagues list once the layout mounts. If the

@@ -11,11 +11,16 @@
       <p class="hero-quiet-eyebrow">
         <span class="hero-quiet-eyebrow-bar" aria-hidden="true"></span>
         Quiet week
+        <span class="issue-cadence issue-cadence-teal" aria-label="Updates weekly">WEEKLY</span>
       </p>
       <h1 class="hero-quiet-headline" :id="`hero-quiet-headline-${componentId}`">
         {{ headline }}
       </h1>
       <p class="hero-quiet-body">{{ body }}</p>
+      <p v-if="byline" class="issue-byline">
+        <span class="issue-byline-tag">THE BEAT</span>
+        <span>{{ byline }}</span>
+      </p>
     </div>
 
     <aside v-if="topTeam" class="hero-quiet-card">
@@ -114,6 +119,17 @@ const body = computed(() => {
     return `The lead stays at the top. No big shake-ups in the standings this week.`
   }
   return 'No new throne. No collapses. Sometimes the week passes without one.'
+})
+
+const byline = computed(() => {
+  if (!props.story) return ''
+  // Freshness is 0-1; convert to a rough "X hours ago" feel.
+  const minutesAgo = Math.max(5, Math.round((1 - props.story.freshness) * 60 * 6))
+  if (minutesAgo < 60) return `FILED · ${minutesAgo} MIN AGO`
+  const hr = Math.round(minutesAgo / 60)
+  if (hr < 24) return `FILED · ${hr} HR AGO`
+  const d = Math.round(hr / 24)
+  return `FILED · ${d} DAY${d === 1 ? '' : 'S'} AGO`
 })
 </script>
 
@@ -278,4 +294,37 @@ const body = computed(() => {
   }
 }
 .issue-section-share:active { transform: scale(0.97); }
+
+.issue-cadence {
+  display: inline-block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+.issue-cadence-teal { background: oklch(0.72 0.18 195 / 0.14); color: oklch(0.72 0.18 195); }
+.issue-cadence-gold { background: oklch(0.78 0.18 92 / 0.14); color: oklch(0.78 0.18 92); }
+.issue-cadence-up   { background: oklch(0.74 0.18 145 / 0.14); color: oklch(0.74 0.18 145); }
+
+.issue-byline {
+  margin: 14px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.45 0.010 90);
+}
+.issue-byline-tag {
+  padding: 2px 6px;
+  background: oklch(0.20 0.015 90);
+  border-radius: 4px;
+  color: oklch(0.78 0.008 90);
+}
 </style>

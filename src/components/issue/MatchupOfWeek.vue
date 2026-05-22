@@ -13,8 +13,13 @@
       <p class="mow-eyebrow">
         <span class="mow-eyebrow-bar" aria-hidden="true"></span>
         {{ eyebrow }}
+        <span class="issue-cadence issue-cadence-teal" aria-label="Updates weekly">WEEKLY</span>
       </p>
       <h2 class="mow-headline" :id="`mow-headline-${componentId}`">{{ headline }}</h2>
+      <p class="issue-byline">
+        <span class="issue-byline-tag">THE BEAT</span>
+        <span>{{ byline }}</span>
+      </p>
     </header>
 
     <div class="mow-pair" :aria-label="`${home.name} versus ${away.name}`">
@@ -228,6 +233,17 @@ const stakes = computed(() => {
       return 'A matchup worth the click this week.'
   }
 })
+
+const byline = computed(() => {
+  if (!props.story) return ''
+  // Freshness is 0-1; convert to a rough "X hours ago" feel.
+  const minutesAgo = Math.max(5, Math.round((1 - props.story.freshness) * 60 * 6))
+  if (minutesAgo < 60) return `FILED · ${minutesAgo} MIN AGO`
+  const hr = Math.round(minutesAgo / 60)
+  if (hr < 24) return `FILED · ${hr} HR AGO`
+  const d = Math.round(hr / 24)
+  return `FILED · ${d} DAY${d === 1 ? '' : 'S'} AGO`
+})
 </script>
 
 <style scoped>
@@ -424,4 +440,37 @@ const stakes = computed(() => {
   }
 }
 .issue-section-share:active { transform: scale(0.97); }
+
+.issue-cadence {
+  display: inline-block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+.issue-cadence-teal { background: oklch(0.72 0.18 195 / 0.14); color: oklch(0.72 0.18 195); }
+.issue-cadence-gold { background: oklch(0.78 0.18 92 / 0.14); color: oklch(0.78 0.18 92); }
+.issue-cadence-up   { background: oklch(0.74 0.18 145 / 0.14); color: oklch(0.74 0.18 145); }
+
+.issue-byline {
+  margin: 14px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.45 0.010 90);
+}
+.issue-byline-tag {
+  padding: 2px 6px;
+  background: oklch(0.20 0.015 90);
+  border-radius: 4px;
+  color: oklch(0.78 0.008 90);
+}
 </style>
