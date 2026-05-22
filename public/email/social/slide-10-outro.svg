@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1350" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <radialGradient id="glow2" cx="50%" cy="28%" r="65%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.16"/>
+      <stop offset="55%" stop-color="#0a0c14" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1080" height="1350" fill="#0a0c14"/>
+  <rect width="1080" height="1350" fill="url(#glow2)"/>
+
+  <!-- Inner border frame -->
+  <rect x="40" y="40" width="1000" height="1270" fill="none" stroke="#1e2130" stroke-width="2" rx="20"/>
+
+  <!-- Top handle -->
+  <text x="540" y="140" text-anchor="middle" fill="#4b5563" font-size="28" font-weight="700" letter-spacing="6">@UFDASHBOARD</text>
+
+  <!-- Eyebrow stamp -->
+  <g transform="translate(540, 350)">
+    <rect x="-210" y="-58" width="420" height="100" fill="none" stroke="#22c55e" stroke-width="4" rx="12"/>
+    <text x="0" y="16" text-anchor="middle" fill="#22c55e" font-size="62" font-weight="900" letter-spacing="10">DISAGREE?</text>
+  </g>
+
+  <!-- Headline -->
+  <text x="540" y="540" text-anchor="middle" fill="#ffffff" font-size="92" font-weight="900" letter-spacing="-2">Tell me in</text>
+  <text x="540" y="660" text-anchor="middle" fill="#ffffff" font-size="92" font-weight="900" letter-spacing="-2">the comments.</text>
+
+  <!-- Sub -->
+  <text x="540" y="780" text-anchor="middle" fill="#9ca3af" font-size="44" font-weight="600">The Braves still aren&#x2019;t moving.</text>
+
+  <!-- Divider -->
+  <line x1="450" y1="870" x2="630" y2="870" stroke="#22c55e" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- CTA -->
+  <text x="540" y="1010" text-anchor="middle" fill="#ffffff" font-size="46" font-weight="800">Follow @ufdashboard</text>
+  <text x="540" y="1085" text-anchor="middle" fill="#9ca3af" font-size="30" font-weight="500">for sports takes that don&#x2019;t pretend</text>
+  <text x="540" y="1130" text-anchor="middle" fill="#9ca3af" font-size="30" font-weight="500">every option is a winner.</text>
+
+  <!-- Page indicator -->
+  <text x="80" y="1280" fill="#374151" font-size="24" font-weight="700">10 / 10</text>
+</svg>

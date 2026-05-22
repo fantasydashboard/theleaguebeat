@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# Public surfaces — crawlable
+Allow: /signup
+Allow: /privacy
+Allow: /demo-categories
+Allow: /demo-categories/connect
+
+# Authenticated app routes — keep out of search
+Disallow: /leagues/
+Disallow: /settings
+Disallow: /auth/
+Disallow: /internal/
+
+Sitemap: https://theleaguebeat.com/sitemap.xml

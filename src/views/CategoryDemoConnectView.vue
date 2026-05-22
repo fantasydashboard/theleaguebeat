@@ -1,0 +1,1172 @@
+<template>
+  <div class="connect">
+    <!-- ─── Header ─────────────────────────────────────────────── -->
+    <section class="connect-head">
+      <p class="connect-eyebrow">
+        <span class="connect-eyebrow-bar" aria-hidden="true"></span>
+        Connect your league
+      </p>
+      <h1 class="connect-headline">Which sport?</h1>
+      <p class="connect-deck">
+        Pick a sport, then connect your league. Editorial recaps for
+        every week of the season.
+      </p>
+    </section>
+
+    <!-- ─── Sport grid (2x2) ───────────────────────────────────── -->
+    <section class="sport-grid" aria-label="Choose a sport">
+      <button
+        type="button"
+        class="sport-card sport-card-active"
+        :class="{ 'sport-card-selected': selectedSport === 'baseball' }"
+        :aria-pressed="selectedSport === 'baseball'"
+        @click="pickSport('baseball')"
+      >
+        <span class="sport-card-art" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M6.3 6.3c2.4 1 4.2 2.8 5.2 5.2"/>
+            <path d="M17.7 17.7c-2.4-1-4.2-2.8-5.2-5.2"/>
+          </svg>
+        </span>
+        <span class="sport-card-name">Baseball</span>
+        <span class="sport-card-pill sport-card-pill-available">Available</span>
+      </button>
+
+      <div class="sport-card sport-card-inactive" aria-disabled="true">
+        <span class="sport-card-art" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3c-3.6 1.8-6 5.5-6 9s2.4 7.2 6 9c3.6-1.8 6-5.5 6-9s-2.4-7.2-6-9z"/>
+            <path d="M12 3v18"/>
+            <path d="M9 7l6 10"/>
+          </svg>
+        </span>
+        <span class="sport-card-name">Football</span>
+        <span class="sport-card-pill sport-card-pill-soon">Coming soon</span>
+      </div>
+
+      <div class="sport-card sport-card-inactive" aria-disabled="true">
+        <span class="sport-card-art" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M3 12h18"/>
+            <path d="M12 3a13 13 0 0 1 0 18"/>
+            <path d="M12 3a13 13 0 0 0 0 18"/>
+          </svg>
+        </span>
+        <span class="sport-card-name">Basketball</span>
+        <span class="sport-card-pill sport-card-pill-soon">Coming soon</span>
+      </div>
+
+      <div class="sport-card sport-card-inactive" aria-disabled="true">
+        <span class="sport-card-art" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3.5"/>
+            <line x1="3" y1="12" x2="8.5" y2="12"/>
+            <line x1="15.5" y1="12" x2="21" y2="12"/>
+          </svg>
+        </span>
+        <span class="sport-card-name">Hockey</span>
+        <span class="sport-card-pill sport-card-pill-soon">Coming soon</span>
+      </div>
+    </section>
+
+    <!-- ─── Platform sub-picker (revealed after sport selected) ─── -->
+    <section
+      v-if="selectedSport === 'baseball'"
+      class="platform-section"
+      aria-label="Choose a platform"
+    >
+      <p class="connect-eyebrow connect-eyebrow-step">
+        <span class="connect-eyebrow-bar" aria-hidden="true"></span>
+        Platform
+      </p>
+      <div class="platform-grid">
+        <button
+          type="button"
+          class="platform-card platform-card-active"
+          :class="{ 'platform-card-selected': selectedPlatform === 'sleeper' }"
+          :aria-pressed="selectedPlatform === 'sleeper'"
+          @click="pickPlatform('sleeper')"
+        >
+          <span class="platform-card-name">Sleeper</span>
+          <span class="platform-card-pill platform-card-pill-available">Available</span>
+        </button>
+        <button
+          type="button"
+          class="platform-card platform-card-active"
+          :class="{ 'platform-card-selected': selectedPlatform === 'yahoo' }"
+          :aria-pressed="selectedPlatform === 'yahoo'"
+          @click="pickPlatform('yahoo')"
+        >
+          <span class="platform-card-name">Yahoo</span>
+          <span class="platform-card-pill platform-card-pill-available">Available</span>
+        </button>
+        <button
+          type="button"
+          class="platform-card platform-card-active"
+          :class="{ 'platform-card-selected': selectedPlatform === 'espn' }"
+          :aria-pressed="selectedPlatform === 'espn'"
+          @click="pickPlatform('espn')"
+        >
+          <span class="platform-card-name">ESPN</span>
+          <span class="platform-card-pill platform-card-pill-available">Available</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─── League ID form (Sleeper) ───────────────────────────── -->
+    <section
+      v-if="selectedSport === 'baseball' && selectedPlatform === 'sleeper'"
+      class="form-section"
+    >
+      <form class="connect-form" @submit.prevent="onSubmit">
+        <label class="form-label" for="league-id-input">
+          Paste your Sleeper baseball league ID
+        </label>
+        <input
+          id="league-id-input"
+          v-model="leagueIdInput"
+          type="text"
+          class="form-input"
+          autocomplete="off"
+          spellcheck="false"
+          inputmode="numeric"
+          placeholder="e.g. 1234567890123456789"
+          required
+        />
+        <p class="form-help">
+          Find it in your Sleeper league URL:
+          <code>sleeper.app/leagues/<span class="form-help-em">[ID]</span></code>
+        </p>
+        <button
+          type="submit"
+          class="form-submit"
+          :disabled="!leagueIdInput.trim()"
+        >
+          Connect
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </form>
+    </section>
+
+    <!-- ─── Yahoo flow ─────────────────────────────────────────── -->
+    <section
+      v-if="selectedSport === 'baseball' && selectedPlatform === 'yahoo'"
+      class="form-section"
+    >
+      <!-- Signin gate: Yahoo connections persist to the user's UFD
+           account, so we need the user signed in before we can wire
+           up the OAuth flow. Shown only when the user is anonymous. -->
+      <div v-if="!authStore.isAuthenticated" class="signin-gate">
+        <p class="signin-gate-eyebrow">
+          <span class="signin-gate-eyebrow-bar" aria-hidden="true"></span>
+          Almost there
+        </p>
+        <h2 class="signin-gate-headline">Sign into UFD to connect Yahoo.</h2>
+        <p class="signin-gate-body">
+          Your Yahoo connection stays linked to your UFD account so you
+          don't have to reconnect every visit.
+        </p>
+        <button
+          type="button"
+          class="form-submit"
+          @click="openSignup"
+        >
+          Sign in
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+
+      <div v-else class="connect-form">
+        <!-- Loading state -->
+        <p v-if="yahooLoading" class="form-help">Loading your Yahoo leagues…</p>
+
+        <!-- Authenticated + leagues found -->
+        <template v-else-if="yahooConnected && yahooLeagues.length > 0">
+          <label class="form-label" for="yahoo-league-select">
+            Pick a Yahoo baseball league
+          </label>
+          <select
+            id="yahoo-league-select"
+            v-model="selectedYahooLeagueKey"
+            class="form-input"
+          >
+            <option value="" disabled>Select a league…</option>
+            <option
+              v-for="league in yahooLeagues"
+              :key="league.league_key"
+              :value="league.league_key"
+            >
+              {{ league.name }} ({{ league.season }})
+            </option>
+          </select>
+          <p class="form-help">
+            Only H2H category baseball leagues are fully supported right
+            now. Other formats may render with limited data.
+          </p>
+          <button
+            type="button"
+            class="form-submit"
+            :disabled="!selectedYahooLeagueKey"
+            @click="onYahooSubmit"
+          >
+            Use this league
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </template>
+
+        <!-- Authenticated but no leagues found -->
+        <template v-else-if="yahooConnected && !yahooLoading">
+          <label class="form-label">No Yahoo baseball leagues found</label>
+          <p class="form-help">
+            We couldn't find any Yahoo baseball leagues on your account.
+            Double-check that the Yahoo account you signed in with owns
+            an MLB fantasy league this season.
+          </p>
+          <p v-if="yahooError" class="form-help" style="color: var(--accent-secondary);">
+            {{ yahooError }}
+          </p>
+        </template>
+
+        <!-- Not authenticated -->
+        <template v-else>
+          <label class="form-label">Sign in with Yahoo</label>
+          <p class="form-help">
+            Connect your Yahoo account once and we'll pull your league's
+            standings, matchups, and categories automatically.
+          </p>
+          <p v-if="yahooError" class="form-help" style="color: var(--accent-secondary);">
+            {{ yahooError }}
+          </p>
+          <button
+            type="button"
+            class="form-submit"
+            @click="connectYahoo"
+          >
+            Sign in with Yahoo
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </template>
+      </div>
+    </section>
+
+    <!-- ─── ESPN flow ──────────────────────────────────────────── -->
+    <section
+      v-if="selectedSport === 'baseball' && selectedPlatform === 'espn'"
+      class="form-section"
+    >
+      <!-- Signin gate: ESPN credentials persist to the user's UFD
+           account too. Without an account, the manual cookie / extension
+           pull paths would silently lose state next visit. -->
+      <div v-if="!authStore.isAuthenticated" class="signin-gate">
+        <p class="signin-gate-eyebrow">
+          <span class="signin-gate-eyebrow-bar" aria-hidden="true"></span>
+          Almost there
+        </p>
+        <h2 class="signin-gate-headline">Sign into UFD to connect ESPN.</h2>
+        <p class="signin-gate-body">
+          Your ESPN connection stays linked to your UFD account so you
+          don't have to reconnect every visit.
+        </p>
+        <button
+          type="button"
+          class="form-submit"
+          @click="openSignup"
+        >
+          Sign in
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+
+      <form v-else class="connect-form" @submit.prevent="onEspnSubmit">
+        <!-- Credential status pill -->
+        <div class="espn-status">
+          <span
+            v-if="espnCredsStatus === 'detected'"
+            class="espn-status-pill espn-status-pill-ok"
+          >
+            <span class="espn-status-dot" aria-hidden="true"></span>
+            Chrome extension detected
+          </span>
+          <span
+            v-else-if="espnCredsStatus === 'stored'"
+            class="espn-status-pill espn-status-pill-ok"
+          >
+            <span class="espn-status-dot" aria-hidden="true"></span>
+            ESPN cookies saved
+          </span>
+          <span
+            v-else-if="espnCredsStatus === 'checking'"
+            class="espn-status-pill espn-status-pill-mute"
+          >
+            Checking for credentials…
+          </span>
+          <span v-else class="espn-status-pill espn-status-pill-warn">
+            <a
+              :href="extensionUrl"
+              target="_blank"
+              rel="noopener"
+              class="espn-status-link"
+            >
+              Install UFD Chrome extension
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7 17L17 7M9 7h8v8"/>
+              </svg>
+            </a>
+            to fetch your league
+          </span>
+        </div>
+
+        <label class="form-label" for="espn-league-id-input">
+          Paste your ESPN baseball league ID
+        </label>
+        <input
+          id="espn-league-id-input"
+          v-model="espnLeagueIdInput"
+          type="text"
+          class="form-input"
+          autocomplete="off"
+          spellcheck="false"
+          inputmode="numeric"
+          placeholder="e.g. 123456"
+          required
+        />
+        <p class="form-help">
+          Find it in your ESPN league URL:
+          <code>fantasy.espn.com/baseball/league?leagueId=<span class="form-help-em">[ID]</span></code>
+        </p>
+
+        <!-- Advanced: manual cookie entry (collapsed by default) -->
+        <details class="espn-advanced">
+          <summary class="espn-advanced-summary">
+            Advanced: paste cookies manually
+          </summary>
+          <div class="espn-advanced-body">
+            <label class="form-label form-label-sub" for="espn-s2-input">
+              espn_s2
+            </label>
+            <input
+              id="espn-s2-input"
+              v-model="manualEspnS2"
+              type="text"
+              class="form-input form-input-mono"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="AEA…"
+            />
+            <label class="form-label form-label-sub" for="espn-swid-input">
+              SWID
+            </label>
+            <input
+              id="espn-swid-input"
+              v-model="manualSwid"
+              type="text"
+              class="form-input form-input-mono"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"
+            />
+            <p class="form-help">
+              Find these in your browser's cookies for
+              <code>espn.com</code> while signed in to ESPN Fantasy.
+            </p>
+          </div>
+        </details>
+
+        <p v-if="espnError" class="form-error">{{ espnError }}</p>
+
+        <button
+          type="submit"
+          class="form-submit"
+          :disabled="!canSubmitEspn || espnBusy"
+        >
+          {{ espnBusy ? 'Connecting…' : 'Connect' }}
+          <svg v-if="!espnBusy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </form>
+    </section>
+
+    <!-- ─── Quiet back-to-demo escape hatch ────────────────────── -->
+    <p class="connect-escape">
+      <router-link to="/demo-categories/home" class="connect-escape-link">
+        or browse the demo
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </router-link>
+    </p>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { usePlatformsStore } from '@/stores/platforms'
+import { useLeaguesStore } from '@/stores/leaguesNew'
+import { yahooService } from '@/services/yahoo'
+import {
+  isExtensionInstalled,
+  getEspnCookiesFromExtension,
+  getExtensionStoreUrl,
+} from '@/services/espnExtension'
+
+const router = useRouter()
+const authStore = useAuthStore()
+const platformsStore = usePlatformsStore()
+
+// Bubbles to App.vue, which owns the AuthModal. The demo layout
+// already forwards `open-signup` from its child router-view.
+const emit = defineEmits<{ (e: 'open-signup'): void }>()
+
+function openSignup(): void {
+  emit('open-signup')
+}
+
+type Sport = 'baseball' | 'football' | 'basketball' | 'hockey'
+type Platform = 'sleeper' | 'yahoo' | 'espn'
+
+const selectedSport = ref<Sport | null>(null)
+const selectedPlatform = ref<Platform | null>(null)
+const leagueIdInput = ref('')
+
+// ─── Yahoo state ────────────────────────────────────────────────
+interface YahooLeagueOption {
+  league_key: string
+  name: string
+  season: string
+  scoring_type: string
+}
+const yahooConnected = ref(false)
+const yahooLoading = ref(false)
+const yahooError = ref<string | null>(null)
+const yahooLeagues = ref<YahooLeagueOption[]>([])
+const selectedYahooLeagueKey = ref('')
+
+// ─── ESPN state ─────────────────────────────────────────────────
+type EspnCredsStatus = 'checking' | 'detected' | 'stored' | 'missing'
+const espnCredsStatus = ref<EspnCredsStatus>('checking')
+const espnLeagueIdInput = ref('')
+const manualEspnS2 = ref('')
+const manualSwid = ref('')
+const espnError = ref<string | null>(null)
+const espnBusy = ref(false)
+const extensionUrl = getExtensionStoreUrl()
+
+const canSubmitEspn = computed(() => {
+  if (!espnLeagueIdInput.value.trim()) return false
+  if (espnCredsStatus.value === 'detected' || espnCredsStatus.value === 'stored') return true
+  return !!(manualEspnS2.value.trim() && manualSwid.value.trim())
+})
+
+function pickSport(sport: Sport): void {
+  selectedSport.value = sport
+  // Auto-select Sleeper since it's the default; user can switch to Yahoo or ESPN.
+  selectedPlatform.value = 'sleeper'
+}
+
+function pickPlatform(platform: Platform): void {
+  selectedPlatform.value = platform
+  if (platform === 'yahoo') {
+    void initializeYahoo()
+  } else if (platform === 'espn') {
+    espnError.value = null
+    void refreshEspnCredsStatus()
+  }
+}
+
+/**
+ * Probe for ESPN credentials in order of preference:
+ *   1) localStorage / Supabase (already-stored cookies)
+ *   2) Chrome extension (live cookie pull)
+ * Updates `espnCredsStatus` so the pill reflects reality.
+ */
+async function refreshEspnCredsStatus(): Promise<void> {
+  espnCredsStatus.value = 'checking'
+  const stored = platformsStore.getEspnCredentials()
+  if (stored?.espn_s2 && stored?.swid) {
+    espnCredsStatus.value = 'stored'
+    return
+  }
+  try {
+    const installed = await isExtensionInstalled()
+    if (installed) {
+      const cookies = await getEspnCookiesFromExtension()
+      if (cookies.espn_s2 && cookies.swid) {
+        espnCredsStatus.value = 'detected'
+        return
+      }
+    }
+  } catch {
+    // ignore — fall through to missing
+  }
+  espnCredsStatus.value = 'missing'
+}
+
+onMounted(() => {
+  // Pre-warm ESPN cred status so the pill is correct the moment the
+  // user picks the platform. Cheap — short-circuits in non-Chromium.
+  void refreshEspnCredsStatus()
+})
+
+async function onSubmit(): Promise<void> {
+  const id = leagueIdInput.value.trim()
+  if (!id || selectedPlatform.value !== 'sleeper') return
+  // Persist the connection so it appears in the switcher across
+  // sessions, then route to the live-league URL by Supabase UUID.
+  // The fetch is just to grab the league's display name + size from
+  // the Sleeper API — best-effort, the row save tolerates failures.
+  let leagueRowId: string | undefined
+  if (authStore.isAuthenticated) {
+    try {
+      const meta = await fetch(`https://api.sleeper.app/v1/league/${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+      const result = await platformsStore.syncSleeperLeague(
+        {
+          league_id: id,
+          name: meta?.name ?? `Sleeper League ${id}`,
+          season: String(meta?.season ?? new Date().getFullYear()),
+          total_rosters: meta?.total_rosters,
+        },
+        'baseball',
+      )
+      if (result.success) leagueRowId = result.leagueRowId
+    } catch (err) {
+      console.warn('[CategoryDemoConnect] Sleeper persist failed:', err)
+    }
+  }
+  if (leagueRowId) {
+    router.push(`/leagues/${leagueRowId}/home`)
+  } else {
+    // Anonymous user or save failed — fall back to legacy query-param
+    // route so the demo still works without the persisted record.
+    router.push({
+      path: '/demo-categories/home',
+      query: { leagueId: id, platform: 'sleeper' },
+    })
+  }
+}
+
+/**
+ * Check the user's Yahoo connection state and, if connected, fetch
+ * their baseball leagues. The check uses `platformsStore` (loaded
+ * from `connected_platforms` in Supabase on app init); if the user
+ * isn't signed in to the app at all, we fall back to the "Sign in
+ * with Yahoo" CTA which will surface the auth flow.
+ */
+async function initializeYahoo(): Promise<void> {
+  yahooError.value = null
+
+  // Refresh platforms store if it's empty but user is authenticated
+  // (handles direct-link visits where the store wasn't pre-populated).
+  if (
+    authStore.isAuthenticated &&
+    platformsStore.connectedPlatforms.length === 0
+  ) {
+    try {
+      await platformsStore.fetchConnectedPlatforms()
+    } catch (err) {
+      console.warn('[CategoryDemoConnect] failed to refresh platforms:', err)
+    }
+  }
+
+  yahooConnected.value = platformsStore.isYahooConnected
+  if (!yahooConnected.value) return
+
+  yahooLoading.value = true
+  try {
+    if (!authStore.user?.id) {
+      throw new Error('Please sign in to load your Yahoo leagues.')
+    }
+    const initialized = await yahooService.initialize(authStore.user.id)
+    if (!initialized) {
+      throw new Error('Yahoo connection is invalid. Please reconnect.')
+    }
+    const leagues = await yahooService.getLeagues('baseball')
+    // Prefer this season's leagues at the top; the service already
+    // sorts by season desc, so just normalize the shape.
+    yahooLeagues.value = leagues.map((l) => ({
+      league_key: l.league_key,
+      name: l.name,
+      season: l.season,
+      scoring_type: l.scoring_type,
+    }))
+  } catch (err) {
+    console.error('[CategoryDemoConnect] Yahoo league fetch failed:', err)
+    yahooError.value = (err as Error).message || 'Failed to load Yahoo leagues.'
+  } finally {
+    yahooLoading.value = false
+  }
+}
+
+function connectYahoo(): void {
+  if (!authStore.isAuthenticated) {
+    // Should not be reachable — the signin gate above hides the
+    // Yahoo CTA when anonymous — but keep the fallback for safety.
+    emit('open-signup')
+    return
+  }
+  // Remember where we came from so the Yahoo callback can drop the
+  // user back on the connect picker (instead of the app shell home)
+  // and resume the league-selection step.
+  try {
+    localStorage.setItem('ufd_yahoo_oauth_origin', '/demo-categories/connect')
+  } catch {
+    // Private mode or quota — non-fatal; callback will use its default.
+  }
+  platformsStore.connectYahoo()
+}
+
+async function onYahooSubmit(): Promise<void> {
+  const key = selectedYahooLeagueKey.value.trim()
+  if (!key) return
+  // syncYahooLeagues already persists every league the OAuth account
+  // can see; we just need to fetch the freshly-saved row to learn its
+  // UUID for the redirect target.
+  let leagueRowId: string | undefined
+  if (authStore.isAuthenticated) {
+    try {
+      await platformsStore.syncYahooLeagues('baseball')
+      // The store updates `leagues` rows; re-read to find the one the
+      // user just picked. We match by platform_league_id (= league_key
+      // in Yahoo's vocabulary).
+      const leaguesStore = useLeaguesStore()
+      if (leaguesStore.leagues.length === 0) await leaguesStore.fetchLeagues()
+      const row = leaguesStore.leagues.find(
+        (l) => l.platform === 'yahoo' && l.platform_league_id === key,
+      )
+      if (row) leagueRowId = row.id
+    } catch (err) {
+      console.warn('[CategoryDemoConnect] Yahoo persist failed:', err)
+    }
+  }
+  if (leagueRowId) {
+    router.push(`/leagues/${leagueRowId}/home`)
+  } else {
+    router.push({
+      path: '/demo-categories/home',
+      query: { leagueId: key, platform: 'yahoo' },
+    })
+  }
+}
+
+/**
+ * ESPN connect flow. Three credential paths:
+ *   1) Chrome extension already detected — just navigate; the adapter
+ *      pulls cookies on demand at page load.
+ *   2) Cookies already stored — same, adapter reads from platformsStore.
+ *   3) User pasted manual creds — persist via platformsStore (which
+ *      also validates against the target league), then navigate.
+ */
+async function onEspnSubmit(): Promise<void> {
+  const id = espnLeagueIdInput.value.trim()
+  if (!id || selectedPlatform.value !== 'espn') return
+  espnError.value = null
+  espnBusy.value = true
+  try {
+    if (manualEspnS2.value.trim() && manualSwid.value.trim()) {
+      const result = await platformsStore.storeEspnCredentials({
+        espn_s2: manualEspnS2.value.trim(),
+        swid: manualSwid.value.trim(),
+        leagueId: id,
+        sport: 'baseball',
+        season: new Date().getFullYear(),
+      })
+      if (!result.success) {
+        espnError.value = result.error || 'Could not validate ESPN cookies.'
+        return
+      }
+    }
+    // Persist the league row to power the switcher across sessions.
+    let leagueRowId: string | undefined
+    if (authStore.isAuthenticated) {
+      try {
+        const result = await platformsStore.syncEspnLeague(
+          id,
+          'baseball',
+          new Date().getFullYear(),
+        )
+        if (result.success) leagueRowId = result.leagueRowId
+      } catch (err) {
+        console.warn('[CategoryDemoConnect] ESPN persist failed:', err)
+      }
+    }
+    if (leagueRowId) {
+      router.push(`/leagues/${leagueRowId}/home`)
+    } else {
+      router.push({
+        path: '/demo-categories/home',
+        query: { leagueId: id, platform: 'espn' },
+      })
+    }
+  } catch (err) {
+    espnError.value = (err as Error).message || 'Failed to connect ESPN league.'
+  } finally {
+    espnBusy.value = false
+  }
+}
+</script>
+
+<style scoped>
+/* Tokens (--ink-N, --accent-*) inherited from .demo-shell. */
+.connect {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  font-family: 'Barlow', sans-serif;
+  color: var(--ink-1);
+  max-width: 880px;
+  margin: 0 auto;
+  padding-top: 16px;
+}
+
+/* ─── Header ──────────────────────────────────────────────────── */
+.connect-head { display: flex; flex-direction: column; gap: 10px; }
+.connect-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+  margin: 0;
+}
+.connect-eyebrow-bar {
+  display: inline-block;
+  width: 28px;
+  height: 2px;
+  background: var(--accent-secondary);
+  border-radius: 1px;
+}
+.connect-eyebrow-step {
+  color: var(--accent-tertiary);
+  margin-bottom: 16px;
+}
+.connect-eyebrow-step .connect-eyebrow-bar {
+  background: var(--accent-tertiary);
+}
+.connect-headline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  line-height: 0.96;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink-1);
+}
+.connect-deck {
+  font-size: 1.02rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+  max-width: 540px;
+  margin: 0;
+}
+
+/* ─── Sport grid ──────────────────────────────────────────────── */
+.sport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.sport-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  background: oklch(0.10 0.014 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink-1);
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sport-card-active { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  .sport-card-active:hover {
+    background: oklch(0.13 0.016 90);
+    border-color: oklch(0.32 0.012 90);
+    transform: translateY(-2px);
+  }
+}
+.sport-card-active:active { transform: scale(0.985); transition-duration: 100ms; }
+.sport-card-active:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.sport-card-selected {
+  background: oklch(0.13 0.016 90);
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px oklch(0.78 0.18 92 / 0.40);
+}
+.sport-card-inactive { opacity: 0.45; pointer-events: none; }
+.sport-card-art { color: var(--accent-tertiary); display: inline-flex; }
+.sport-card-selected .sport-card-art { color: var(--accent-primary); }
+.sport-card-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-1);
+}
+.sport-card-pill {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.sport-card-pill-available {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.10);
+  border: 1px solid oklch(0.74 0.18 145 / 0.32);
+}
+.sport-card-pill-soon {
+  color: var(--ink-3);
+  background: oklch(0.20 0.015 90 / 0.5);
+  border: 1px solid oklch(0.32 0.012 90);
+}
+
+/* ─── Platform sub-picker ─────────────────────────────────────── */
+.platform-section { display: flex; flex-direction: column; }
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.platform-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px;
+  background: oklch(0.10 0.014 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink-1);
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.platform-card-active { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  .platform-card-active:hover {
+    background: oklch(0.13 0.016 90);
+    border-color: oklch(0.32 0.012 90);
+    transform: translateY(-1px);
+  }
+}
+.platform-card-active:active { transform: scale(0.985); transition-duration: 100ms; }
+.platform-card-active:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.platform-card-selected {
+  background: oklch(0.13 0.016 90);
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px oklch(0.78 0.18 92 / 0.40);
+}
+.platform-card-inactive { opacity: 0.40; pointer-events: none; }
+.platform-card-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.platform-card-pill {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.60rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.platform-card-pill-available {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.10);
+  border: 1px solid oklch(0.74 0.18 145 / 0.32);
+}
+.platform-card-pill-soon {
+  color: var(--ink-3);
+  background: oklch(0.20 0.015 90 / 0.5);
+  border: 1px solid oklch(0.32 0.012 90);
+}
+
+/* ─── Form ────────────────────────────────────────────────────── */
+.form-section { display: flex; flex-direction: column; }
+.connect-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: oklch(0.10 0.014 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 14px;
+  padding: 22px;
+}
+.form-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.form-label-sub {
+  font-size: 0.7rem;
+  margin-top: 4px;
+  color: var(--ink-3);
+}
+.form-input {
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink-1);
+  background: oklch(0.06 0.014 90);
+  border: 1px solid oklch(0.32 0.012 90);
+  border-radius: 10px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.form-input-mono {
+  font-family: 'Barlow Condensed', monospace;
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+}
+.form-input::placeholder { color: oklch(0.36 0.010 90); }
+.form-input:focus { border-color: var(--accent-primary); }
+.form-help {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--ink-3);
+}
+.form-help code {
+  font-family: 'Barlow Condensed', monospace;
+  font-size: 0.82rem;
+  background: oklch(0.06 0.014 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: var(--ink-2);
+}
+.form-help-em { color: var(--accent-tertiary); }
+.form-error {
+  margin: 0;
+  font-size: 0.86rem;
+  color: oklch(0.66 0.18 30);
+}
+.form-submit {
+  align-self: flex-start;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-primary);
+  color: oklch(0.10 0.012 90);
+  border: none;
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), filter 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.form-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .form-submit:not(:disabled):hover { transform: translateY(-1px); }
+}
+.form-submit:not(:disabled):active { transform: scale(0.97); transition-duration: 100ms; }
+.form-submit:focus-visible {
+  outline: 2px solid var(--ink-1);
+  outline-offset: 2px;
+}
+
+/* ─── Signin gate (shown when anonymous + picked Yahoo or ESPN) ── */
+.signin-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: oklch(0.10 0.014 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 14px;
+  padding: 22px;
+}
+.signin-gate-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-tertiary);
+  margin: 0;
+}
+.signin-gate-eyebrow-bar {
+  display: inline-block;
+  width: 22px;
+  height: 2px;
+  background: var(--accent-tertiary);
+  border-radius: 1px;
+}
+.signin-gate-headline {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  line-height: 1.05;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+.signin-gate-body {
+  margin: 0 0 4px;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 520px;
+}
+
+/* ─── ESPN credential status pill ─────────────────────────────── */
+.espn-status {
+  display: flex;
+  margin-bottom: 6px;
+}
+.espn-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.espn-status-pill-ok {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.10);
+  border: 1px solid oklch(0.74 0.18 145 / 0.32);
+}
+.espn-status-pill-warn {
+  color: oklch(0.78 0.16 60);
+  background: oklch(0.78 0.16 60 / 0.10);
+  border: 1px solid oklch(0.78 0.16 60 / 0.32);
+}
+.espn-status-pill-mute {
+  color: var(--ink-3);
+  background: oklch(0.20 0.015 90 / 0.5);
+  border: 1px solid oklch(0.32 0.012 90);
+}
+.espn-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  display: inline-block;
+}
+.espn-status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ─── ESPN advanced (manual cookie entry) ─────────────────────── */
+.espn-advanced {
+  margin-top: 4px;
+  border-top: 1px dashed oklch(0.20 0.015 90);
+  padding-top: 12px;
+}
+.espn-advanced-summary {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.espn-advanced-summary::-webkit-details-marker { display: none; }
+.espn-advanced-summary::before {
+  content: '+ ';
+  color: var(--accent-tertiary);
+}
+.espn-advanced[open] .espn-advanced-summary::before { content: '\2212 '; }
+.espn-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ─── Escape hatch ────────────────────────────────────────────── */
+.connect-escape {
+  margin: 8px 0 0;
+  text-align: center;
+}
+.connect-escape-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.84rem;
+  color: var(--ink-3);
+  text-decoration: none;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .connect-escape-link:hover { color: var(--ink-1); }
+}
+.connect-escape-link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .connect { gap: 32px; padding-top: 8px; }
+  .sport-grid { grid-template-columns: 1fr; }
+  .platform-grid { grid-template-columns: 1fr; }
+  .connect-form { padding: 18px; }
+}
+</style>

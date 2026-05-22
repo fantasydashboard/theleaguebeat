@@ -1,0 +1,1268 @@
+<template>
+  <Teleport to="body">
+    <div class="cmm-root" role="presentation">
+      <div class="cmm-backdrop" @click="onClose" aria-hidden="true"></div>
+      <div
+        ref="dialogRef"
+        class="cmm-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="`cmm-title-${matchup.id}`"
+      >
+        <!-- ─── HEADER ──────────────────────────────────────────────── -->
+        <header class="cmm-head">
+          <p class="cmm-eyebrow">Week {{ matchup.weekNumber }}</p>
+          <div class="cmm-head-faceoff">
+            <div class="cmm-head-team">
+              <div
+                class="cmm-head-avatar"
+                :style="{ background: `linear-gradient(135deg, ${homeTeam.avatarColor})` }"
+              >
+                <img v-if="homeTeam.avatarUrl" :src="homeTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+                <span v-else>{{ homeTeam.ownerInitials }}</span>
+              </div>
+              <h2 :id="`cmm-title-${matchup.id}`" class="cmm-head-name">{{ homeTeam.name }}</h2>
+            </div>
+            <span class="cmm-head-vs" aria-hidden="true">vs</span>
+            <div class="cmm-head-team cmm-head-team-away">
+              <h2 class="cmm-head-name">{{ awayTeam.name }}</h2>
+              <div
+                class="cmm-head-avatar"
+                :style="{ background: `linear-gradient(135deg, ${awayTeam.avatarColor})` }"
+              >
+                <img v-if="awayTeam.avatarUrl" :src="awayTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+                <span v-else>{{ awayTeam.ownerInitials }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cmm-head-status">
+            <span v-if="matchup.status === 'live'" class="cmm-status cmm-status-live">
+              <span class="cmm-status-dot" aria-hidden="true"></span>
+              Live
+            </span>
+            <span v-else-if="matchup.status === 'coasting'" class="cmm-status cmm-status-coasting">
+              Coasting
+            </span>
+            <span v-else-if="matchup.status === 'final'" class="cmm-status cmm-status-final">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Locked
+            </span>
+            <span v-else class="cmm-status cmm-status-upcoming">Upcoming</span>
+          </div>
+
+          <button
+            ref="closeBtnRef"
+            type="button"
+            class="cmm-close"
+            aria-label="Close matchup detail"
+            @click="onClose"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="5" y1="5" x2="19" y2="19" />
+              <line x1="19" y1="5" x2="5" y2="19" />
+            </svg>
+          </button>
+        </header>
+
+        <!-- ─── WIN PROBABILITY HERO ────────────────────────────────── -->
+        <section class="cmm-wp" aria-label="Win probability">
+          <div class="cmm-wp-team">
+            <div
+              class="cmm-wp-avatar"
+              :style="{ background: `linear-gradient(135deg, ${homeTeam.avatarColor})` }"
+            >
+              <img v-if="homeTeam.avatarUrl" :src="homeTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+              <span v-else>{{ homeTeam.ownerInitials }}</span>
+            </div>
+            <p class="cmm-wp-name">{{ homeTeam.name }}</p>
+            <span class="cmm-wp-pct" :style="{ color: homePctColor }">{{ homeWinPct }}%</span>
+            <p class="cmm-wp-scores">
+              <span class="cmm-wp-current">{{ matchup.aWins }} wins</span>
+              <span class="cmm-wp-sep" aria-hidden="true">·</span>
+              <span class="cmm-wp-proj">proj {{ matchup.aProj }}-{{ 11 - matchup.aProj }}</span>
+            </p>
+          </div>
+
+          <div class="cmm-wp-center">
+            <span class="cmm-wp-divider" aria-hidden="true"></span>
+            <p class="cmm-wp-methodology">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              <span>10,000 Monte Carlo sims, updated 8 minutes ago.</span>
+            </p>
+          </div>
+
+          <div class="cmm-wp-team cmm-wp-team-away">
+            <div
+              class="cmm-wp-avatar"
+              :style="{ background: `linear-gradient(135deg, ${awayTeam.avatarColor})` }"
+            >
+              <img v-if="awayTeam.avatarUrl" :src="awayTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+              <span v-else>{{ awayTeam.ownerInitials }}</span>
+            </div>
+            <p class="cmm-wp-name">{{ awayTeam.name }}</p>
+            <span class="cmm-wp-pct" :style="{ color: awayPctColor }">{{ awayWinPct }}%</span>
+            <p class="cmm-wp-scores">
+              <span class="cmm-wp-current">{{ matchup.bWins }} wins</span>
+              <span class="cmm-wp-sep" aria-hidden="true">·</span>
+              <span class="cmm-wp-proj">proj {{ matchup.bProj }}-{{ 11 - matchup.bProj }}</span>
+            </p>
+          </div>
+        </section>
+
+        <!-- ─── DAILY WIN-PROB CHART ────────────────────────────────── -->
+        <section class="cmm-chart" aria-labelledby="cmm-chart-eyebrow">
+          <p class="cmm-section-eyebrow cmm-section-eyebrow-teal" id="cmm-chart-eyebrow">Across the week</p>
+          <h3 class="cmm-section-headline">How this matchup shifted.</h3>
+
+          <div class="cmm-chart-wrap">
+            <svg
+              class="cmm-chart-svg"
+              :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+              preserveAspectRatio="none"
+              role="img"
+              :aria-label="`Daily win probability across the week. ${homeTeam.name} ${homeWinPct} percent, ${awayTeam.name} ${awayWinPct} percent.`"
+            >
+              <!-- Gridlines at 25/50/75 -->
+              <g class="cmm-grid">
+                <line v-for="p in [25, 50, 75]" :key="`grid-${p}`"
+                  x1="0" :y1="yForPct(p)" :x2="CHART_W" :y2="yForPct(p)" />
+                <line class="cmm-grid-mid"
+                  x1="0" :y1="yForPct(50)" :x2="CHART_W" :y2="yForPct(50)" />
+              </g>
+
+              <!-- NOW vertical line at Thursday -->
+              <g v-if="nowX !== null" class="cmm-now">
+                <line :x1="nowX" :y1="Y_TOP" :x2="nowX" :y2="CHART_H - Y_BOTTOM" />
+                <rect :x="nowX - 16" :y="Y_TOP - 16" width="32" height="13" rx="3" />
+                <text :x="nowX" :y="Y_TOP - 6.5" text-anchor="middle">NOW</text>
+              </g>
+
+              <!-- Home path -->
+              <path class="cmm-line"
+                :d="pathFor(homeSeries)"
+                :stroke="homeAccent" />
+              <!-- Away path -->
+              <path class="cmm-line"
+                :d="pathFor(awaySeries)"
+                :stroke="awayAccent" />
+
+              <!-- Endpoint dots at each day -->
+              <g v-for="(v, i) in homeSeries" :key="`dot-h-${i}`">
+                <circle :cx="xForDay(i)" :cy="yForPct(v)" r="3" :fill="homeAccent" />
+              </g>
+              <g v-for="(v, i) in awaySeries" :key="`dot-a-${i}`">
+                <circle :cx="xForDay(i)" :cy="yForPct(v)" r="3" :fill="awayAccent" />
+              </g>
+
+              <!-- Value chip at current day for home -->
+              <g v-if="currentDayIndex !== null">
+                <rect
+                  :x="xForDay(currentDayIndex) - 18"
+                  :y="yForPct(homeSeries[currentDayIndex]) - 22"
+                  width="36" height="15" rx="3"
+                  :fill="`oklch(from ${homeAccent} l c h / 0.14)`"
+                />
+                <text
+                  :x="xForDay(currentDayIndex)"
+                  :y="yForPct(homeSeries[currentDayIndex]) - 11"
+                  text-anchor="middle"
+                  class="cmm-chip-text"
+                  :fill="homeAccent"
+                >{{ homeSeries[currentDayIndex] }}%</text>
+              </g>
+            </svg>
+
+            <ul class="cmm-chart-days" aria-hidden="true">
+              <li v-for="(d, i) in DAY_LABELS" :key="d" :class="{ 'cmm-chart-day-now': i === currentDayIndex }">{{ d }}</li>
+            </ul>
+
+            <ul class="cmm-chart-legend" role="list">
+              <li class="cmm-chart-legend-item">
+                <span class="cmm-chart-legend-swatch" :style="{ background: homeAccent }" aria-hidden="true"></span>
+                <span>{{ homeTeam.name }}</span>
+              </li>
+              <li class="cmm-chart-legend-item">
+                <span class="cmm-chart-legend-swatch" :style="{ background: awayAccent }" aria-hidden="true"></span>
+                <span>{{ awayTeam.name }}</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ─── SCOUTING ────────────────────────────────────────────── -->
+        <section class="cmm-scout" aria-labelledby="cmm-scout-eyebrow">
+          <p class="cmm-section-eyebrow" id="cmm-scout-eyebrow">Scouting</p>
+
+          <div class="cmm-scout-grid">
+            <article class="cmm-scout-col">
+              <header class="cmm-scout-head">
+                <div
+                  class="cmm-scout-avatar"
+                  :style="{ background: `linear-gradient(135deg, ${homeTeam.avatarColor})` }"
+                >
+                  <img v-if="homeTeam.avatarUrl" :src="homeTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+                  <span v-else>{{ homeTeam.ownerInitials }}</span>
+                </div>
+                <div class="cmm-scout-head-text">
+                  <p class="cmm-scout-name">{{ homeTeam.name }}</p>
+                  <p class="cmm-scout-meta">
+                    {{ homeStanding.catWins }}-{{ homeStanding.catLosses }}{{ homeStanding.catTies ? `-${homeStanding.catTies}` : '' }}
+                    <span class="cmm-scout-meta-dot" aria-hidden="true">·</span>
+                    #{{ homeStanding.rank }}
+                  </p>
+                </div>
+              </header>
+              <p class="cmm-scout-body">{{ homeScout }}</p>
+              <p class="cmm-form-label">Last 5</p>
+              <ul class="cmm-form-row" :aria-label="`Last five results for ${homeTeam.name}`" role="list">
+                <li v-for="(r, i) in homeForm" :key="`hf-${i}`" :class="['cmm-form-pip', formClass(r)]">{{ r }}</li>
+              </ul>
+            </article>
+
+            <article class="cmm-scout-col">
+              <header class="cmm-scout-head">
+                <div
+                  class="cmm-scout-avatar"
+                  :style="{ background: `linear-gradient(135deg, ${awayTeam.avatarColor})` }"
+                >
+                  <img v-if="awayTeam.avatarUrl" :src="awayTeam.avatarUrl" class="cmm-avatar-img" alt="" />
+                  <span v-else>{{ awayTeam.ownerInitials }}</span>
+                </div>
+                <div class="cmm-scout-head-text">
+                  <p class="cmm-scout-name">{{ awayTeam.name }}</p>
+                  <p class="cmm-scout-meta">
+                    {{ awayStanding.catWins }}-{{ awayStanding.catLosses }}{{ awayStanding.catTies ? `-${awayStanding.catTies}` : '' }}
+                    <span class="cmm-scout-meta-dot" aria-hidden="true">·</span>
+                    #{{ awayStanding.rank }}
+                  </p>
+                </div>
+              </header>
+              <p class="cmm-scout-body">{{ awayScout }}</p>
+              <p class="cmm-form-label">Last 5</p>
+              <ul class="cmm-form-row" :aria-label="`Last five results for ${awayTeam.name}`" role="list">
+                <li v-for="(r, i) in awayForm" :key="`af-${i}`" :class="['cmm-form-pip', formClass(r)]">{{ r }}</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- ─── CAT-BY-CAT BATTLE ───────────────────────────────────── -->
+        <section class="cmm-cats" aria-labelledby="cmm-cats-eyebrow">
+          <p class="cmm-section-eyebrow" id="cmm-cats-eyebrow">Cat-by-cat battle</p>
+          <p class="cmm-cats-summary">
+            <strong class="cmm-cats-strong">{{ decidedForAway }} decided</strong> for {{ awayTeam.name }}.
+            <strong class="cmm-cats-strong">{{ contestedCount }} contested</strong>.
+            <strong class="cmm-cats-strong">{{ concededByAway }} conceded</strong> by {{ awayTeam.name }}.
+          </p>
+
+          <div class="cmm-cats-wrap">
+            <ul class="cmm-cats-list" role="list">
+              <li
+                v-for="line in matchup.catLines"
+                :key="line.catId"
+                class="cmm-cats-row"
+                :class="rowClassFor(line)"
+              >
+                <span
+                  class="cmm-cats-val cmm-cats-val-a"
+                  :class="{ 'cmm-cats-val-lead': aHasLead(line) }"
+                  :style="aHasLead(line) ? { color: homeAccent } : undefined"
+                >{{ formatVal(line.catId, line.aCurrent) }}</span>
+
+                <span class="cmm-cats-margin cmm-cats-margin-a">
+                  <span v-if="marginFor(line, 'a')" class="cmm-cats-chip" :style="chipStyle(line, 'a')">
+                    {{ marginFor(line, 'a') }}
+                  </span>
+                </span>
+
+                <span class="cmm-cats-label">{{ line.catId }}</span>
+
+                <span class="cmm-cats-margin cmm-cats-margin-b">
+                  <span v-if="marginFor(line, 'b')" class="cmm-cats-chip" :style="chipStyle(line, 'b')">
+                    {{ marginFor(line, 'b') }}
+                  </span>
+                </span>
+
+                <span
+                  class="cmm-cats-val cmm-cats-val-b"
+                  :class="{ 'cmm-cats-val-lead': bHasLead(line) }"
+                  :style="bHasLead(line) ? { color: awayAccent } : undefined"
+                >{{ formatVal(line.catId, line.bCurrent) }}</span>
+
+                <span class="cmm-cats-status">
+                  <span
+                    v-if="line.status === 'contested'"
+                    class="cmm-cats-status-chip cmm-cats-status-chip-live"
+                  >
+                    <span class="cmm-cats-status-dot" aria-hidden="true"></span>
+                    Live
+                  </span>
+                  <span
+                    v-else-if="line.status === 'punted-a' || line.status === 'punted-b'"
+                    class="cmm-cats-status-chip cmm-cats-status-chip-punt"
+                  >Punt</span>
+                  <span
+                    v-else
+                    class="cmm-cats-status-chip cmm-cats-status-chip-locked"
+                  >
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Locked
+                  </span>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ─── WHAT TO WATCH ──────────────────────────────────────── -->
+        <section class="cmm-watch" aria-label="What to watch">
+          <p class="cmm-watch-eyebrow">{{ watchEyebrow }}</p>
+          <p class="cmm-watch-body">{{ watchBody }}</p>
+        </section>
+
+        <!-- ─── SEASON SERIES ──────────────────────────────────────── -->
+        <section class="cmm-series" aria-labelledby="cmm-series-eyebrow">
+          <p class="cmm-section-eyebrow" id="cmm-series-eyebrow">{{ seriesEyebrow }}</p>
+          <p class="cmm-series-body">{{ seriesProse }}</p>
+        </section>
+
+        <footer class="cmm-foot">
+          <button type="button" class="cmm-share" @click="emit('open-signup')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            Share matchup
+          </button>
+        </footer>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import {
+  getTeam,
+  getMatchup,
+  standings2026Week8,
+  teamScoutingProse,
+  teamLastFiveH2H,
+  matchupSeriesProse,
+  type CategoryMatchupCatLine,
+  type CategoryId,
+} from '@/fixtures/categoriesLeague'
+import { accentFor } from '@/utils/teamColor'
+import { smoothPath, type Point } from '@/utils/svgPath'
+import { useDemoModal } from '@/composables/useDemoModal'
+
+const props = defineProps<{
+  matchupId: string
+  /** Optional editorial override for the "What to watch" callout. When
+   *  present, replaces the hand-authored fixture string. Provided by
+   *  the Matchups page's live editorial pipeline. */
+  whatToWatchOverride?: { eyebrow?: string; headline?: string }
+  /** Optional editorial override for the Season Series prose. When
+   *  present, replaces the fixture's `matchupSeriesProse` lookup. */
+  seasonSeriesOverride?: { eyebrow?: string; body?: string }
+}>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'open-signup'): void }>()
+
+const matchup = computed(() => getMatchup(props.matchupId))
+const homeTeam = computed(() => getTeam(matchup.value.homeTeamId))
+const awayTeam = computed(() => getTeam(matchup.value.awayTeamId))
+const homeStanding = computed(
+  () => standings2026Week8.find((s) => s.teamId === matchup.value.homeTeamId)!,
+)
+const awayStanding = computed(
+  () => standings2026Week8.find((s) => s.teamId === matchup.value.awayTeamId)!,
+)
+
+const homeAccent = computed(() => accentFor(homeTeam.value))
+const awayAccent = computed(() => accentFor(awayTeam.value))
+
+const homeWinPct = computed(() => clampWP(matchup.value.homeWinProb))
+const awayWinPct = computed(() => 100 - homeWinPct.value)
+
+// Color the win-probability percent: green if leading, magenta if trailing.
+const homePctColor = computed(() =>
+  homeWinPct.value >= awayWinPct.value
+    ? 'oklch(0.74 0.18 145)'  // green: ahead
+    : 'oklch(0.70 0.27 350)', // magenta: behind
+)
+const awayPctColor = computed(() =>
+  awayWinPct.value >= homeWinPct.value
+    ? 'oklch(0.74 0.18 145)'
+    : 'oklch(0.70 0.27 350)',
+)
+
+// Daily series — pull from matchup.dailyTrend.
+const homeSeries = computed(() =>
+  matchup.value.dailyTrend.map((d) => clampWP(d.aWinProb)),
+)
+const awaySeries = computed(() =>
+  matchup.value.dailyTrend.map((d) => clampWP(d.bWinProb)),
+)
+const currentDayIndex = computed(() => {
+  // last day that's not a projection
+  let idx = -1
+  matchup.value.dailyTrend.forEach((d, i) => {
+    if (!d.isProjection) idx = i
+  })
+  return idx === -1 ? null : idx
+})
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// Scouting
+const homeScout = computed(() => teamScoutingProse[matchup.value.homeTeamId] ?? '')
+const awayScout = computed(() => teamScoutingProse[matchup.value.awayTeamId] ?? '')
+const homeForm = computed(() => teamLastFiveH2H[matchup.value.homeTeamId] ?? [])
+const awayForm = computed(() => teamLastFiveH2H[matchup.value.awayTeamId] ?? [])
+
+function formClass(r: 'W' | 'L' | 'T') {
+  if (r === 'W') return 'cmm-form-pip-win'
+  if (r === 'L') return 'cmm-form-pip-loss'
+  return 'cmm-form-pip-tie'
+}
+
+// Cat summary counts — relative to away (b) team, which is the one
+// editorial copy frames. e.g. "5 decided for MV. 4 contested. 2 conceded by MV."
+const decidedForAway = computed(
+  () => matchup.value.catLines.filter((c) => c.status === 'decided-b').length,
+)
+const decidedForHome = computed(
+  () => matchup.value.catLines.filter((c) => c.status === 'decided-a').length,
+)
+const contestedCount = computed(
+  () => matchup.value.catLines.filter((c) => c.status === 'contested').length,
+)
+const concededByAway = computed(
+  () => matchup.value.catLines.filter((c) => c.status === 'punted-b').length,
+)
+const concededByHome = computed(
+  () => matchup.value.catLines.filter((c) => c.status === 'punted-a').length,
+)
+// Suppress "unused computed" warnings if framing flips — these are kept
+// in case the editorial copy wants the other side's framing.
+void decidedForHome
+void concededByHome
+
+// Cat row helpers — display, lead detection, margin chip, tint.
+function formatVal(catId: CategoryId, v: number): string {
+  if (catId === 'AVG') return v.toFixed(3).replace(/^0/, '')
+  if (catId === 'ERA') return v.toFixed(2)
+  return Math.round(v).toString()
+}
+
+// Lower is better for ERA only.
+function lowerBetter(catId: CategoryId): boolean {
+  return catId === 'ERA'
+}
+
+function aHasLead(line: CategoryMatchupCatLine): boolean {
+  if (line.aCurrent === line.bCurrent) return false
+  return lowerBetter(line.catId)
+    ? line.aCurrent < line.bCurrent
+    : line.aCurrent > line.bCurrent
+}
+function bHasLead(line: CategoryMatchupCatLine): boolean {
+  if (line.aCurrent === line.bCurrent) return false
+  return lowerBetter(line.catId)
+    ? line.bCurrent < line.aCurrent
+    : line.bCurrent > line.aCurrent
+}
+
+function marginFor(line: CategoryMatchupCatLine, side: 'a' | 'b'): string | null {
+  // For punted cats, no chip on the punting side — keep the row dim.
+  if (line.status === 'punted-a' && side === 'a') return null
+  if (line.status === 'punted-b' && side === 'b') return null
+  if (line.aCurrent === line.bCurrent) return null
+  const diff = Math.abs(line.aCurrent - line.bCurrent)
+  const sideHasLead = side === 'a' ? aHasLead(line) : bHasLead(line)
+  if (!sideHasLead) return null
+  if (line.catId === 'AVG') {
+    return `+${diff.toFixed(3).replace(/^0/, '')}`
+  }
+  if (line.catId === 'ERA') {
+    return `-${diff.toFixed(2)}`
+  }
+  return `+${Math.round(diff)}`
+}
+
+function chipStyle(line: CategoryMatchupCatLine, side: 'a' | 'b') {
+  const sideHasLead = side === 'a' ? aHasLead(line) : bHasLead(line)
+  if (!sideHasLead) return undefined
+  // Green for the lead's chip when contested, accent-team color when locked.
+  const isLocked =
+    (line.status === 'decided-a' && side === 'a') ||
+    (line.status === 'decided-b' && side === 'b')
+  if (isLocked) {
+    const color = side === 'a' ? homeAccent.value : awayAccent.value
+    return {
+      color,
+      backgroundColor: tintFrom(color, 0.14),
+      borderColor: tintFrom(color, 0.34),
+    }
+  }
+  // contested lead
+  return {
+    color: 'oklch(0.78 0.18 92)',
+    backgroundColor: 'oklch(0.78 0.18 92 / 0.12)',
+    borderColor: 'oklch(0.78 0.18 92 / 0.32)',
+  }
+}
+
+function rowClassFor(line: CategoryMatchupCatLine): string {
+  return `cmm-cats-row-${line.status}`
+}
+
+function tintFrom(oklch: string, alpha: number): string {
+  const inner = oklch.replace(/^oklch\(/, '').replace(/\)$/, '').trim()
+  return `oklch(${inner} / ${alpha})`
+}
+
+function clampWP(v: number): number {
+  return Math.max(1, Math.min(99, Math.round(v)))
+}
+
+/* ─── What-to-watch copy (editorial-aware) ───────────────────── */
+const watchEyebrow = computed(() => {
+  const eb = props.whatToWatchOverride?.eyebrow
+  if (eb && eb.trim().length > 0) return eb
+  return 'What to watch'
+})
+const watchBody = computed(() => {
+  const body = props.whatToWatchOverride?.headline
+  if (body && body.trim().length > 0) return body
+  return matchup.value.whatToWatch
+})
+
+/* ─── Season series prose lookup (editorial-aware) ───────────── */
+const seriesEyebrow = computed(() => {
+  const eb = props.seasonSeriesOverride?.eyebrow
+  if (eb && eb.trim().length > 0) return eb
+  return 'Season series'
+})
+const seriesProse = computed(() => {
+  const overrideBody = props.seasonSeriesOverride?.body
+  if (overrideBody && overrideBody.trim().length > 0) return overrideBody
+  const hId = matchup.value.homeTeamId
+  const aId = matchup.value.awayTeamId
+  const direct = matchupSeriesProse[`${hId}-${aId}`]
+  if (direct) return direct.body
+  const flipped = matchupSeriesProse[`${aId}-${hId}`]
+  if (flipped) return flipped.body
+  return `First meeting of the season. ${homeTeam.value.name} and ${awayTeam.value.name} have no recent head-to-head history on file.`
+})
+
+/* ─── Chart geometry ──────────────────────────────────────────── */
+const CHART_W = 640
+const CHART_H = 240
+const X_LEFT = 30
+const X_RIGHT = 30
+const Y_TOP = 28
+const Y_BOTTOM = 18
+const N_DAYS = 7
+
+function xForDay(i: number) {
+  const usable = CHART_W - X_LEFT - X_RIGHT
+  return X_LEFT + (i / (N_DAYS - 1)) * usable
+}
+function yForPct(p: number) {
+  const usable = CHART_H - Y_TOP - Y_BOTTOM
+  return Y_TOP + ((100 - p) / 100) * usable
+}
+const nowX = computed(() => {
+  const idx = currentDayIndex.value
+  if (idx === null) return null
+  return xForDay(idx)
+})
+
+function pathFor(values: number[]): string {
+  const pts: Point[] = values.map((v, i) => ({ x: xForDay(i), y: yForPct(v) }))
+  return smoothPath(pts)
+}
+
+/* ─── Focus management ──────────────────────────────────────── */
+const dialogRef = ref<HTMLElement | null>(null)
+const closeBtnRef = ref<HTMLElement | null>(null)
+
+function onClose() {
+  emit('close')
+}
+
+useDemoModal({ dialogRef, closeBtnRef, onClose })
+</script>
+
+<style scoped>
+.cmm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  --ink-1: oklch(0.97 0.005 90);
+  --ink-2: oklch(0.78 0.008 90);
+  --ink-3: oklch(0.55 0.010 90);
+  --ink-4: oklch(0.40 0.012 90);
+  --ink-5: oklch(0.20 0.015 90);
+  --ink-6: oklch(0.14 0.018 90);
+  --ink-7: oklch(0.10 0.015 90);
+
+  --accent-primary:   oklch(0.78 0.18 92);
+  --accent-secondary: oklch(0.70 0.27 350);
+  --accent-tertiary:  oklch(0.72 0.18 195);
+  --accent-up:        oklch(0.74 0.18 145);
+  --accent-down:      oklch(0.70 0.22 0);
+
+  font-family: 'Barlow', sans-serif;
+  color: var(--ink-1);
+}
+.cmm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: oklch(0.04 0.014 90 / 0.78);
+  opacity: 0;
+  animation: cmm-fade-in 140ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.cmm-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: oklch(0.10 0.015 90);
+  border: 1px solid oklch(0.22 0.015 90);
+  border-radius: 18px;
+  padding: 24px 28px 22px;
+  box-shadow:
+    0 28px 72px -28px oklch(0 0 0 / 0.85),
+    inset 0 1px 0 oklch(1 0 0 / 0.04);
+  opacity: 0;
+  transform: scale(0.96) translateY(8px);
+  animation: cmm-dialog-in 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 30ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmm-backdrop, .cmm-dialog { animation: none; opacity: 1; transform: none; }
+}
+@keyframes cmm-fade-in { to { opacity: 1; } }
+@keyframes cmm-dialog-in { to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.cmm-avatar-img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+
+/* ─── HEADER ─────────────────────────────────────────────────── */
+.cmm-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 12px 16px;
+  margin-bottom: 22px;
+}
+.cmm-eyebrow {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cmm-head-faceoff {
+  grid-column: 1;
+  display: flex; align-items: center; gap: 14px; min-width: 0;
+}
+.cmm-head-team {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+}
+.cmm-head-team-away { flex-direction: row-reverse; }
+.cmm-head-avatar {
+  width: 44px; height: 44px;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 1rem;
+  color: oklch(0.12 0.012 90);
+  flex-shrink: 0; overflow: hidden;
+  box-shadow: 0 6px 18px -8px oklch(0 0 0 / 0.6);
+}
+.cmm-head-name {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  letter-spacing: -0.006em;
+  color: var(--ink-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmm-head-vs {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 0 2px;
+}
+.cmm-head-status {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex; align-items: center;
+  align-self: center;
+  justify-self: end;
+}
+.cmm-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.cmm-status-live {
+  color: var(--accent-primary);
+  background: oklch(0.78 0.18 92 / 0.10);
+  border-color: oklch(0.78 0.18 92 / 0.35);
+}
+.cmm-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes cmm-pulse {
+    0%, 60%, 100% { opacity: 1; transform: scale(1); }
+    30% { opacity: 0.4; transform: scale(1.4); }
+  }
+  .cmm-status-dot { animation: cmm-pulse 2.4s infinite cubic-bezier(0.22, 1, 0.36, 1); }
+}
+.cmm-status-coasting {
+  color: var(--accent-secondary);
+  background: oklch(0.70 0.27 350 / 0.10);
+  border-color: oklch(0.70 0.27 350 / 0.30);
+}
+.cmm-status-final {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.10);
+  border-color: oklch(0.74 0.18 145 / 0.35);
+}
+.cmm-status-upcoming {
+  color: var(--ink-3);
+  background: oklch(0.20 0.012 90 / 0.6);
+  border-color: oklch(0.22 0.015 90);
+}
+
+.cmm-close {
+  grid-column: 2;
+  grid-row: 1;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid oklch(0.22 0.015 90);
+  border-radius: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cmm-close:hover { color: var(--ink-1); border-color: oklch(0.36 0.015 90); }
+.cmm-close:active {
+  transform: scale(0.97);
+  transition-duration: 100ms;
+}
+.cmm-close:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* ─── WIN-PROB HERO ───────────────────────────────────────────── */
+.cmm-wp {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid oklch(0.16 0.018 90);
+  margin-bottom: 24px;
+}
+.cmm-wp-team {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  min-width: 0;
+}
+.cmm-wp-team-away { align-items: flex-end; text-align: right; }
+.cmm-wp-avatar {
+  width: 80px; height: 80px;
+  border-radius: 18px;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 1.6rem;
+  color: oklch(0.12 0.012 90);
+  overflow: hidden;
+  box-shadow: 0 8px 24px -10px oklch(0 0 0 / 0.6);
+}
+.cmm-wp-name {
+  margin: 4px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmm-wp-pct {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 7vw, 3.2rem);
+  line-height: 1;
+  letter-spacing: -0.014em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.cmm-wp-scores {
+  margin: 4px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cmm-wp-current { color: var(--ink-1); font-weight: 800; }
+.cmm-wp-sep { color: var(--ink-5); }
+.cmm-wp-center {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 0 4px; min-width: 0;
+}
+.cmm-wp-divider {
+  width: 1px; height: 36px;
+  background: oklch(0.22 0.015 90);
+}
+.cmm-wp-methodology {
+  margin: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.66rem;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  text-align: center;
+  line-height: 1.3;
+  max-width: 200px;
+}
+
+/* ─── SECTION ──────────────────────────────────────────────── */
+.cmm-section-eyebrow {
+  margin: 0 0 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cmm-section-eyebrow-teal { color: var(--accent-tertiary); }
+.cmm-section-headline {
+  margin: 0 0 14px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  line-height: 1.1;
+  letter-spacing: -0.008em;
+  color: var(--ink-1);
+}
+
+/* ─── CHART ────────────────────────────────────────────────── */
+.cmm-chart { margin-bottom: 28px; }
+.cmm-chart-wrap { position: relative; }
+.cmm-chart-svg { width: 100%; height: 240px; display: block; }
+.cmm-grid line {
+  stroke: oklch(0.18 0.015 90);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.cmm-grid .cmm-grid-mid {
+  stroke: oklch(0.22 0.015 90);
+  stroke-dasharray: none;
+}
+.cmm-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cmm-now line {
+  stroke: var(--accent-tertiary);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.cmm-now rect {
+  fill: oklch(0.72 0.18 195 / 0.16);
+  stroke: var(--accent-tertiary);
+  stroke-width: 1;
+}
+.cmm-now text {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  fill: var(--accent-tertiary);
+}
+.cmm-chip-text {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.cmm-chart-days {
+  display: flex; justify-content: space-between;
+  padding: 4px 30px 0;
+  margin: 0; list-style: none;
+}
+.cmm-chart-days li {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cmm-chart-day-now { color: var(--accent-tertiary); }
+.cmm-chart-legend {
+  list-style: none;
+  padding: 12px 0 0; margin: 0;
+  display: flex; gap: 18px; justify-content: center;
+}
+.cmm-chart-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+.cmm-chart-legend-swatch {
+  width: 12px; height: 3px; border-radius: 2px;
+}
+
+/* ─── SCOUT ────────────────────────────────────────────────── */
+.cmm-scout { margin-bottom: 28px; }
+.cmm-scout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+.cmm-scout-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.cmm-scout-avatar {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 0.92rem;
+  color: oklch(0.12 0.012 90);
+  overflow: hidden;
+  box-shadow: 0 6px 16px -8px oklch(0 0 0 / 0.55);
+  flex-shrink: 0;
+}
+.cmm-scout-head-text { min-width: 0; }
+.cmm-scout-name {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.02rem;
+  line-height: 1;
+  color: var(--ink-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cmm-scout-meta {
+  margin: 3px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cmm-scout-meta-dot { color: var(--ink-5); margin: 0 2px; }
+.cmm-scout-body {
+  margin: 0 0 10px;
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.cmm-form-label {
+  margin: 0 0 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cmm-form-row {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: flex; gap: 4px;
+}
+.cmm-form-pip {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 900;
+  border-radius: 4px;
+}
+.cmm-form-pip-win {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.14);
+  border: 1px solid oklch(0.74 0.18 145 / 0.32);
+}
+.cmm-form-pip-loss {
+  color: var(--accent-secondary);
+  background: oklch(0.70 0.27 350 / 0.10);
+  border: 1px solid oklch(0.70 0.27 350 / 0.28);
+}
+.cmm-form-pip-tie {
+  color: var(--ink-3);
+  background: oklch(0.20 0.012 90 / 0.5);
+  border: 1px solid oklch(0.22 0.015 90);
+}
+
+/* ─── CAT-BY-CAT BATTLE ───────────────────────────────────── */
+.cmm-cats { margin-bottom: 24px; }
+.cmm-cats-summary {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.cmm-cats-strong {
+  color: var(--ink-1);
+  font-weight: 800;
+}
+.cmm-cats-wrap {
+  border: 1px solid oklch(0.16 0.018 90);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.cmm-cats-list {
+  list-style: none;
+  margin: 0; padding: 0;
+}
+.cmm-cats-row {
+  display: grid;
+  grid-template-columns:
+    minmax(64px, 1fr)
+    auto
+    52px
+    auto
+    minmax(64px, 1fr)
+    74px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid oklch(0.14 0.018 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.cmm-cats-row:last-child { border-bottom: none; }
+.cmm-cats-row-decided-a {
+  background: oklch(from var(--ink-6) l c h / 1);
+  background-color: oklch(0.70 0.22 0 / 0.06);
+}
+.cmm-cats-row-decided-b {
+  background-color: oklch(0.74 0.18 145 / 0.06);
+}
+.cmm-cats-row-contested {
+  background-color: oklch(0.78 0.18 92 / 0.05);
+}
+.cmm-cats-row-punted-a,
+.cmm-cats-row-punted-b {
+  background-color: transparent;
+  opacity: 0.55;
+}
+.cmm-cats-val {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.cmm-cats-val-a { text-align: right; }
+.cmm-cats-val-b { text-align: left; }
+.cmm-cats-val-lead {
+  color: var(--ink-1);
+  font-weight: 900;
+}
+.cmm-cats-margin {
+  display: flex; align-items: center;
+}
+.cmm-cats-margin-a { justify-content: flex-end; }
+.cmm-cats-margin-b { justify-content: flex-start; }
+.cmm-cats-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 0.70rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.cmm-cats-label {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cmm-cats-status {
+  display: flex; justify-content: flex-end; align-items: center;
+}
+.cmm-cats-status-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+.cmm-cats-status-chip-live {
+  color: var(--accent-primary);
+  background: oklch(0.78 0.18 92 / 0.10);
+  border-color: oklch(0.78 0.18 92 / 0.32);
+}
+.cmm-cats-status-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cmm-cats-status-dot { animation: cmm-pulse 2.4s infinite cubic-bezier(0.22, 1, 0.36, 1); }
+}
+.cmm-cats-status-chip-locked {
+  color: var(--accent-up);
+  background: oklch(0.74 0.18 145 / 0.10);
+  border-color: oklch(0.74 0.18 145 / 0.32);
+}
+.cmm-cats-status-chip-punt {
+  color: var(--ink-3);
+  background: oklch(0.16 0.018 90 / 0.6);
+  border-color: oklch(0.22 0.015 90);
+}
+
+/* ─── WHAT TO WATCH ───────────────────────────────────────── */
+.cmm-watch {
+  background: oklch(0.78 0.18 92 / 0.05);
+  border: 1px solid oklch(0.78 0.18 92 / 0.22);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+}
+.cmm-watch-eyebrow {
+  margin: 0 0 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+.cmm-watch-body {
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.5;
+  color: var(--ink-1);
+  font-style: italic;
+}
+
+/* ─── SEASON SERIES ─────────────────────────────────────────── */
+.cmm-series { margin-bottom: 18px; }
+.cmm-series-body {
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 64ch;
+}
+
+/* ─── FOOT ─────────────────────────────────────────────────── */
+.cmm-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid oklch(0.16 0.015 90);
+}
+.cmm-share {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid oklch(0.28 0.015 90);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cmm-share:hover { color: var(--ink-1); border-color: oklch(0.44 0.015 90); }
+.cmm-share:active {
+  transform: scale(0.97);
+  transition-duration: 100ms;
+}
+.cmm-share:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* ─── MOBILE ───────────────────────────────────────────────── */
+@media (max-width: 620px) {
+  .cmm-dialog { padding: 20px 18px 18px; }
+  .cmm-head-name { font-size: 1rem; }
+  .cmm-head-avatar { width: 38px; height: 38px; border-radius: 9px; }
+  .cmm-wp { grid-template-columns: 1fr; gap: 18px; }
+  .cmm-wp-team-away { align-items: flex-start; text-align: left; }
+  .cmm-wp-center { flex-direction: row; }
+  .cmm-wp-divider { width: 36px; height: 1px; }
+  .cmm-wp-avatar { width: 64px; height: 64px; border-radius: 14px; }
+  .cmm-scout-grid { grid-template-columns: 1fr; gap: 18px; }
+  .cmm-chart-svg { height: 200px; }
+
+  .cmm-cats-row {
+    grid-template-columns:
+      minmax(48px, 1fr)
+      auto
+      40px
+      auto
+      minmax(48px, 1fr);
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .cmm-cats-status { grid-column: 1 / -1; justify-content: flex-end; padding-top: 4px; }
+  .cmm-cats-val { font-size: 0.92rem; }
+  .cmm-cats-chip { font-size: 0.64rem; padding: 1px 6px; }
+}
+</style>

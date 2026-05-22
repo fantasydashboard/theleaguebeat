@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 360" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" style="background:#0a0c14;">
+  <!-- Background fill (in case the email client ignores the style attr) -->
+  <rect x="0" y="0" width="1080" height="360" fill="#0a0c14"/>
+
+  <!-- Y-axis rank labels -->
+  <g fill="#6b7280" font-size="14" font-weight="700">
+    <text x="14" y="46">#1</text>
+    <text x="14" y="113">#2</text>
+    <text x="14" y="181">#3</text>
+    <text x="14" y="248">#4</text>
+    <text x="14" y="316">#5</text>
+  </g>
+
+  <!-- Horizontal gridlines -->
+  <g stroke="#1e2130" stroke-width="1">
+    <line x1="50" y1="40" x2="1050" y2="40"/>
+    <line x1="50" y1="107" x2="1050" y2="107"/>
+    <line x1="50" y1="175" x2="1050" y2="175"/>
+    <line x1="50" y1="242" x2="1050" y2="242"/>
+    <line x1="50" y1="310" x2="1050" y2="310"/>
+  </g>
+
+  <!-- X-axis week labels -->
+  <g fill="#6b7280" font-size="13" text-anchor="middle">
+    <text x="50" y="340">Wk 1</text>
+    <text x="141" y="340">Wk 2</text>
+    <text x="232" y="340">Wk 3</text>
+    <text x="323" y="340">Wk 4</text>
+    <text x="414" y="340">Wk 5</text>
+    <text x="505" y="340">Wk 6</text>
+    <text x="595" y="340">Wk 7</text>
+    <text x="686" y="340">Wk 8</text>
+    <text x="777" y="340">Wk 9</text>
+    <text x="868" y="340">Wk 10</text>
+    <text x="959" y="340">Wk 11</text>
+    <text x="1050" y="340">Wk 12</text>
+  </g>
+
+  <!-- ── Lines ── -->
+
+  <!-- Wild Rotos (green) — finishes #1 -->
+  <path d="M50,175 C80,175 111,175 141,175 C171,175 202,107 232,107 C262,107 293,107 323,107 C353,107 384,107 414,107 C444,107 475,40 505,40 C535,40 565,40 595,40 C625,40 656,107 686,107 C716,107 747,40 777,40 C807,40 838,40 868,40 C898,40 929,40 959,40 C989,40 1020,40 1050,40" fill="none" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Crazy Eights (yellow) — finishes #2 -->
+  <path d="M50,40 C80,40 111,40 141,40 C171,40 202,40 232,40 C262,40 293,40 323,40 C353,40 384,175 414,175 C444,175 475,175 505,175 C535,175 565,107 595,107 C625,107 656,40 686,40 C716,40 747,107 777,107 C807,107 838,107 868,107 C898,107 929,107 959,107 C989,107 1020,107 1050,107" fill="none" stroke="#eab308" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- The Hot Corner (cyan) — finishes #3 -->
+  <path d="M50,242 C80,242 111,242 141,242 C171,242 202,175 232,175 C262,175 293,175 323,175 C353,175 384,242 414,242 C444,242 475,242 505,242 C535,242 565,242 595,242 C625,242 656,175 686,175 C716,175 747,175 777,175 C807,175 838,175 868,175 C898,175 929,175 959,175 C989,175 1020,175 1050,175" fill="none" stroke="#06b6d4" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Juggernauts (purple) — finishes #4 -->
+  <path d="M50,107 C80,107 111,107 141,107 C171,107 202,242 232,242 C262,242 293,242 323,242 C353,242 384,40 414,40 C444,40 475,107 505,107 C535,107 565,175 595,175 C625,175 656,242 686,242 C716,242 747,242 777,242 C807,242 838,242 868,242 C898,242 929,242 959,242 C989,242 1020,242 1050,242" fill="none" stroke="#a78bfa" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Pink Panther (pink) — finishes #5 -->
+  <path d="M50,310 L1050,310" fill="none" stroke="#ec4899" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- End-of-line dots -->
+  <circle cx="1050" cy="40" r="6" fill="#22c55e"/>
+  <circle cx="1050" cy="107" r="6" fill="#eab308"/>
+  <circle cx="1050" cy="175" r="6" fill="#06b6d4"/>
+  <circle cx="1050" cy="242" r="6" fill="#a78bfa"/>
+  <circle cx="1050" cy="310" r="6" fill="#ec4899"/>
+</svg>

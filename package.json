@@ -1,0 +1,38 @@
+{
+  "name": "theleaguebeat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The League Beat — an editorial publication that auto-generates magazine-style coverage of your fantasy sports league.",
+  "author": "Limelight Creative",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "@vercel/analytics": "^2.0.1",
+    "apexcharts": "^4.2.0",
+    "gifenc": "^1.0.3",
+    "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.0",
+    "vue-router": "^4.5.0",
+    "vue3-apexcharts": "^1.6.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.4.18",
+    "vue-tsc": "^2.0.21"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
