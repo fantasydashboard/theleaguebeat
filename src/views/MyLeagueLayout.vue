@@ -122,6 +122,7 @@
       :fallback-week="mastheadFallback?.week"
       :fallback-season="mastheadFallback?.season"
       :fallback-updated="mastheadUpdatedAt"
+      :league-id="routeLeagueId || undefined"
     />
 
     <main class="league-main">

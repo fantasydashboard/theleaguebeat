@@ -30,12 +30,56 @@
       </div>
 
       <div class="issue-masthead-rule" aria-hidden="true"></div>
+
+      <!-- Page-level share — single button that hands the recipient
+           the whole issue, not just one story. Only renders for
+           live league routes (where a /i/:uuid URL exists). -->
+      <button
+        v-if="shareUrl"
+        type="button"
+        class="issue-masthead-share"
+        :class="{ 'issue-masthead-share-copied': copied }"
+        :aria-label="copied ? 'Issue link copied' : 'Share this issue'"
+        @click="onShareIssue"
+      >
+        <svg
+          v-if="!copied"
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+          <polyline points="16 6 12 2 8 6"/>
+          <line x1="12" y1="2" x2="12" y2="15"/>
+        </svg>
+        <svg
+          v-else
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        {{ copied ? 'Link copied' : 'Share issue' }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useIssueStore } from '@/stores/issueState'
 
 /** First-paint fallback — passed by the layout from the cached league
@@ -44,6 +88,10 @@ const props = defineProps<{
   fallbackWeek?: number
   fallbackSeason?: number
   fallbackUpdated?: Date
+  /** Supabase `leagues.id` UUID for the active league. Drives the
+   *  page-level share URL. When omitted (demo route, unauthenticated
+   *  visitor) the share button is hidden. */
+  leagueId?: string
 }>()
 
 const issueStore = useIssueStore()
@@ -74,6 +122,57 @@ const updatedLabel = computed(() => {
   if (!ts) return null
   return formatRelativeUpdated(ts)
 })
+
+/* ─────────────────────────────────────────────────────────────────
+   Page-level share — builds the public /i/:uuid URL and tries the
+   native share sheet first, falling back to clipboard copy with a
+   transient "Link copied" confirmation on the button.
+───────────────────────────────────────────────────────────────── */
+
+const copied = ref(false)
+
+const shareUrl = computed(() => {
+  if (!props.leagueId || typeof window === 'undefined') return null
+  return `${window.location.origin}/i/${props.leagueId}`
+})
+
+async function onShareIssue() {
+  const url = shareUrl.value
+  if (!url) return
+
+  const shareData = {
+    title: 'The League Beat',
+    text: "This week's issue of our league magazine.",
+    url,
+  }
+
+  // Prefer the native share sheet — pops the iOS/Android sheet so
+  // recipients land in iMessage/WhatsApp/Discord in two taps.
+  if (
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function'
+  ) {
+    try {
+      await navigator.share(shareData)
+      return
+    } catch (err) {
+      // User canceled — treat as success, don't fall through to
+      // the clipboard copy. Other errors do fall through.
+      if ((err as Error).name === 'AbortError') return
+      console.warn('[IssueMasthead] navigator.share failed:', err)
+    }
+  }
+
+  // Desktop / fallback: copy the URL + show the "Link copied"
+  // confirmation. Auto-revert after 1.8s.
+  try {
+    await navigator.clipboard.writeText(url)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1800)
+  } catch (err) {
+    console.warn('[IssueMasthead] clipboard write failed:', err)
+  }
+}
 
 /* ─────────────────────────────────────────────────────────────────
    Helpers
@@ -206,6 +305,40 @@ export function deriveIssueMeta(data: CategoryLeagueData): {
 /* Playoff labels read magenta to flag the stage shift visually. */
 .issue-masthead-label {
   color: oklch(0.70 0.27 350);
+}
+
+/* Share-this-issue button — hugs the right edge of the masthead. */
+.issue-masthead-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid oklch(0.32 0.012 90);
+  color: oklch(0.97 0.005 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .issue-masthead-share:hover {
+    border-color: oklch(0.78 0.18 92);
+    color: oklch(0.78 0.18 92);
+  }
+}
+.issue-masthead-share:active { transform: scale(0.97); }
+.issue-masthead-share-copied {
+  border-color: oklch(0.74 0.18 145);
+  color: oklch(0.74 0.18 145);
 }
 
 @media (max-width: 720px) {

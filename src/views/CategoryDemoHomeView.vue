@@ -17,6 +17,13 @@
     <LiveLoadError v-else-if="liveError" :message="liveError" />
 
     <!-- ─────────────────────────────────────────────────────────────
+         ISSUE LEDE — single editorial sentence summarizing what's
+         in this issue, derived from the top selected stories.
+         Magazine's "what to read for" line at the very top.
+    ────────────────────────────────────────────────────────────── -->
+    <IssueLede :stories="selectedStories" :data="issueData" />
+
+    <!-- ─────────────────────────────────────────────────────────────
          NEW ISSUE COMPOSITION — dynamic section list driven by the
          detection + selection + composition pipeline. See
          docs/EDITORIAL_ARCHITECTURE.md. Sections render in priority
@@ -768,12 +775,16 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         7. AROUND THE LEAGUE — 5 news ticker rows
+         7. SEASON ARCS — five accumulating storylines.
+         Differs from The Wire (top of page) by cadence: The Wire is
+         daily / "what happened yesterday"; this section is durable
+         season-long pulses (hot streaks, bubble watch, rough patches,
+         cat kings). Same surface shape — different timescale.
     ────────────────────────────────────────────────────────────── -->
     <section class="ticker" aria-labelledby="ticker-headline">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-mute">Around the league</p>
-        <h2 class="ticker-headline" id="ticker-headline">Five things worth knowing.</h2>
+        <p class="section-eyebrow section-eyebrow-mute">The season so far</p>
+        <h2 class="ticker-headline" id="ticker-headline">Five arcs worth watching.</h2>
       </header>
 
       <ul class="ticker-list" role="list">
@@ -842,6 +853,7 @@ import MatchupOfWeek from '@/components/issue/MatchupOfWeek.vue'
 import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
+import IssueLede from '@/components/issue/IssueLede.vue'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
