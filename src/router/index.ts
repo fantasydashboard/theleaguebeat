@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useLeaguesStore } from '@/stores/leaguesNew'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -8,11 +9,25 @@ const router = createRouter({
     return { top: 0, behavior: 'instant' }
   },
   routes: [
-    // Landing — for now, drop visitors straight into the demo until
-    // a proper marketing landing page exists.
+    // Landing page — public marketing surface. Signed-in users with
+    // saved leagues short-circuit to their primary league via the
+    // LandingView's onMounted (and via this route's beforeEnter as a
+    // belt-and-suspenders fallback when the stores are pre-hydrated).
     {
       path: '/',
-      redirect: '/demo-categories/connect',
+      name: 'landing',
+      component: () => import('@/views/LandingView.vue'),
+      beforeEnter: (_to, _from, next) => {
+        const authStore = useAuthStore()
+        const leaguesStore = useLeaguesStore()
+        if (authStore.isAuthenticated && leaguesStore.leagues.length > 0) {
+          const primary = leaguesStore.leagues.find((l) => l.is_primary)
+          const target = primary ?? leaguesStore.leagues[0]
+          next(`/leagues/${target.id}/home`)
+          return
+        }
+        next()
+      },
     },
 
     // Auth flow

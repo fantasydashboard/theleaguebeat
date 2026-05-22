@@ -7,10 +7,53 @@
          initial value, so the page remains visually populated.
     ────────────────────────────────────────────────────────────── -->
     <div v-if="liveLoading" class="live-banner live-banner-loading" role="status" aria-live="polite">
-      <span class="live-banner-spinner" aria-hidden="true"></span>
+      <!-- Brand-aware loading mark: monogram pulses in place of the
+           generic spinner ring. Quieter, more on-brand. -->
+      <span class="live-banner-mark" aria-hidden="true">
+        <img src="/tlb-favicon.png" alt="" class="live-banner-mark-img" />
+      </span>
       Loading your league from {{ platformLabel }}. Hang tight.
     </div>
     <LiveLoadError v-else-if="liveError" :message="liveError" />
+
+    <!-- ─────────────────────────────────────────────────────────────
+         NEW ISSUE COMPOSITION — dynamic section list driven by the
+         detection + selection + composition pipeline. See
+         docs/EDITORIAL_ARCHITECTURE.md. Sections render in priority
+         order; the legacy hero face-off below still renders for
+         compatibility until Tier 1 finishes replacing it.
+    ────────────────────────────────────────────────────────────── -->
+    <template v-for="section in dynamicIssueSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
+      <HeroSolo
+        v-if="section.type === 'hero-solo' && section.story"
+        :story="section.story"
+        :data="issueData"
+      />
+      <HeroQuiet
+        v-else-if="section.type === 'hero-quiet'"
+        :story="section.story"
+        :data="issueData"
+      />
+      <MatchupOfWeek
+        v-else-if="section.type === 'matchup-of-week' && section.story"
+        :story="section.story"
+        :data="issueData"
+      />
+      <StreakWatch
+        v-else-if="section.type === 'streak-watch' && section.story"
+        :story="section.story"
+        :data="issueData"
+      />
+      <DivisionRace
+        v-else-if="section.type === 'division-race' && section.story"
+        :story="section.story"
+        :data="issueData"
+      />
+      <!-- hero-faceoff falls through to the legacy inline section
+           below, which already renders the face-off layout. Future
+           tiers will extract it into HeroFaceoff.vue and remove the
+           legacy inline section. -->
+    </template>
 
     <!-- ─────────────────────────────────────────────────────────────
          1. THE HEADLINE — Story of Week 8
@@ -765,6 +808,15 @@ import {
 import { accentFor, accentStops } from '@/utils/teamColor'
 import { smoothPath, type Point } from '@/utils/svgPath'
 import { renderHomePage, type RenderedHomeCopy } from '@/editorial/render'
+import { detectAll } from '@/editorial/detection'
+import { selectStoriesForIssue } from '@/editorial/selection'
+import { composeIssue, type IssueSection } from '@/editorial/composition'
+import { deriveSeasonStage } from '@/editorial/detection/helpers'
+import HeroSolo from '@/components/issue/HeroSolo.vue'
+import HeroQuiet from '@/components/issue/HeroQuiet.vue'
+import MatchupOfWeek from '@/components/issue/MatchupOfWeek.vue'
+import StreakWatch from '@/components/issue/StreakWatch.vue'
+import DivisionRace from '@/components/issue/DivisionRace.vue'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -983,6 +1035,68 @@ const liveEditorial = shallowRef<RenderedHomeCopy>(
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
+
+/* ─────────────────────────────────────────────────────────────────
+   NEW ISSUE PIPELINE — see docs/EDITORIAL_ARCHITECTURE.md.
+
+   Replaces the static 7-section layout with a dynamic, magazine-style
+   issue composition. Every visit gets a freshly-composed set of
+   sections based on which story candidates fire from the data,
+   ranked by importance + freshness + (eventually) personalization.
+
+   For Tier 1 we render the new dynamic section list ABOVE the
+   existing rendering — the legacy hero face-off + playoff push
+   continue to render below for compatibility. The new system
+   gradually replaces them as the rendered sections grow more
+   comprehensive in future tiers.
+───────────────────────────────────────────────────────────────── */
+const issueSections = computed<IssueSection[]>(() => {
+  const source = liveData.value ?? categoriesFixtureToLeagueData()
+  const context = {
+    currentWeek: source.currentWeek,
+    seasonStage: deriveSeasonStage(
+      source.currentWeek,
+      source.regularSeasonEndWeek,
+    ),
+    issueDate: new Date(),
+    viewer: source.teams.find((t) => t.isMyTeam)
+      ? {
+          userId: 'viewer',
+          myTeamId: source.teams.find((t) => t.isMyTeam)?.id,
+          myDivisionId: source.teams.find((t) => t.isMyTeam)?.divisionId,
+        }
+      : undefined,
+  }
+  const candidates = detectAll(source, context)
+  const stories = selectStoriesForIssue(candidates, context)
+  return composeIssue(stories, context)
+})
+
+/** Section types the new pipeline owns (rendered via the dynamic
+ *  loop in the template). Anchor sections + existing inline content
+ *  (standings, matchup feed, ticker, playoff push) keep their
+ *  hand-authored rendering below. */
+const NEW_SECTION_TYPES = new Set([
+  'hero-faceoff',
+  'hero-solo',
+  'hero-quiet',
+  'hero-trade',
+  'hero-milestone',
+  'matchup-of-week',
+  'streak-watch',
+  'division-race',
+  'trade-recap',
+  'player-spotlight',
+])
+
+const dynamicIssueSections = computed(() =>
+  issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type)),
+)
+
+/** Source league data passed to section components for team lookups. */
+const issueData = computed(
+  () => liveData.value ?? categoriesFixtureToLeagueData(),
+)
 
 // Two ways to bind this view to a real league:
 //   - Strict mode: `/leagues/:leagueId/home` — leagueId is a Supabase
@@ -1514,6 +1628,31 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
 @media (prefers-reduced-motion: no-preference) {
   @keyframes live-spin { to { transform: rotate(360deg); } }
   .live-banner-spinner { animation: live-spin 0.9s linear infinite; }
+}
+/* Brand-aware loading mark — pulses gently instead of spinning. */
+.live-banner-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.live-banner-mark-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes live-pulse {
+    0%, 100% { opacity: 0.55; transform: scale(0.96); }
+    50%      { opacity: 1;    transform: scale(1.02); }
+  }
+  .live-banner-mark {
+    animation: live-pulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  }
 }
 .live-banner-error {
   flex-wrap: wrap;

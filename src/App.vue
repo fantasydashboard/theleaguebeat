@@ -5,10 +5,9 @@
     <!-- Auth modal — surfaced from any route that requests sign-in.
          Each route opens it by emitting `open-signup`. -->
     <AuthModal
-      v-if="authModalOpen"
-      :open="authModalOpen"
+      :is-open="authModalOpen"
       @close="authModalOpen = false"
-      @signed-in="onSignedIn"
+      @success="onSignedIn"
     />
   </div>
 </template>
@@ -46,7 +45,7 @@ async function onSignedIn() {
 
 onMounted(async () => {
   try {
-    await authStore.checkAuth()
+    await authStore.initialize()
     if (authStore.isAuthenticated) {
       await Promise.all([
         platformsStore.fetchConnectedPlatforms(),

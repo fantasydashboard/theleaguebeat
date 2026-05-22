@@ -1,5 +1,47 @@
 <template>
   <div class="connect">
+    <!-- ─── Your saved leagues — only renders when signed in + at
+         least one league exists. Lets returning users jump straight
+         to their existing leagues without re-entering league IDs. -->
+    <section
+      v-if="authStore.isAuthenticated && leaguesStore.leagues.length > 0"
+      class="saved-leagues"
+      aria-labelledby="saved-leagues-heading"
+    >
+      <header class="saved-leagues-head">
+        <p class="connect-eyebrow">
+          <span class="connect-eyebrow-bar" aria-hidden="true"></span>
+          Your leagues
+        </p>
+        <h2 id="saved-leagues-heading" class="saved-leagues-headline">
+          Pick up where you left off.
+        </h2>
+      </header>
+      <ul class="saved-leagues-list" role="list">
+        <li
+          v-for="league in leaguesStore.leagues"
+          :key="league.id"
+          class="saved-leagues-row"
+        >
+          <router-link :to="`/leagues/${league.id}/home`" class="saved-leagues-link">
+            <span class="saved-leagues-name">{{ league.league_name }}</span>
+            <span class="saved-leagues-meta">
+              {{ platformLabel(league.platform) }} · {{ league.sport }}
+              <span v-if="league.season"> · {{ league.season }}</span>
+            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="saved-leagues-arrow" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </router-link>
+        </li>
+      </ul>
+      <div class="saved-leagues-sep" aria-hidden="true">
+        <span class="saved-leagues-sep-line"></span>
+        <span class="saved-leagues-sep-label">or add another</span>
+        <span class="saved-leagues-sep-line"></span>
+      </div>
+    </section>
+
     <!-- ─── Header ─────────────────────────────────────────────── -->
     <section class="connect-head">
       <p class="connect-eyebrow">
@@ -290,43 +332,105 @@
       </div>
 
       <form v-else class="connect-form" @submit.prevent="onEspnSubmit">
-        <!-- Credential status pill -->
-        <div class="espn-status">
-          <span
-            v-if="espnCredsStatus === 'detected'"
-            class="espn-status-pill espn-status-pill-ok"
+        <!-- Two-step ESPN readiness checklist.
+             Step 1: Chrome extension installed (so we can read cookies).
+             Step 2: User signed in to espn.com (so cookies exist).
+             Each step shows checking / ok / missing independently; the
+             user can see at a glance which prerequisite still needs
+             attention. The "stored cookies" path collapses both steps
+             to ok since the user already authed previously. -->
+        <ol class="espn-steps" aria-label="ESPN connection prerequisites">
+          <!-- Step 1: extension -->
+          <li
+            class="espn-step"
+            :class="[
+              `espn-step-${espnExtensionState}`,
+              { 'espn-step-done': espnExtensionState === 'ok' },
+            ]"
           >
-            <span class="espn-status-dot" aria-hidden="true"></span>
-            Chrome extension detected
-          </span>
-          <span
-            v-else-if="espnCredsStatus === 'stored'"
-            class="espn-status-pill espn-status-pill-ok"
+            <span class="espn-step-marker" aria-hidden="true">
+              <svg
+                v-if="espnExtensionState === 'ok'"
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="3.2"
+                stroke-linecap="round" stroke-linejoin="round"
+              ><polyline points="20 6 9 17 4 12"/></svg>
+              <span v-else-if="espnExtensionState === 'checking'" class="espn-step-spinner"></span>
+              <span v-else class="espn-step-num">1</span>
+            </span>
+            <div class="espn-step-body">
+              <p class="espn-step-title">Install the UFD Chrome extension</p>
+              <p v-if="espnExtensionState === 'ok'" class="espn-step-status espn-step-status-ok">
+                Detected.
+              </p>
+              <p v-else-if="espnExtensionState === 'checking'" class="espn-step-status">
+                Checking…
+              </p>
+              <a
+                v-else
+                :href="extensionUrl"
+                target="_blank"
+                rel="noopener"
+                class="espn-step-link"
+              >
+                Install extension
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 17L17 7M9 7h8v8"/>
+                </svg>
+              </a>
+            </div>
+          </li>
+
+          <!-- Step 2: signed in to ESPN -->
+          <li
+            class="espn-step"
+            :class="[
+              `espn-step-${espnSignedInState}`,
+              { 'espn-step-done': espnSignedInState === 'ok' },
+            ]"
           >
-            <span class="espn-status-dot" aria-hidden="true"></span>
-            ESPN cookies saved
-          </span>
-          <span
-            v-else-if="espnCredsStatus === 'checking'"
-            class="espn-status-pill espn-status-pill-mute"
-          >
-            Checking for credentials…
-          </span>
-          <span v-else class="espn-status-pill espn-status-pill-warn">
-            <a
-              :href="extensionUrl"
-              target="_blank"
-              rel="noopener"
-              class="espn-status-link"
+            <span class="espn-step-marker" aria-hidden="true">
+              <svg
+                v-if="espnSignedInState === 'ok'"
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="3.2"
+                stroke-linecap="round" stroke-linejoin="round"
+              ><polyline points="20 6 9 17 4 12"/></svg>
+              <span v-else-if="espnSignedInState === 'checking'" class="espn-step-spinner"></span>
+              <span v-else class="espn-step-num">2</span>
+            </span>
+            <div class="espn-step-body">
+              <p class="espn-step-title">Sign in to ESPN in this browser</p>
+              <p v-if="espnSignedInState === 'ok'" class="espn-step-status espn-step-status-ok">
+                Signed in.
+              </p>
+              <p v-else-if="espnSignedInState === 'checking'" class="espn-step-status">
+                Checking…
+              </p>
+              <a
+                v-else
+                :href="espnSignInUrl"
+                target="_blank"
+                rel="noopener"
+                class="espn-step-link"
+              >
+                Sign in at espn.com
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 17L17 7M9 7h8v8"/>
+                </svg>
+              </a>
+            </div>
+            <button
+              v-if="espnSignedInState === 'missing' && espnExtensionState === 'ok'"
+              type="button"
+              class="espn-step-recheck"
+              @click="refreshEspnCredsStatus"
+              aria-label="Re-check ESPN sign-in status"
             >
-              Install UFD Chrome extension
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M7 17L17 7M9 7h8v8"/>
-              </svg>
-            </a>
-            to fetch your league
-          </span>
-        </div>
+              Re-check
+            </button>
+          </li>
+        </ol>
 
         <label class="form-label" for="espn-league-id-input">
           Paste your ESPN baseball league ID
@@ -427,6 +531,30 @@ import {
 const router = useRouter()
 const authStore = useAuthStore()
 const platformsStore = usePlatformsStore()
+// Page-level access to saved leagues so we can render the "pick up
+// where you left off" section at the top for returning users.
+const leaguesStore = useLeaguesStore()
+
+// Hydrate the leagues list on mount if the user is signed in and
+// we haven't fetched yet (e.g. deep-link visit straight to /connect).
+onMounted(async () => {
+  if (authStore.isAuthenticated && leaguesStore.leagues.length === 0) {
+    try {
+      await leaguesStore.fetchLeagues()
+    } catch (err) {
+      console.warn('[CategoryDemoConnect] fetchLeagues failed:', err)
+    }
+  }
+})
+
+// Short, friendly platform label for the saved-leagues list.
+function platformLabel(p: string): string {
+  if (p === 'espn') return 'ESPN'
+  if (p === 'yahoo') return 'Yahoo'
+  if (p === 'sleeper') return 'Sleeper'
+  if (p === 'fantrax') return 'Fantrax'
+  return p
+}
 
 // Bubbles to App.vue, which owns the AuthModal. The demo layout
 // already forwards `open-signup` from its child router-view.
@@ -457,14 +585,32 @@ const yahooLeagues = ref<YahooLeagueOption[]>([])
 const selectedYahooLeagueKey = ref('')
 
 // ─── ESPN state ─────────────────────────────────────────────────
-type EspnCredsStatus = 'checking' | 'detected' | 'stored' | 'missing'
-const espnCredsStatus = ref<EspnCredsStatus>('checking')
+// We track the two prerequisites independently so the UI can show
+// per-step readiness instead of a single conflated status pill.
+type EspnStepState = 'checking' | 'ok' | 'missing'
+const espnExtensionState = ref<EspnStepState>('checking')
+const espnSignedInState  = ref<EspnStepState>('checking')
+// `espnCredsStatus` is kept as a derived signal because downstream
+// flows (submit handler, "stored cookies" path) still read it. Maps
+// the two-step state back to the existing 4-value status.
+const espnCredsStatus = computed<'checking' | 'detected' | 'stored' | 'missing'>(() => {
+  if (espnExtensionState.value === 'checking' || espnSignedInState.value === 'checking') {
+    return 'checking'
+  }
+  const stored = platformsStore.getEspnCredentials()
+  if (stored?.espn_s2 && stored?.swid) return 'stored'
+  if (espnExtensionState.value === 'ok' && espnSignedInState.value === 'ok') return 'detected'
+  return 'missing'
+})
 const espnLeagueIdInput = ref('')
 const manualEspnS2 = ref('')
 const manualSwid = ref('')
 const espnError = ref<string | null>(null)
 const espnBusy = ref(false)
 const extensionUrl = getExtensionStoreUrl()
+// Sign-in target on ESPN — used by step 2's CTA. Generic enough to
+// cover any future entry point; the league-detail page works as well.
+const espnSignInUrl = 'https://www.espn.com/fantasy/baseball/'
 
 const canSubmitEspn = computed(() => {
   if (!espnLeagueIdInput.value.trim()) return false
@@ -489,31 +635,45 @@ function pickPlatform(platform: Platform): void {
 }
 
 /**
- * Probe for ESPN credentials in order of preference:
- *   1) localStorage / Supabase (already-stored cookies)
- *   2) Chrome extension (live cookie pull)
- * Updates `espnCredsStatus` so the pill reflects reality.
+ * Probe both prerequisites independently so the UI can render
+ * per-step readiness:
+ *   - `espnExtensionState`: is the UFD Chrome extension installed?
+ *   - `espnSignedInState`:  are ESPN cookies readable (i.e. the user
+ *     is signed in to espn.com in this browser)?
+ *
+ * If stored cookies exist on the platforms store, both steps short-
+ * circuit to "ok" — the user already authed at some point.
  */
 async function refreshEspnCredsStatus(): Promise<void> {
-  espnCredsStatus.value = 'checking'
+  espnExtensionState.value = 'checking'
+  espnSignedInState.value  = 'checking'
+
+  // Short-circuit: if cookies were stored from a previous session,
+  // both prerequisites are effectively satisfied.
   const stored = platformsStore.getEspnCredentials()
   if (stored?.espn_s2 && stored?.swid) {
-    espnCredsStatus.value = 'stored'
+    espnExtensionState.value = 'ok'
+    espnSignedInState.value  = 'ok'
     return
   }
+
   try {
     const installed = await isExtensionInstalled()
+    espnExtensionState.value = installed ? 'ok' : 'missing'
     if (installed) {
       const cookies = await getEspnCookiesFromExtension()
-      if (cookies.espn_s2 && cookies.swid) {
-        espnCredsStatus.value = 'detected'
-        return
-      }
+      espnSignedInState.value =
+        cookies.espn_s2 && cookies.swid ? 'ok' : 'missing'
+    } else {
+      // Without the extension we can't probe ESPN cookies from the
+      // browser at all. Treat sign-in as "missing" until the
+      // extension is installed.
+      espnSignedInState.value = 'missing'
     }
   } catch {
-    // ignore — fall through to missing
+    espnExtensionState.value = 'missing'
+    espnSignedInState.value  = 'missing'
   }
-  espnCredsStatus.value = 'missing'
 }
 
 onMounted(() => {
@@ -732,6 +892,116 @@ async function onEspnSubmit(): Promise<void> {
   max-width: 880px;
   margin: 0 auto;
   padding-top: 16px;
+}
+
+/* ─── Saved leagues (pick-up-where-you-left-off) ──────────────── */
+.saved-leagues {
+  margin-bottom: 56px;
+  padding: 28px;
+  border-radius: 14px;
+  background: oklch(0.10 0.015 90 / 0.55);
+  border: 1px solid oklch(0.20 0.015 90);
+}
+.saved-leagues-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.saved-leagues-headline {
+  margin: 0;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+  color: var(--ink-1);
+}
+.saved-leagues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.saved-leagues-row {
+  /* No box on the row itself — visual weight lives on the link card. */
+}
+.saved-leagues-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name arrow"
+    "meta arrow";
+  align-items: center;
+  gap: 4px 16px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: oklch(0.07 0.014 90 / 0.55);
+  border: 1px solid oklch(0.18 0.015 90);
+  text-decoration: none;
+  color: var(--ink-1);
+  transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .saved-leagues-link:hover {
+    background: oklch(0.10 0.014 90);
+    border-color: oklch(0.78 0.18 92 / 0.40);
+  }
+  .saved-leagues-link:hover .saved-leagues-arrow {
+    transform: translateX(2px);
+  }
+}
+.saved-leagues-link:active { transform: scale(0.995); }
+.saved-leagues-link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.saved-leagues-name {
+  grid-area: name;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+.saved-leagues-meta {
+  grid-area: meta;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.saved-leagues-arrow {
+  grid-area: arrow;
+  color: var(--ink-3);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* "or add another" divider — kept quiet so the saved-leagues list
+   reads as the primary CTA. */
+.saved-leagues-sep {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  color: var(--ink-3);
+}
+.saved-leagues-sep-line {
+  flex: 1;
+  height: 1px;
+  background: oklch(0.18 0.015 90);
+}
+.saved-leagues-sep-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 /* ─── Header ──────────────────────────────────────────────────── */
@@ -1107,6 +1377,139 @@ async function onEspnSubmit(): Promise<void> {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ─── ESPN two-step prerequisite checklist ────────────────────── */
+.espn-steps {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 10px;
+  background: oklch(0.10 0.015 90 / 0.55);
+  border: 1px solid oklch(0.20 0.015 90);
+}
+.espn-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: oklch(0.07 0.014 90 / 0.55);
+  border: 1px solid transparent;
+  transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.espn-step-ok      { border-color: oklch(0.74 0.18 145 / 0.30); background: oklch(0.74 0.18 145 / 0.06); }
+.espn-step-missing { border-color: oklch(0.78 0.16 60  / 0.30); background: oklch(0.78 0.16 60  / 0.06); }
+.espn-step-checking { border-color: oklch(0.32 0.012 90); }
+
+.espn-step-marker {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 800;
+  background: oklch(0.20 0.015 90);
+  color: var(--ink-2);
+}
+.espn-step-ok .espn-step-marker {
+  background: var(--accent-up);
+  color: oklch(0.10 0.05 145);
+}
+.espn-step-missing .espn-step-marker {
+  background: oklch(0.78 0.16 60);
+  color: oklch(0.10 0.05 60);
+}
+.espn-step-num {
+  line-height: 1;
+}
+.espn-step-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid oklch(0.32 0.012 90);
+  border-top-color: var(--ink-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes espn-step-spin { to { transform: rotate(360deg); } }
+  .espn-step-spinner { animation: espn-step-spin 0.85s linear infinite; }
+}
+
+.espn-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+}
+.espn-step-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--ink-1);
+}
+.espn-step-done .espn-step-title {
+  color: var(--ink-2);
+}
+.espn-step-status {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.espn-step-status-ok {
+  color: var(--accent-up);
+}
+.espn-step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.16 60);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.espn-step-link:hover {
+  color: oklch(0.85 0.16 60);
+}
+.espn-step-recheck {
+  align-self: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid oklch(0.32 0.012 90);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.espn-step-recheck:hover {
+  color: var(--ink-1);
+  border-color: oklch(0.55 0.010 90);
+}
+.espn-step-recheck:active {
+  transform: scale(0.97);
 }
 
 /* ─── ESPN advanced (manual cookie entry) ─────────────────────── */

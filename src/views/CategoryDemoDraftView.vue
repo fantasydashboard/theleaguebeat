@@ -8,7 +8,9 @@
          stays visually populated during load.
     ────────────────────────────────────────────────────────────── -->
     <div v-if="liveLoading" class="live-banner live-banner-loading" role="status" aria-live="polite">
-      <span class="live-banner-spinner" aria-hidden="true"></span>
+      <span class="live-banner-mark" aria-hidden="true">
+        <img src="/tlb-favicon.png" alt="" class="live-banner-mark-img" />
+      </span>
       Loading your draft from {{ platformLabel }}. Hang tight.
     </div>
     <LiveLoadError v-else-if="liveError" :message="liveError" />
@@ -2705,6 +2707,18 @@ function onOpenPickFromTeam(pickOverall: number) {
 @media (prefers-reduced-motion: no-preference) {
   @keyframes live-spin { to { transform: rotate(360deg); } }
   .live-banner-spinner { animation: live-spin 0.9s linear infinite; }
+}
+.live-banner-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 4px; overflow: hidden; flex-shrink: 0;
+}
+.live-banner-mark-img { width: 100%; height: 100%; display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes live-pulse {
+    0%, 100% { opacity: 0.55; transform: scale(0.96); }
+    50%      { opacity: 1;    transform: scale(1.02); }
+  }
+  .live-banner-mark { animation: live-pulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 }
 .live-banner-error,
 .live-banner-info {

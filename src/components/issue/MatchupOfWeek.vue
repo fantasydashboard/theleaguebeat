@@ -1,0 +1,384 @@
+<template>
+  <!--
+    MatchupOfWeek — two-team callout for the matchup-driven story
+    types: matchup-of-week, photo-finish, razor-close, division-clash,
+    rematch, playoff-rematch, spoiler-watch.
+
+    This is a curated EDITORIAL callout. It is intentionally distinct
+    from the row-style matchup-feed below it so the page does not
+    repeat itself.
+  -->
+  <section class="mow" :aria-labelledby="`mow-headline-${componentId}`">
+    <header class="mow-head">
+      <p class="mow-eyebrow">
+        <span class="mow-eyebrow-bar" aria-hidden="true"></span>
+        {{ eyebrow }}
+      </p>
+      <h2 class="mow-headline" :id="`mow-headline-${componentId}`">{{ headline }}</h2>
+    </header>
+
+    <div class="mow-pair" :aria-label="`${home.name} versus ${away.name}`">
+      <article class="mow-side mow-side-home">
+        <div
+          class="mow-avatar"
+          :style="{ background: `linear-gradient(135deg, ${home.avatarColor})` }"
+          :class="{ 'mow-avatar-placeholder': !hasHome }"
+        >
+          <img v-if="home.avatarUrl" :src="home.avatarUrl" class="mow-avatar-img" alt="" />
+          <span v-else>{{ home.ownerInitials }}</span>
+        </div>
+        <div class="mow-side-meta">
+          <p class="mow-side-name">{{ home.name }}</p>
+          <p v-if="homeRank" class="mow-side-rank">#{{ homeRank }}</p>
+          <p v-if="homeCats != null" class="mow-side-score">{{ homeCats }}</p>
+        </div>
+      </article>
+
+      <div class="mow-vs" aria-hidden="true">
+        <span class="mow-vs-line"></span>
+        <span class="mow-vs-word">VS</span>
+        <span class="mow-vs-line"></span>
+      </div>
+
+      <article class="mow-side mow-side-away">
+        <div
+          class="mow-avatar"
+          :style="{ background: `linear-gradient(135deg, ${away.avatarColor})` }"
+          :class="{ 'mow-avatar-placeholder': !hasAway }"
+        >
+          <img v-if="away.avatarUrl" :src="away.avatarUrl" class="mow-avatar-img" alt="" />
+          <span v-else>{{ away.ownerInitials }}</span>
+        </div>
+        <div class="mow-side-meta">
+          <p class="mow-side-name">{{ away.name }}</p>
+          <p v-if="awayRank" class="mow-side-rank">#{{ awayRank }}</p>
+          <p v-if="awayCats != null" class="mow-side-score">{{ awayCats }}</p>
+        </div>
+      </article>
+    </div>
+
+    <p class="mow-stakes">{{ stakes }}</p>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { SelectedStory } from '@/editorial/detection/types'
+import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+
+const props = defineProps<{
+  story: SelectedStory
+  data?: CategoryLeagueData
+}>()
+
+const componentId = Math.random().toString(36).slice(2, 8)
+
+/** Placeholder team shape — keeps the layout intact when a teamId
+ *  cannot be resolved against `props.data`. */
+function placeholder(label = 'Team'): CategoryLeagueDataTeam {
+  return {
+    id: 'unknown',
+    name: label,
+    ownerName: '',
+    ownerInitials: '??',
+    avatarColor: 'oklch(0.32 0.012 90), oklch(0.20 0.015 90)',
+    isMyTeam: false,
+  }
+}
+
+function lookupTeam(id: string | undefined, label: string): CategoryLeagueDataTeam {
+  if (!id) return placeholder(label)
+  return props.data?.teams.find((t) => t.id === id) ?? placeholder(label)
+}
+
+/** Pull team ids from context.homeTeamId/awayTeamId if available, else
+ *  fall back to teamIds[0] and teamIds[1]. */
+const homeTeamId = computed<string | undefined>(() => {
+  const ctx = props.story.context as { homeTeamId?: unknown }
+  if (typeof ctx.homeTeamId === 'string') return ctx.homeTeamId
+  return props.story.teamIds?.[0]
+})
+const awayTeamId = computed<string | undefined>(() => {
+  const ctx = props.story.context as { awayTeamId?: unknown }
+  if (typeof ctx.awayTeamId === 'string') return ctx.awayTeamId
+  return props.story.teamIds?.[1]
+})
+
+const home = computed(() => lookupTeam(homeTeamId.value, 'Home'))
+const away = computed(() => lookupTeam(awayTeamId.value, 'Away'))
+const hasHome = computed(() => home.value.id !== 'unknown')
+const hasAway = computed(() => away.value.id !== 'unknown')
+
+/** Optional rank labels off either context or current standings. */
+function rankFor(teamId: string | undefined): number | null {
+  if (!teamId) return null
+  const row = props.data?.standings.find((s) => s.teamId === teamId)
+  return row?.rank ?? null
+}
+const homeRank = computed(() => {
+  const ctx = props.story.context as { homeRank?: unknown }
+  if (typeof ctx.homeRank === 'number') return ctx.homeRank
+  return rankFor(homeTeamId.value)
+})
+const awayRank = computed(() => {
+  const ctx = props.story.context as { awayRank?: unknown }
+  if (typeof ctx.awayRank === 'number') return ctx.awayRank
+  return rankFor(awayTeamId.value)
+})
+
+/** Cat-wins so far, if the story carries them (matchup detectors do). */
+const homeCats = computed<number | null>(() => {
+  const v = (props.story.context as { homeCatWins?: unknown }).homeCatWins
+  return typeof v === 'number' ? v : null
+})
+const awayCats = computed<number | null>(() => {
+  const v = (props.story.context as { awayCatWins?: unknown }).awayCatWins
+  return typeof v === 'number' ? v : null
+})
+
+const eyebrow = computed(() => {
+  switch (props.story.type) {
+    case 'matchup-of-week':   return 'Matchup of the week'
+    case 'photo-finish':      return 'Photo finish'
+    case 'razor-close':       return 'Razor close'
+    case 'division-clash':    return 'Division clash'
+    case 'rematch':           return 'Rematch'
+    case 'playoff-rematch':   return 'Playoff rematch'
+    case 'spoiler-watch':     return 'Spoiler watch'
+    case 'stakes-week':       return 'Stakes week'
+    default:                  return 'Featured matchup'
+  }
+})
+
+const headline = computed(() => {
+  const h = home.value.name || 'Home'
+  const a = away.value.name || 'Away'
+  switch (props.story.type) {
+    case 'matchup-of-week':
+      if (homeRank.value && awayRank.value) {
+        return `${h} draws ${a}. Seeds ${homeRank.value} and ${awayRank.value}.`
+      }
+      return `${h} draws ${a}.`
+    case 'photo-finish':
+      return `${h} and ${a}. One cat decides it.`
+    case 'razor-close':
+      return `${h} and ${a} are inside a cat.`
+    case 'division-clash':
+      return `${h} hosts ${a}. Division stakes.`
+    case 'rematch':
+      return `${h} sees ${a} again.`
+    case 'playoff-rematch':
+      return `${h} and ${a}. The playoff rematch.`
+    case 'spoiler-watch':
+      return `${h} hosts ${a}. Eliminated meets contender.`
+    case 'stakes-week':
+      return `${h} versus ${a}. Stakes week.`
+    default:
+      return `${h} versus ${a}.`
+  }
+})
+
+/** Stakes line — one sentence under the pair. Specific where we can be. */
+const stakes = computed(() => {
+  const ctx = props.story.context as Record<string, unknown>
+  const hCats = homeCats.value
+  const aCats = awayCats.value
+  const contested = typeof ctx.contestedCount === 'number' ? ctx.contestedCount : null
+  const status = typeof ctx.status === 'string' ? ctx.status : null
+
+  switch (props.story.type) {
+    case 'matchup-of-week':
+      if (hCats != null && aCats != null) return `${hCats}-${aCats} on the scoreboard${contested != null ? `, ${contested} cats still in play.` : '.'}`
+      if (homeRank.value && awayRank.value) return `Top of the slate. The two highest seeds drew each other.`
+      return 'Top of the slate this week.'
+    case 'photo-finish':
+      if (contested != null) return `${contested} cats unresolved. The split decides it.`
+      return 'A one-cat margin going into the final hours.'
+    case 'razor-close':
+      if (hCats != null && aCats != null) return `${hCats}-${aCats} with cats still live. Margin: one.`
+      return 'Inside a single category. Either side can flip it.'
+    case 'division-clash':
+      return 'Same division. The winner clears air in the bubble.'
+    case 'rematch':
+      return 'Same two teams from earlier in the year. Different shape this time.'
+    case 'playoff-rematch':
+      return 'A bracket rerun. The first meeting set the tone.'
+    case 'spoiler-watch':
+      return 'A team with nothing to lose can take the contender down a peg.'
+    case 'stakes-week':
+      return 'Both seeds need this one.'
+    default:
+      if (status === 'live') return 'Live now. The cats are still moving.'
+      return 'A matchup worth the click this week.'
+  }
+})
+</script>
+
+<style scoped>
+.mow {
+  --ink-1: oklch(0.97 0.005 90);
+  --ink-2: oklch(0.78 0.008 90);
+  --ink-3: oklch(0.55 0.010 90);
+  --ink-4: oklch(0.32 0.012 90);
+  --accent-primary:   oklch(0.78 0.18 92);
+  --accent-secondary: oklch(0.70 0.27 350);
+  --accent-tertiary:  oklch(0.72 0.18 195);
+
+  position: relative;
+  padding: 28px 28px 26px;
+  border: 1px solid oklch(0.22 0.015 90);
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse at top left, oklch(0.72 0.18 195 / 0.10), transparent 55%),
+    radial-gradient(ellipse at bottom right, oklch(0.70 0.27 350 / 0.08), transparent 55%),
+    oklch(0.10 0.015 90);
+  font-family: 'Barlow', sans-serif;
+  color: var(--ink-1);
+}
+
+.mow-head { margin-bottom: 22px; }
+.mow-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-tertiary);
+  margin: 0 0 10px;
+}
+.mow-eyebrow-bar {
+  width: 22px;
+  height: 1px;
+  background: var(--accent-tertiary);
+}
+.mow-headline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  line-height: 1;
+  letter-spacing: -0.012em;
+  color: var(--ink-1);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mow-pair {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: center;
+  margin: 6px 0 18px;
+}
+
+.mow-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.mow-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  color: oklch(0.12 0.012 90);
+  box-shadow: 0 10px 28px -14px oklch(0 0 0 / 0.55);
+  overflow: hidden;
+}
+.mow-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mow-avatar-placeholder {
+  opacity: 0.65;
+  color: var(--ink-3);
+}
+
+.mow-side-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.mow-side-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.02rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-1);
+  margin: 0;
+  max-width: 18ch;
+  overflow-wrap: anywhere;
+}
+.mow-side-rank {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 0;
+}
+.mow-side-score {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--ink-1);
+  margin: 2px 0 0;
+}
+
+.mow-vs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 56px;
+}
+.mow-vs-line {
+  width: 1px;
+  height: 22px;
+  background: oklch(0.30 0.015 90);
+}
+.mow-vs-word {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--ink-3);
+}
+
+.mow-stakes {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0;
+  text-align: center;
+  max-width: 56ch;
+  margin-inline: auto;
+}
+
+@media (max-width: 520px) {
+  .mow { padding: 22px 18px 22px; border-radius: 18px; }
+  .mow-pair { gap: 8px; }
+  .mow-avatar { width: 60px; height: 60px; border-radius: 14px; font-size: 1.05rem; }
+  .mow-side-score { font-size: 1.25rem; }
+  .mow-vs { min-width: 40px; }
+  .mow-vs-word { font-size: 0.7rem; letter-spacing: 0.18em; }
+  .mow-stakes { font-size: 0.92rem; text-align: left; }
+}
+@media (max-width: 380px) {
+  .mow { padding: 18px 14px 18px; }
+}
+</style>

@@ -5,6 +5,13 @@
     <header class="league-bar" role="banner">
       <div class="league-bar-inner">
         <div class="league-bar-left">
+          <!-- Masthead — TLB monogram, always-visible, clickable to /.
+               Plays the "you're inside The League Beat" role on every
+               working page. Wayfinding ("Your league" pill) lives next
+               to it; the two are different signals stacked side by side. -->
+          <router-link to="/" class="league-bar-brand" aria-label="The League Beat — back to home">
+            <img src="/tlb-favicon.png" alt="The League Beat" class="league-bar-brand-mark" />
+          </router-link>
           <span class="league-bar-pill" aria-label="Live league experience">
             <span class="league-bar-dot" aria-hidden="true"></span>
             Your league
@@ -110,6 +117,8 @@
     <main class="league-main">
       <router-view @open-signup="$emit('open-signup')" />
     </main>
+
+    <TLBFooter />
   </div>
 </template>
 
@@ -118,6 +127,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
+import TLBFooter from '@/components/TLBFooter.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -239,6 +249,31 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 .league-bar-left, .league-bar-right { display: inline-flex; align-items: center; gap: 14px; }
+
+/* Masthead — small monogram, persistent across every product page. */
+.league-bar-brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 2px;
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .league-bar-brand:hover { opacity: 0.85; }
+}
+.league-bar-brand:active { transform: scale(0.97); transition-duration: 100ms; }
+.league-bar-brand:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.league-bar-brand-mark {
+  width: 32px;
+  height: 32px;
+  display: block;
+  border-radius: 6px;
+}
 
 /* Green pill differentiates "your league" (live) from the teal demo pill. */
 .league-bar-pill {

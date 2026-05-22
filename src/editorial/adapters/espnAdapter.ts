@@ -280,6 +280,19 @@ export async function espnLeagueToCategoryData(
   const currentWeek = clampWeek(league.status?.currentMatchupPeriod ?? 1)
   const playoffCutoff = league.settings?.playoffTeamCount || 6
 
+  // Last week of the regular season — drives season-stage detection
+  // so editorial copy like "Four weeks left to settle the bubble"
+  // is anchored to the league's actual schedule rather than the
+  // demo fixture's 12-week assumption. ESPN exposes the count of
+  // regular-season matchup periods at
+  // `settings.scheduleSettings.matchupPeriodCount` (or the
+  // `regularSeasonMatchupPeriodCount` shortcut), with playoff
+  // periods stacked on top.
+  const regularSeasonEndWeek =
+    (league.settings as any)?.scheduleSettings?.matchupPeriodCount
+    ?? league.settings?.regularSeasonMatchupPeriodCount
+    ?? undefined
+
   // 2. Teams + members in parallel.
   const [teams, members] = await Promise.all([
     withCache(cacheKey(leagueId, 'teams', season), () =>
@@ -375,12 +388,20 @@ export async function espnLeagueToCategoryData(
   // 15. Draft (optional).
   const draft = await buildDraft(leagueId, season)
 
+  // Division metadata — drives the new division-aware detection
+  // layer (division-race-tight, division-clash, divisional-wild-card,
+  // etc.). Returns undefined for single-table leagues; downstream
+  // detectors no-op when the field is absent.
+  const divisions = buildDivisions(league)
+
   return {
     leagueId,
     leagueName: league.name || `ESPN League ${leagueId}`,
     currentWeek,
     currentSeason: season,
     playoffCutoff,
+    regularSeasonEndWeek,
+    divisions,
     teams: teamsOut,
     categories,
     standings,
@@ -487,8 +508,37 @@ function buildTeams(
       avatarUrl: t.logo || undefined,
       avatarColor: teamColorHash(`espn:${t.id}:${teamName}`),
       isMyTeam,
+      // ESPN divisions: each team carries a numeric `divisionId`;
+      // 0 means "no division" (single-table leagues). Editorial
+      // detectors gate division stories on the presence of a
+      // non-empty `divisions` array, so we leave divisionId
+      // undefined when ESPN reports 0.
+      divisionId:
+        t.divisionId && t.divisionId > 0
+          ? `espn-div-${t.divisionId}`
+          : undefined,
     }
   })
+}
+
+/**
+ * Surface ESPN's division metadata onto the editorial contract.
+ * `settings.scheduleSettings.divisions` is an array of
+ * `{ id, name, size }`; we map id → our namespaced id so it lines up
+ * with each team's `divisionId`. Returns undefined for single-table
+ * leagues (zero or one division).
+ */
+function buildDivisions(
+  league: EspnLeague,
+): { id: string; name: string }[] | undefined {
+  const raw = (league.settings as any)?.scheduleSettings?.divisions
+  if (!Array.isArray(raw) || raw.length < 2) return undefined
+  return raw.map((d: any, idx: number) => ({
+    id: `espn-div-${d?.id ?? idx}`,
+    name: typeof d?.name === 'string' && d.name.length > 0
+      ? d.name
+      : `Division ${idx + 1}`,
+  }))
 }
 
 function initialsOf(name: string): string {

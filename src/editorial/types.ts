@@ -31,6 +31,19 @@ export interface CategoryLeagueDataTeam {
   avatarUrl?: string
   avatarColor: string         // OKLCH gradient stops, comma-separated
   isMyTeam: boolean
+  /** Division id, if the league is divisional. Maps to one of the
+   *  entries in `CategoryLeagueData.divisions`. */
+  divisionId?: string
+  /** Optional descriptive label rendered next to the team name in
+   *  the standings ("Pitching-pure", "Speed and patience", etc.). */
+  profileDescriptor?: string
+}
+
+/** A division in a divisional league (typical for ESPN setups —
+ *  N/S or E/W). Leagues without divisions just omit this. */
+export interface CategoryLeagueDataDivision {
+  id: string
+  name: string
 }
 
 export interface CategoryLeagueDataCategory {
@@ -172,6 +185,15 @@ export interface CategoryLeagueData {
    * (e.g. 12 for the demo category baseball league) when missing.
    */
   regularSeasonEndWeek?: number
+
+  /**
+   * League division metadata. Many ESPN leagues are split into 2+
+   * divisions (e.g. North/South); each team carries a divisionId
+   * referencing one of these entries. Optional because Sleeper +
+   * Yahoo leagues are typically division-less, and the demo fixture
+   * is too.
+   */
+  divisions?: CategoryLeagueDataDivision[]
 
   // Teams
   teams: CategoryLeagueDataTeam[]

@@ -4,6 +4,11 @@
     <header class="demo-bar" role="banner">
       <div class="demo-bar-inner">
         <div class="demo-bar-left">
+          <!-- Masthead — same monogram as the live-league layout so the
+               brand is consistent across demo and product. -->
+          <router-link to="/" class="demo-bar-brand" aria-label="The League Beat — back to home">
+            <img src="/tlb-favicon.png" alt="The League Beat" class="demo-bar-brand-mark" />
+          </router-link>
           <span class="demo-bar-pill" aria-label="You are exploring a category-league demo">
             <span class="demo-bar-dot" aria-hidden="true"></span>
             Category league demo
@@ -59,10 +64,13 @@
     <main class="demo-main">
       <router-view @open-signup="$emit('open-signup')" />
     </main>
+
+    <TLBFooter />
   </div>
 </template>
 
 <script setup lang="ts">
+import TLBFooter from '@/components/TLBFooter.vue'
 defineEmits<{ (e: 'open-signup'): void }>()
 </script>
 
@@ -108,6 +116,31 @@ defineEmits<{ (e: 'open-signup'): void }>()
   flex-wrap: wrap;
 }
 .demo-bar-left, .demo-bar-right { display: inline-flex; align-items: center; gap: 14px; }
+
+/* Masthead — small monogram, persistent across every product page. */
+.demo-bar-brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 2px;
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .demo-bar-brand:hover { opacity: 0.85; }
+}
+.demo-bar-brand:active { transform: scale(0.97); transition-duration: 100ms; }
+.demo-bar-brand:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.demo-bar-brand-mark {
+  width: 32px;
+  height: 32px;
+  display: block;
+  border-radius: 6px;
+}
 
 /* Teal pill so this demo differentiates from /demo (which uses magenta). */
 .demo-bar-pill {
