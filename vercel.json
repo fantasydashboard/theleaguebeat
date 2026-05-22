@@ -5,6 +5,10 @@
       "destination": "/api/supabase/[...path]"
     },
     {
+      "source": "/i/:shareSlug",
+      "destination": "/api/i/:shareSlug"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
