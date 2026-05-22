@@ -61,10 +61,14 @@
       </div>
     </nav>
 
-    <!-- Magazine masthead — fixed demo issue. Same shape as the live
-         layout, just driven by the fixture's week + season since the
-         demo doesn't have a real league row. -->
-    <IssueMasthead :issue="demoIssue" />
+    <!-- Magazine masthead — reads live issue context from
+         useIssueStore (each demo view publishes its fixture's week
+         on mount). Fallback props supply the demo's current week
+         for first-paint state before a view mounts. -->
+    <IssueMasthead
+      :fallback-week="demoFallback.week"
+      :fallback-season="demoFallback.season"
+    />
 
     <main class="demo-main">
       <router-view @open-signup="$emit('open-signup')" />
@@ -82,17 +86,13 @@ import { currentWeek as fixtureWeek } from '@/fixtures/categoriesLeague'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
-/** Demo issue meta — pulled from the fixture so the masthead reads
- *  consistently with the rest of the demo content. */
-const demoIssue = computed(() => {
-  const year = new Date().getFullYear()
-  return {
-    volume: Math.max(1, year - 2025),
-    issueNumber: fixtureWeek,
-    weekNumber: fixtureWeek,
-    year,
-  }
-})
+/** First-paint fallback so the masthead reads consistently with
+ *  the rest of the demo content before a child view publishes the
+ *  live values via the issue store. */
+const demoFallback = computed(() => ({
+  week: fixtureWeek,
+  season: new Date().getFullYear(),
+}))
 </script>
 
 <style scoped>

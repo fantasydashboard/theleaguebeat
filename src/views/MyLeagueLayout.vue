@@ -114,14 +114,14 @@
       </div>
     </nav>
 
-    <!-- Magazine masthead — sits between the league chrome and the
-         issue content. Establishes "you're reading this week's issue."
-         Only renders when we have league data to derive the issue
-         meta from. -->
+    <!-- Magazine masthead — reads live issue context from the
+         useIssueStore (set by whichever view loaded the league).
+         Falls back to cached league-row data for first-paint state
+         before the view's adapter populates the store. -->
     <IssueMasthead
-      v-if="mastheadIssue"
-      :issue="mastheadIssue"
-      :last-updated="mastheadUpdatedAt"
+      :fallback-week="mastheadFallback?.week"
+      :fallback-season="mastheadFallback?.season"
+      :fallback-updated="mastheadUpdatedAt"
     />
 
     <main class="league-main">
@@ -160,24 +160,20 @@ const activeLeague = computed(() =>
 )
 
 /* ─────────────────────────────────────────────────────────────────
-   Masthead issue metadata — derived from the active league row.
-   This renders BEFORE the view runs its adapter fetch, so we work
-   from the cheap fields on the league row (season + settings) rather
-   than the full CategoryLeagueData. View-level masthead overrides
-   (with finer week math) are a future polish.
+   Masthead fallback — feeds the masthead its first-paint state from
+   the cached `leagues` row before the active view's adapter loads
+   and writes the live week/season into the issue store. Pulled from
+   `settings.current_week` if present; otherwise the masthead's "ISSUE"
+   number renders empty until live data arrives.
 ───────────────────────────────────────────────────────────────── */
-const mastheadIssue = computed(() => {
+const mastheadFallback = computed(() => {
   const league = activeLeague.value
   if (!league) return null
   const year = parseSeasonYear(league.season)
   const settings = (league.settings ?? {}) as Record<string, unknown>
-  const weekNumber = Math.max(1, Number(settings.current_week ?? 1) || 1)
-  return {
-    volume: Math.max(1, year - 2025),
-    issueNumber: weekNumber,
-    weekNumber,
-    year,
-  }
+  const rawWeek = Number(settings.current_week ?? 0)
+  const week = Number.isFinite(rawWeek) && rawWeek > 0 ? rawWeek : undefined
+  return { week, season: year }
 })
 
 /** Use the league row's `last_synced_at` if present so the

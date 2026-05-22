@@ -2,23 +2,24 @@
   <!-- Magazine masthead — persistent thin strip above the hero on
        every issue page. Establishes the publication framing: this
        isn't a dashboard, it's an issue of a magazine you're reading.
-       Renders inside the layout so it persists across home / power
-       rankings / matchups / draft / history. -->
+       Reads live issue context from useIssueStore (set by whichever
+       view loaded the league); falls back to props for first-paint
+       state when the store hasn't been populated yet. -->
   <div class="issue-masthead" role="banner">
     <div class="issue-masthead-inner">
       <div class="issue-masthead-rule" aria-hidden="true"></div>
 
       <p class="issue-masthead-brand">THE LEAGUE BEAT</p>
 
-      <div class="issue-masthead-meta" v-if="issue">
+      <div class="issue-masthead-meta" v-if="meta">
         <span class="issue-masthead-sep" aria-hidden="true">·</span>
-        <span>VOL. {{ issue.volume }}</span>
+        <span>VOL. {{ meta.volume }}</span>
         <span class="issue-masthead-sep" aria-hidden="true">·</span>
-        <span>ISSUE {{ issue.issueNumber }}</span>
+        <span :class="{ 'issue-masthead-label': meta.issueLabel.kind === 'playoff' }">
+          {{ meta.issueLabel.display }}
+        </span>
         <span class="issue-masthead-sep" aria-hidden="true">·</span>
-        <span>WEEK {{ issue.weekNumber }}</span>
-        <span class="issue-masthead-sep" aria-hidden="true">·</span>
-        <span>{{ issue.year }}</span>
+        <span>{{ meta.year }}</span>
         <span
           v-if="updatedLabel"
           class="issue-masthead-meta-dim"
@@ -35,39 +36,76 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useIssueStore } from '@/stores/issueState'
 
-/**
- * Issue metadata for the masthead. All fields are derived from the
- * league + season state — see the helper `deriveIssueMeta` exported
- * below so any layout/view can produce the same shape.
- */
-export interface IssueMeta {
-  /** Year-of-publication relative to the brand epoch (TLB started
-   *  shipping in 2026 → that's Vol 1). */
-  volume: number
-  /** Sequential issue number within this volume — equals the current
-   *  matchup week of the active league. */
-  issueNumber: number
-  /** Matchup week for the active league, shown alongside the issue
-   *  number for sports-context legibility. */
-  weekNumber: number
-  /** Calendar year of the season. */
-  year: number
-}
-
+/** First-paint fallback — passed by the layout from the cached league
+ *  row before the view's live adapter populates the store. */
 const props = defineProps<{
-  /** Pre-computed issue metadata. Layouts derive this from their
-   *  active league and pass it down. */
-  issue?: IssueMeta
-  /** Optional last-updated timestamp for the "UPDATED X AGO" line.
-   *  If omitted the meta line skips the updated chunk entirely. */
-  lastUpdated?: Date
+  fallbackWeek?: number
+  fallbackSeason?: number
+  fallbackUpdated?: Date
 }>()
 
-const updatedLabel = computed(() => {
-  if (!props.lastUpdated) return null
-  return formatRelativeUpdated(props.lastUpdated)
+const issueStore = useIssueStore()
+
+const meta = computed(() => {
+  // Prefer live store values; fall back to props from the layout's
+  // cached league row when the view hasn't published yet.
+  const week =
+    issueStore.currentWeek ?? props.fallbackWeek ?? null
+  const season =
+    issueStore.currentSeason ??
+    props.fallbackSeason ??
+    new Date().getFullYear()
+  const endWeek = issueStore.regularSeasonEndWeek ?? undefined
+  const stage = issueStore.seasonStage ?? undefined
+
+  if (week == null) return null
+
+  return {
+    volume: deriveVolume(season),
+    year: season,
+    issueLabel: deriveIssueLabel(week, endWeek, stage),
+  }
 })
+
+const updatedLabel = computed(() => {
+  const ts = issueStore.lastUpdated ?? props.fallbackUpdated
+  if (!ts) return null
+  return formatRelativeUpdated(ts)
+})
+
+/* ─────────────────────────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────────────────────────── */
+
+/** Volume = season number since TLB launched (2026 = Vol. 1). */
+function deriveVolume(season: number): number {
+  return Math.max(1, season - 2025)
+}
+
+/** Issue label varies by season stage:
+ *   - Regular season: "ISSUE 8"
+ *   - Playoffs: "PLAYOFFS · ROUND 1" / "SEMIFINAL" / "CHAMPIONSHIP"
+ *   - Off-season: "OFF SEASON · ISSUE 25" (continues the count)
+ */
+function deriveIssueLabel(
+  week: number,
+  endWeek: number | undefined,
+  stage: string | undefined,
+): { display: string; kind: 'regular' | 'playoff' | 'offseason' } {
+  if (stage === 'playoffs' && endWeek != null) {
+    const round = week - endWeek
+    if (round === 1) return { display: 'PLAYOFFS · ROUND 1', kind: 'playoff' }
+    if (round === 2) return { display: 'PLAYOFFS · SEMIFINAL', kind: 'playoff' }
+    if (round >= 3) return { display: 'PLAYOFFS · CHAMPIONSHIP', kind: 'playoff' }
+    return { display: `PLAYOFFS · ROUND ${round}`, kind: 'playoff' }
+  }
+  if (stage === 'offseason') {
+    return { display: `OFF SEASON · ISSUE ${week}`, kind: 'offseason' }
+  }
+  return { display: `ISSUE ${week}`, kind: 'regular' }
+}
 
 /** Format "1 MIN AGO" / "11 MIN AGO" / "3 HRS AGO" / "TODAY" /
  *  "YESTERDAY" — short, all-caps, magazine register. */
@@ -88,26 +126,23 @@ function formatRelativeUpdated(date: Date): string {
 
 <script lang="ts">
 /**
- * Pure helper — derive issue metadata from a CategoryLeagueData
- * snapshot. Lives alongside the component so both the layout and
- * any view that needs the same shape can call it without duplicating
- * the math.
- *
- * Volume math: 2026 is Vol 1; each subsequent year increments by 1.
+ * Public helper — derive volume / issue / year shape from a
+ * CategoryLeagueData snapshot. Same math the masthead uses
+ * internally, exposed so any consumer that needs the shape can
+ * call it without duplication. Useful when share cards or OG
+ * images want to stamp the issue meta.
  */
 import type { CategoryLeagueData } from '@/editorial/types'
 
 export function deriveIssueMeta(data: CategoryLeagueData): {
   volume: number
   issueNumber: number
-  weekNumber: number
   year: number
 } {
   const year = data.currentSeason || new Date().getFullYear()
   return {
     volume: Math.max(1, year - 2025),
     issueNumber: Math.max(1, data.currentWeek),
-    weekNumber: Math.max(1, data.currentWeek),
     year,
   }
 }
@@ -167,6 +202,10 @@ export function deriveIssueMeta(data: CategoryLeagueData): {
 }
 .issue-masthead-sep {
   color: oklch(0.78 0.18 92 / 0.55);
+}
+/* Playoff labels read magenta to flag the stage shift visually. */
+.issue-masthead-label {
+  color: oklch(0.70 0.27 350);
 }
 
 @media (max-width: 720px) {

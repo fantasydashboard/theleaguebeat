@@ -843,6 +843,7 @@ import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
 import { useShareStory } from '@/composables/useShareStory'
+import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -1196,6 +1197,7 @@ const showPlayoffPush = computed(() => {
 //     when no query params present. Kept until everything lives on the
 //     new /leagues route tree.
 const leaguesStore = useLeaguesStore()
+const issueStore = useIssueStore()
 const strictLeagueRecord = computed(() => {
   const uuid = route.params.leagueId
   if (typeof uuid !== 'string' || uuid.length === 0) return null
@@ -1249,6 +1251,17 @@ async function loadLiveData() {
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = data
     liveEditorial.value = renderHomePage(data)
+    // Publish live issue context to the shared store so the
+    // layout's masthead can swap its first-paint fallback ("ISSUE ?")
+    // for the real week. Includes season stage so the playoff
+    // labels ("PLAYOFFS · ROUND 1") light up at the right time.
+    issueStore.setIssue({
+      currentWeek: data.currentWeek,
+      currentSeason: data.currentSeason,
+      regularSeasonEndWeek: data.regularSeasonEndWeek,
+      seasonStage: deriveSeasonStage(data.currentWeek, data.regularSeasonEndWeek),
+      lastUpdated: new Date(),
+    })
   } catch (err) {
     const platformName =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
@@ -1259,6 +1272,21 @@ async function loadLiveData() {
 }
 
 onMounted(async () => {
+  // Publish the fixture's current week to the issue store IMMEDIATELY
+  // so the masthead renders correct issue numbers before (or in lieu
+  // of) the live adapter load. Live data overwrites this if present.
+  const fixtureSource = categoriesFixtureToLeagueData()
+  issueStore.setIssue({
+    currentWeek: fixtureSource.currentWeek,
+    currentSeason: fixtureSource.currentSeason,
+    regularSeasonEndWeek: fixtureSource.regularSeasonEndWeek,
+    seasonStage: deriveSeasonStage(
+      fixtureSource.currentWeek,
+      fixtureSource.regularSeasonEndWeek,
+    ),
+    lastUpdated: new Date(),
+  })
+
   // In strict mode the leagues store may not be hydrated yet (deep link
   // or page refresh) — make sure we have the row before trying to load.
   if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
