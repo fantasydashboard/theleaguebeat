@@ -48,6 +48,20 @@
         </span>
       </div>
     </aside>
+
+    <button
+      type="button"
+      class="issue-section-share"
+      :aria-label="`Share ${story.type} story to your league chat`"
+      @click="emit('share', story)"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <polyline points="16 6 12 2 8 6"/>
+        <line x1="12" y1="2" x2="12" y2="15"/>
+      </svg>
+      Share
+    </button>
   </section>
 </template>
 
@@ -60,6 +74,8 @@ const props = defineProps<{
   story: SelectedStory
   data?: CategoryLeagueData
 }>()
+
+const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
 
 // Stable per-instance id so multiple heroes on a page don't share an aria-label id.
 const componentId = Math.random().toString(36).slice(2, 8)
@@ -515,4 +531,31 @@ function spellOut(n: number): string {
   }
   .hero-solo-headline { font-size: clamp(2rem, 9vw, 2.6rem); }
 }
+
+.issue-section-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  margin-top: 18px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid oklch(0.32 0.012 90);
+  color: oklch(0.97 0.005 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .issue-section-share:hover {
+    border-color: oklch(0.55 0.010 90);
+    background: oklch(0.14 0.018 90);
+  }
+}
+.issue-section-share:active { transform: scale(0.97); }
 </style>

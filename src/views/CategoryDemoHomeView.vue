@@ -24,44 +24,52 @@
          compatibility until Tier 1 finishes replacing it.
     ────────────────────────────────────────────────────────────── -->
     <template v-for="section in dynamicIssueSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
-      <HeroSolo
-        v-if="section.type === 'hero-solo' && section.story"
+      <HeroFaceoff
+        v-if="section.type === 'hero-faceoff' && section.story"
         :story="section.story"
         :data="issueData"
+        @share="onShareStory"
+      />
+      <HeroSolo
+        v-else-if="section.type === 'hero-solo' && section.story"
+        :story="section.story"
+        :data="issueData"
+        @share="onShareStory"
       />
       <HeroQuiet
         v-else-if="section.type === 'hero-quiet'"
         :story="section.story"
         :data="issueData"
+        @share="onShareStory"
       />
       <MatchupOfWeek
         v-else-if="section.type === 'matchup-of-week' && section.story"
         :story="section.story"
         :data="issueData"
+        @share="onShareStory"
       />
       <StreakWatch
         v-else-if="section.type === 'streak-watch' && section.story"
         :story="section.story"
         :data="issueData"
+        @share="onShareStory"
       />
       <DivisionRace
         v-else-if="section.type === 'division-race' && section.story"
         :story="section.story"
         :data="issueData"
+        @share="onShareStory"
       />
-      <!-- hero-faceoff falls through to the legacy inline section
-           below, which already renders the face-off layout. Future
-           tiers will extract it into HeroFaceoff.vue and remove the
-           legacy inline section. -->
     </template>
 
     <!-- ─────────────────────────────────────────────────────────────
-         1. THE HEADLINE — Story of Week 8
-         Editorial hero, protagonist vs antagonist face-off.
-         Magazine-cover read: "The dynasty falls." Closer's Therapy
-         lost three straight; Bullpen Theology is the new throne.
+         1. LEGACY HERO — kept for fallback only. The composition
+         pipeline above emits its own hero (faceoff/solo/quiet/etc)
+         when it detects a story; we only render this legacy inline
+         hero when the pipeline didn't produce one (empty data,
+         fixture without a strong story, etc).
     ────────────────────────────────────────────────────────────── -->
-    <section class="hero" aria-labelledby="hero-headline">
+    <section v-if="!hasDynamicHero" class="hero" aria-labelledby="hero-headline">
       <div class="hero-copy">
         <p class="hero-eyebrow">
           <span class="hero-eyebrow-bar" aria-hidden="true"></span>
@@ -147,7 +155,15 @@
          line between seed 6 and seed 7. MV row gets yellow wayfinding
          tint + star pin (third-person copy elsewhere).
     ────────────────────────────────────────────────────────────── -->
-    <section class="bubble" aria-labelledby="bubble-headline">
+    <!-- Playoff push only renders in stretch (last ~5 weeks) and final
+         (last ~2 weeks) stages — and during actual playoffs. In
+         midseason this framing is editorially wrong (no urgency yet,
+         the bubble isn't real until the math tightens). -->
+    <section
+      v-if="showPlayoffPush"
+      class="bubble"
+      aria-labelledby="bubble-headline"
+    >
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta">Playoff push</p>
         <h2 class="bubble-headline" id="bubble-headline">Four teams. Two spots.</h2>
@@ -814,9 +830,11 @@ import { composeIssue, type IssueSection } from '@/editorial/composition'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import HeroSolo from '@/components/issue/HeroSolo.vue'
 import HeroQuiet from '@/components/issue/HeroQuiet.vue'
+import HeroFaceoff from '@/components/issue/HeroFaceoff.vue'
 import MatchupOfWeek from '@/components/issue/MatchupOfWeek.vue'
 import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
+import { useShareStory } from '@/composables/useShareStory'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -1089,6 +1107,30 @@ const NEW_SECTION_TYPES = new Set([
   'player-spotlight',
 ])
 
+/** True when the new composition pipeline has surfaced a hero section.
+ *  We use this to suppress the legacy inline hero face-off below so
+ *  the page doesn't render two competing hero treatments back-to-back. */
+const HERO_SECTION_TYPES = new Set([
+  'hero-faceoff',
+  'hero-solo',
+  'hero-quiet',
+  'hero-trade',
+  'hero-milestone',
+])
+const hasDynamicHero = computed(() =>
+  issueSections.value.some((s) => HERO_SECTION_TYPES.has(s.type)),
+)
+
+/** Share handler — generates a vertical (9:16) PNG of the story via
+ *  the ShareCard template and triggers the platform's share sheet
+ *  (mobile) or a download + clipboard write (desktop). All failure
+ *  paths log to console and surface a UI toast via shareError. */
+const { shareStory: triggerShare, isSharing, shareError } = useShareStory()
+
+function onShareStory(story: import('@/editorial/detection').SelectedStory) {
+  void triggerShare(story, issueData.value)
+}
+
 const dynamicIssueSections = computed(() =>
   issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type)),
 )
@@ -1097,6 +1139,21 @@ const dynamicIssueSections = computed(() =>
 const issueData = computed(
   () => liveData.value ?? categoriesFixtureToLeagueData(),
 )
+
+/** Season-stage gate for the inline playoff-push section. The
+ *  framing only makes sense in the last 5 weeks of the regular
+ *  season (stretch) and onward — in midseason "four teams two
+ *  spots" reads as premature urgency that doesn't match the math.
+ *  Composition emits the playoff-push-detailed section only in
+ *  those stages; we mirror that gate on the inline rendering. */
+const showPlayoffPush = computed(() => {
+  const source = liveData.value ?? categoriesFixtureToLeagueData()
+  const stage = deriveSeasonStage(
+    source.currentWeek,
+    source.regularSeasonEndWeek,
+  )
+  return stage === 'stretch' || stage === 'final' || stage === 'playoffs'
+})
 
 // Two ways to bind this view to a real league:
 //   - Strict mode: `/leagues/:leagueId/home` — leagueId is a Supabase

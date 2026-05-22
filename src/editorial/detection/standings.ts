@@ -43,9 +43,12 @@ import {
 
 const W = {
   /** Throne change is the biggest single-week standings event. */
-  newThrone: 90,
-  /** Former #1 collapse is nearly as big as the takeover itself. */
-  dynastyFalling: 85,
+  newThrone: 92,
+  /** Former #1 collapse is nearly as big as the takeover itself.
+   *  Lifted to 90 (was 85) so it consistently outranks matchup-of-week
+   *  (85) — a falling dynasty is bigger drama than two top teams
+   *  playing each other on a routine week. */
+  dynastyFalling: 90,
   /** Locked top seed is the season-ending crown — slightly above
    *  new-throne because it's terminal (irreversible). */
   lockedTopSeed: 95,

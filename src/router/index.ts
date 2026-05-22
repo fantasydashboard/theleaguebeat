@@ -55,6 +55,16 @@ const router = createRouter({
       meta: { public: true },
     },
 
+    // Public share route — anonymous, read-only issue view. The
+    // `shareSlug` is the league's Supabase `leagues.id` UUID. Used as
+    // the URL someone forwards to their league chat. No auth required.
+    {
+      path: '/i/:shareSlug',
+      name: 'public-share',
+      component: () => import('@/views/PublicShareView.vue'),
+      meta: { public: true },
+    },
+
     // Settings (authenticated — manage connected leagues)
     {
       path: '/settings',
