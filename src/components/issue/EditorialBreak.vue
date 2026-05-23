@@ -70,8 +70,12 @@ function formatDate(d: Date): string {
 .editorial-break {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin: 48px 0 28px;
+  gap: 10px;
+  /* Tightened from 48/28 → 24/16 so the breaks no longer add a
+     screen of dead space between sections. The hero's own bottom
+     margin + the next section's top padding already provide some
+     breathing room; the break is just the editorial signature. */
+  margin: 24px 0 16px;
 }
 
 /* Tone tokens — picks up the canonical accent palette. */
@@ -136,7 +140,7 @@ function formatDate(d: Date): string {
 /* Small — used between rapid sections where a full date stamp
    would be too much. */
 .editorial-break-small {
-  margin: 28px 0 20px;
+  margin: 16px 0 12px;
 }
 .editorial-break-small .editorial-break-rule {
   background: oklch(0.20 0.015 90);
@@ -145,7 +149,7 @@ function formatDate(d: Date): string {
 /* Feature — used between major shifts (weekly → daily, daily →
    season-cumulative). The rule is heavier; the kicker is bigger. */
 .editorial-break-feature {
-  margin: 64px 0 36px;
+  margin: 36px 0 24px;
 }
 .editorial-break-feature .editorial-break-kicker {
   font-size: 0.96rem;

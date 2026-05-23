@@ -88,6 +88,10 @@ const props = defineProps<{
   fallbackWeek?: number
   fallbackSeason?: number
   fallbackUpdated?: Date
+  /** Earliest known season for this league — drives the volume
+   *  number. Pre-computed in the layout from the leaguesStore so
+   *  the masthead reads correctly before any view publishes. */
+  fallbackFoundedSeason?: number
   /** Supabase `leagues.id` UUID for the active league. Drives the
    *  page-level share URL. When omitted (demo route, unauthenticated
    *  visitor) the share button is hidden. */
@@ -107,11 +111,17 @@ const meta = computed(() => {
     new Date().getFullYear()
   const endWeek = issueStore.regularSeasonEndWeek ?? undefined
   const stage = issueStore.seasonStage ?? undefined
+  // Founded season — earliest known season for this league. When
+  // unknown, defaults to current season (giving Vol. 1).
+  const founded =
+    issueStore.leagueFoundedSeason ??
+    props.fallbackFoundedSeason ??
+    season
 
   if (week == null) return null
 
   return {
-    volume: deriveVolume(season),
+    volume: deriveVolume(season, founded),
     year: season,
     issueLabel: deriveIssueLabel(week, endWeek, stage),
   }
@@ -178,9 +188,12 @@ async function onShareIssue() {
    Helpers
 ───────────────────────────────────────────────────────────────── */
 
-/** Volume = season number since TLB launched (2026 = Vol. 1). */
-function deriveVolume(season: number): number {
-  return Math.max(1, season - 2025)
+/** Volume = number of seasons this league has run in TLB. Vol. 1 in
+ *  the league's first known season; increments by one each subsequent
+ *  season we have data for. Only counts seasons the user has actually
+ *  connected — we understate rather than fabricate league age. */
+function deriveVolume(season: number, founded: number): number {
+  return Math.max(1, season - founded + 1)
 }
 
 /** Issue label varies by season stage:
@@ -233,14 +246,20 @@ function formatRelativeUpdated(date: Date): string {
  */
 import type { CategoryLeagueData } from '@/editorial/types'
 
-export function deriveIssueMeta(data: CategoryLeagueData): {
+export function deriveIssueMeta(
+  data: CategoryLeagueData,
+  /** Optional earliest known season for the league. Defaults to
+   *  the data's currentSeason if unknown (Vol. 1). */
+  foundedSeason?: number,
+): {
   volume: number
   issueNumber: number
   year: number
 } {
   const year = data.currentSeason || new Date().getFullYear()
+  const founded = foundedSeason ?? year
   return {
-    volume: Math.max(1, year - 2025),
+    volume: Math.max(1, year - founded + 1),
     issueNumber: Math.max(1, data.currentWeek),
     year,
   }

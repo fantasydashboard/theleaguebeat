@@ -121,6 +121,7 @@
     <IssueMasthead
       :fallback-week="mastheadFallback?.week"
       :fallback-season="mastheadFallback?.season"
+      :fallback-founded-season="mastheadFoundedSeason"
       :fallback-updated="mastheadUpdatedAt"
       :league-id="routeLeagueId || undefined"
     />
@@ -140,6 +141,7 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
 import IssueMasthead from '@/components/issue/IssueMasthead.vue'
 import TLBFooter from '@/components/TLBFooter.vue'
+import { leagueFoundedSeason } from '@/utils/leagueAge'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -185,6 +187,17 @@ const mastheadUpdatedAt = computed(() => {
   if (!ts) return new Date()
   const parsed = new Date(ts)
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+})
+
+/** Earliest season we have stored for this league (same name +
+ *  platform). Drives the magazine volume number — Vol 3 in 2026 for
+ *  a league we've also stored 2024 + 2025 for. Falls back to the
+ *  active league's own season (giving Vol. 1) when no siblings
+ *  exist. */
+const mastheadFoundedSeason = computed<number | undefined>(() => {
+  const league = activeLeague.value
+  if (!league) return undefined
+  return leagueFoundedSeason(league, leaguesStore.leagues)
 })
 
 function parseSeasonYear(season: unknown): number {

@@ -64,6 +64,9 @@ const TIER_A: ReadonlySet<StoryType> = new Set<StoryType>([
   'first-below-500',
   'three-week-collapse',
   'basement-streak',
+  // Transaction stories worth a card
+  'lopsided-trade',
+  'faab-blowout',
 ])
 
 const TIER_B: ReadonlySet<StoryType> = new Set<StoryType>([
@@ -85,6 +88,7 @@ const TIER_B: ReadonlySet<StoryType> = new Set<StoryType>([
   'bubble-surprise',
   'punt-success',
   'punt-failure',
+  'waiver-winner',
 ])
 
 const TIER_C: ReadonlySet<StoryType> = new Set<StoryType>([
@@ -149,6 +153,9 @@ const NUMBERS_TYPES: ReadonlySet<StoryType> = new Set<StoryType>([
   'twelve-k-game',
   'punt-success',
   'punt-failure',
+  // Trade + transaction numerics (player count, FAAB dollars)
+  'lopsided-trade',
+  'faab-blowout',
 ])
 
 export function pickFormat(type: StoryType): ShareFormat {

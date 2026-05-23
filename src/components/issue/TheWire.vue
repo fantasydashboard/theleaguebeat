@@ -10,7 +10,7 @@
        trades, injuries) are honest placeholders until Tier 3b
        ingestion lands.
   -->
-  <section class="wire" aria-labelledby="wire-heading">
+  <section v-if="hasCards" class="wire" aria-labelledby="wire-heading">
     <header class="wire-head">
       <div class="wire-head-eyebrow">
         <span class="wire-head-eyebrow-bar" aria-hidden="true"></span>
@@ -88,12 +88,12 @@
           <span>Coming soon</span>
         </div>
 
+        <!-- Byline without the redundant "THE WIRE" tag — the
+             section header already declares the publication slot.
+             Just the timestamp ("3 HR AGO") to anchor freshness. -->
         <p class="wire-card-byline">
-          <span class="wire-card-byline-tag">THE WIRE</span>
           <span>{{ card.byline }}</span>
         </p>
-
-        <span class="wire-card-num" aria-hidden="true">{{ paddedIndex(idx) }} / {{ paddedIndex(cards.length - 1) }}</span>
       </article>
     </div>
   </section>
@@ -166,8 +166,12 @@ const WIRE_STORY_TYPES: StoryType[] = [
   'comeback-team',
   'three-week-comeback',
   'three-week-collapse',
-  // Player/transaction stories (will fire once Tier 3a/3b ships)
+  // Transaction stories (Tier 3a — wired via detection/transactions.ts)
   'blockbuster-trade',
+  'lopsided-trade',
+  'faab-blowout',
+  'waiver-winner',
+  // Player stories (Tier 3b — pending player-stats ingester)
   'monster-night',
   'three-hr-game',
   'twelve-k-game',
@@ -178,12 +182,18 @@ const WIRE_STORY_TYPES: StoryType[] = [
 const issueDate = computed(() => props.issueDate ?? new Date())
 
 const cards = computed<WireCard[]>(() => {
-  const fromStories = wireStories.value.map(storyToCard)
-  // Pad to at least 6 cards with placeholders so the carousel is
-  // never anemic. Placeholders advertise upcoming triggers honestly.
-  const placeholders = placeholderCards(6 - fromStories.length)
-  return [...fromStories, ...placeholders]
+  // Only render real stories — no "coming soon" placeholders. When
+  // the Wire is empty, the section header hides itself entirely
+  // rather than showing fake content. As real data sources land
+  // (player nights, injuries, bad beats), they flow in via new
+  // detectors and the carousel fills out organically.
+  return wireStories.value.map(storyToCard)
 })
+
+/** Hide the Wire entirely when no real cards are available — the
+ *  parent template uses this to suppress the section header so we
+ *  don't show "Today's filings" with an empty carousel underneath. */
+const hasCards = computed(() => cards.value.length > 0)
 
 const wireStories = computed(() => {
   const wireTypes = new Set<StoryType>(WIRE_STORY_TYPES)
@@ -240,7 +250,10 @@ function eyebrowForStoryType(type: StoryType): string {
     case 'comeback-team':        return 'COMEBACK ARC'
     case 'three-week-comeback':  return 'THREE-WEEK RUN'
     case 'three-week-collapse':  return 'THREE-WEEK FALL'
-    case 'blockbuster-trade':    return 'TRADE'
+    case 'blockbuster-trade':    return 'BLOCKBUSTER'
+    case 'lopsided-trade':       return 'TRADE'
+    case 'faab-blowout':         return 'FAAB WAR'
+    case 'waiver-winner':        return 'WAIVER WIN'
     case 'monster-night':        return 'MONSTER NIGHT'
     case 'three-hr-game':        return '3-HR GAME'
     case 'twelve-k-game':        return '12-K GAME'
@@ -270,7 +283,10 @@ function headlineForStoryType(type: StoryType, teamName?: string): string {
     case 'comeback-team':        return `${t} is back.`
     case 'three-week-comeback':  return `Three weeks of gains for ${t}.`
     case 'three-week-collapse':  return `Three weeks of losses for ${t}.`
-    case 'blockbuster-trade':    return `${t} pulled the trigger on a trade.`
+    case 'blockbuster-trade':    return `${t} pulled the trigger on a blockbuster.`
+    case 'lopsided-trade':       return `${t} made a move.`
+    case 'faab-blowout':         return `${t} won the FAAB war.`
+    case 'waiver-winner':        return `${t} snagged off waivers.`
     case 'monster-night':        return 'Monster line off the bat last night.'
     case 'three-hr-game':        return 'A 3-HR night moved the math.'
     case 'twelve-k-game':        return 'Twelve strikeouts. The K race tightened.'
@@ -296,6 +312,10 @@ function bodyForStoryType(type: StoryType, _teamName?: string): string | undefin
     case 'friday-preview':       return 'Whatever is decided this weekend probably decides the week.'
     case 'sunday-final-push':    return 'Save situations and cat-leads still up for grabs.'
     case 'off-day-deep-dive':    return 'A quiet day on the board. A good day to read the matchup.'
+    case 'blockbuster-trade':    return 'Multi-player swap reshapes both rosters. The standings notice.'
+    case 'lopsided-trade':       return 'Trade processed. Both sides bet on a future state.'
+    case 'faab-blowout':         return 'Outbid the rest of the league. The waiver pool just got thinner.'
+    case 'waiver-winner':        return 'Top of the waiver order, used wisely. A roster move with stakes.'
     default:                     return undefined
   }
 }
@@ -319,7 +339,10 @@ function toneForStoryType(type: StoryType): Tone {
     case 'monster-night':
     case 'three-hr-game':
     case 'twelve-k-game':
-    case 'blockbuster-trade':    return 'gold'
+    case 'blockbuster-trade':
+    case 'faab-blowout':         return 'gold'
+    case 'lopsided-trade':
+    case 'waiver-winner':        return 'teal'
     case 'off-day-deep-dive':    return 'neutral'
     default:                     return 'magenta'
   }
@@ -329,17 +352,14 @@ function toneForStoryType(type: StoryType): Tone {
    Bylines — magazine-y "FILED · 3H AGO" line.
 ───────────────────────────────────────────────────────────────── */
 
-function formatByline(story: SelectedStory, now: Date): string {
-  const dow = now.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
-  const hour = now.getHours()
+function formatByline(story: SelectedStory, _now: Date): string {
+  // One relative-time stamp ("3 HR AGO") — the section header
+  // already shows the date stamp ("Saturday, May 23") so repeating
+  // it on every card was triple-stamping the same information.
   const minutesAgo = Math.max(1, Math.round((1 - story.freshness) * 60 * 6))
-  const ago =
-    minutesAgo < 60
-      ? `${minutesAgo} MIN AGO`
-      : minutesAgo < 24 * 60
-      ? `${Math.round(minutesAgo / 60)} HR AGO`
-      : `${Math.round(minutesAgo / (60 * 24))} D AGO`
-  return `${dow} · ${hour.toString().padStart(2, '0')}:00 · ${ago}`
+  if (minutesAgo < 60) return `${minutesAgo} MIN AGO`
+  if (minutesAgo < 24 * 60) return `${Math.round(minutesAgo / 60)} HR AGO`
+  return `${Math.round(minutesAgo / (60 * 24))} DAY AGO`
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -565,7 +585,9 @@ onMounted(() => onTrackScroll())
 }
 .wire-track::-webkit-scrollbar { display: none; }
 
-/* Card */
+/* Card — stripped chrome. No rounded border container; a tone-
+   colored left-edge bar provides the editorial signature without
+   the "stack of dashboard cards" feel. */
 .wire-card {
   position: relative;
   flex: 0 0 320px;
@@ -573,29 +595,31 @@ onMounted(() => onTrackScroll())
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 24px 22px 18px;
-  border-radius: 14px;
-  background: oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.18 0.015 90);
-  min-height: 240px;
+  padding: 20px 22px 18px 24px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  min-height: 220px;
 }
-.wire-card-up      { border-color: oklch(0.74 0.18 145 / 0.30); }
-.wire-card-down    { border-color: oklch(0.65 0.20 25 / 0.30); }
-.wire-card-teal    { border-color: oklch(0.72 0.18 195 / 0.30); }
-.wire-card-gold    { border-color: oklch(0.78 0.18 92 / 0.30); }
-.wire-card-magenta { border-color: oklch(0.70 0.27 350 / 0.30); }
-.wire-card-neutral { border-color: oklch(0.32 0.012 90); }
-
-.wire-card-placeholder {
-  background: repeating-linear-gradient(
-    135deg,
-    oklch(0.10 0.015 90),
-    oklch(0.10 0.015 90) 10px,
-    oklch(0.11 0.015 90) 10px,
-    oklch(0.11 0.015 90) 20px
-  );
-  opacity: 0.85;
+/* Tone-colored left-edge bar — single-pixel visual signature that
+   reads as editorial categorization without the dashboard-card
+   feel. Maps to the same tone palette used everywhere else. */
+.wire-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--wire-tone, oklch(0.32 0.012 90));
 }
+.wire-card-up      { --wire-tone: oklch(0.74 0.18 145); }
+.wire-card-down    { --wire-tone: oklch(0.65 0.20 25); }
+.wire-card-teal    { --wire-tone: oklch(0.72 0.18 195); }
+.wire-card-gold    { --wire-tone: oklch(0.78 0.18 92); }
+.wire-card-magenta { --wire-tone: oklch(0.70 0.27 350); }
+.wire-card-neutral { --wire-tone: oklch(0.32 0.012 90); }
 
 .wire-card-eyebrow {
   display: inline-flex;

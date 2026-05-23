@@ -46,6 +46,11 @@ import type {
   CategoryLeagueDataWeeklyRanks,
   WLT,
 } from '../types'
+import type {
+  LeagueTransaction,
+  TransactionKind,
+  TransactionMovement,
+} from '../transactions/types'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -337,6 +342,11 @@ async function buildYahooLeagueData(
   // Draft (optional).
   const draft = await buildDraft(leagueKey, currentSeason)
 
+  // League transactions — trades, FAAB winners, waiver claims.
+  // Non-fatal: returns undefined when Yahoo's transactions endpoint
+  // errors. Transaction detectors quietly no-op when missing.
+  const transactions = await buildYahooTransactions(leagueKey, metadata.currentWeek)
+
   return {
     leagueId: leagueKey,
     leagueName: deriveLeagueName(leagueSettingsRaw, leagueKey),
@@ -359,7 +369,116 @@ async function buildYahooLeagueData(
     draft,
     weeklyCatsWon,
     weeklyLeagueAverage,
+    transactions,
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   YAHOO LEAGUE TRANSACTIONS
+
+   yahooService.getTransactions returns rich shape (player movements
+   + bid amounts). We normalize to LeagueTransaction[] for cross-
+   platform detection.
+
+   Yahoo team_keys look like "458.l.12345.t.7" — we keep the trailing
+   "t.7" → "7" form for matching against CategoryLeagueDataTeam.id
+   which Yahoo adapters set to the team_key's full string.
+───────────────────────────────────────────────────────────────── */
+
+async function buildYahooTransactions(
+  leagueKey: string,
+  currentWeek: number,
+): Promise<LeagueTransaction[] | undefined> {
+  try {
+    const raw = await yahooService.getTransactions(leagueKey)
+    if (!raw || raw.length === 0) return undefined
+
+    const txs: LeagueTransaction[] = []
+    for (const t of raw) {
+      const normalized = normalizeYahooTransaction(t, currentWeek)
+      if (normalized) txs.push(normalized)
+    }
+    txs.sort((a, b) => b.timestamp - a.timestamp)
+    return txs
+  } catch (err) {
+    console.warn('[yahooAdapter] transactions fetch failed:', err)
+    return undefined
+  }
+}
+
+function normalizeYahooTransaction(
+  t: any,
+  currentWeek: number,
+): LeagueTransaction | null {
+  if (!t || t.status !== 'successful') return null
+
+  const kind = classifyYahooKind(t.type, t.faab_bid)
+  if (!kind) return null
+
+  const movements: TransactionMovement[] = []
+  const teamSet = new Set<string>()
+  for (const m of (t.movements ?? []) as any[]) {
+    const fromTeamId = yahooTeamRef(m.source_type, m.source_team_key)
+    const toTeamId = yahooTeamRef(m.destination_type, m.destination_team_key)
+    if (fromTeamId !== 'fa' && fromTeamId !== 'waivers') teamSet.add(fromTeamId)
+    if (toTeamId !== 'fa' && toTeamId !== 'waivers') teamSet.add(toTeamId)
+    movements.push({
+      playerId: m.player_id || m.player_key || '',
+      playerName: m.player_name || 'Unknown player',
+      position: m.position,
+      fromTeamId,
+      toTeamId,
+    })
+  }
+  if (movements.length === 0) return null
+
+  // Yahoo timestamps are unix SECONDS — convert to ms.
+  const timestampMs = t.timestamp ? t.timestamp * 1000 : Date.now()
+
+  // Fantasy week — Yahoo doesn't directly tag transactions with a
+  // week. Approximate from the timestamp using the current week as
+  // the "now" anchor and assuming a 7-day week. Good enough for
+  // freshness math; not load-bearing.
+  const daysAgo = Math.floor((Date.now() - timestampMs) / (1000 * 60 * 60 * 24))
+  const week = Math.max(1, currentWeek - Math.floor(daysAgo / 7))
+
+  return {
+    id: String(t.transaction_key ?? t.transaction_id ?? `${t.timestamp}-${kind}`),
+    platform: 'yahoo',
+    kind,
+    timestamp: timestampMs,
+    week,
+    teamIds: Array.from(teamSet),
+    movements,
+    faabBid: t.faab_bid && t.faab_bid > 0 ? t.faab_bid : undefined,
+    waiverPriority: t.waiver_priority,
+  }
+}
+
+function classifyYahooKind(
+  type: string | undefined,
+  faabBid: number | undefined,
+): TransactionKind | null {
+  if (!type) return null
+  switch (type) {
+    case 'trade':                return 'trade'
+    case 'add':                  return typeof faabBid === 'number' && faabBid > 0 ? 'faab-add' : 'fa-add'
+    case 'drop':                 return 'drop'
+    case 'add/drop':             return typeof faabBid === 'number' && faabBid > 0 ? 'faab-add' : 'fa-add'
+    case 'commish':              return null
+    case 'pending_trade':        return null
+    case 'waiver':               return 'waiver-add'
+    default:                     return null
+  }
+}
+
+/** Map Yahoo source/destination type + team_key to our team ref
+ *  sentinel ('fa', 'waivers', or a team_key string). */
+function yahooTeamRef(type: string, teamKey: string | undefined): string {
+  if (type === 'freeagents') return 'fa'
+  if (type === 'waivers') return 'waivers'
+  if (type === 'team' || type === 'trade') return teamKey ?? 'fa'
+  return teamKey ?? 'fa'
 }
 
 /* ─────────────────────────────────────────────────────────────────

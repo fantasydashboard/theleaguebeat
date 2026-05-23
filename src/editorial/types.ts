@@ -233,6 +233,17 @@ export interface CategoryLeagueData {
   /** Mathematical league average per week (constant 5.5 for an 11-cat
    *  10-team league with no ties — zero-sum across team-pairs). */
   weeklyLeagueAverage?: number[]
+
+  /** Normalized league transactions — trades, adds, drops, FAAB +
+   *  waiver claims. Adapters populate from each platform's native
+   *  transactions endpoint; detectors in detection/transactions.ts
+   *  consume to emit blockbuster-trade, faab-blowout, etc.
+   *
+   *  Sorted newest-first by `timestamp` so detectors can short-
+   *  circuit on freshness. Optional — when undefined, transaction
+   *  detectors are skipped (no error, just no Wire stories from
+   *  trades). */
+  transactions?: import('./transactions/types').LeagueTransaction[]
 }
 
 /* ─────────────────────────────────────────────────────────────────

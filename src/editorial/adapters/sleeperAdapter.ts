@@ -43,6 +43,11 @@ import type {
   CategoryLeagueDataWeeklyRanks,
   WLT,
 } from '../types'
+import type {
+  LeagueTransaction,
+  TransactionKind,
+  TransactionMovement,
+} from '../transactions/types'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -267,6 +272,11 @@ export async function sleeperLeagueToCategoryData(
   // 17. Draft (Draft page). Optional — undefined when not exposed.
   const draft = await buildDraft(leagueId, currentSeason)
 
+  // 18. League transactions (trades, FAAB winners, waivers). Walks
+  //     every week from 1 → currentWeek (Sleeper exposes one round
+  //     at a time). Non-fatal on failure.
+  const transactions = await buildSleeperTransactions(leagueId, currentWeek, league.sport)
+
   return {
     leagueId,
     leagueName: league.name || 'Sleeper League',
@@ -285,6 +295,115 @@ export async function sleeperLeagueToCategoryData(
     draft,
     weeklyCatsWon,
     weeklyLeagueAverage,
+    transactions,
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SLEEPER LEAGUE TRANSACTIONS
+
+   Sleeper exposes transactions per "round" (week). We fetch all
+   rounds up through the current week in parallel and merge into
+   one list, then normalize to LeagueTransaction[].
+
+   Player names come from the player DB cached by sleeperService.
+───────────────────────────────────────────────────────────────── */
+
+async function buildSleeperTransactions(
+  leagueId: string,
+  currentWeek: number,
+  sport: string | undefined,
+): Promise<LeagueTransaction[] | undefined> {
+  try {
+    const sleeperSport = sport ?? 'nfl'
+    const [allRaw, playerDb] = await Promise.all([
+      withCache(cacheKey(leagueId, 'all-transactions', currentWeek), () =>
+        sleeperService.getAllTransactions(leagueId, currentWeek),
+      ),
+      sleeperService.getPlayersBySport(sleeperSport).catch(() => null),
+    ])
+    if (!allRaw || allRaw.length === 0) return undefined
+
+    const txs: LeagueTransaction[] = []
+    for (const t of allRaw) {
+      const normalized = normalizeSleeperTransaction(t, currentWeek, playerDb)
+      if (normalized) txs.push(normalized)
+    }
+    txs.sort((a, b) => b.timestamp - a.timestamp)
+    return txs
+  } catch (err) {
+    console.warn('[sleeperAdapter] transactions fetch failed:', err)
+    return undefined
+  }
+}
+
+function normalizeSleeperTransaction(
+  t: any,
+  currentWeek: number,
+  playerDb: Record<string, any> | null,
+): LeagueTransaction | null {
+  if (!t || t.status !== 'complete') return null
+
+  // Sleeper kinds: 'trade' | 'waiver' | 'free_agent'
+  const settings = t.settings ?? {}
+  const faabBid = typeof settings.waiver_bid === 'number' ? settings.waiver_bid : undefined
+
+  let kind: TransactionKind | null = null
+  if (t.type === 'trade') kind = 'trade'
+  else if (t.type === 'waiver') kind = typeof faabBid === 'number' && faabBid > 0 ? 'faab-add' : 'waiver-add'
+  else if (t.type === 'free_agent') kind = 'fa-add'
+  if (!kind) return null
+
+  const adds: Record<string, number> = t.adds ?? {}
+  const drops: Record<string, number> = t.drops ?? {}
+
+  // Build the movement list. A player in `adds` was acquired by the
+  // target roster; a player only in `drops` was sent to FA/waivers.
+  // For trades, both adds + drops are populated and each player
+  // appears in BOTH (added to one roster, dropped from another).
+  const movements: TransactionMovement[] = []
+  const teamSet = new Set<string>()
+
+  const allPlayerIds = new Set([...Object.keys(adds), ...Object.keys(drops)])
+  for (const pid of allPlayerIds) {
+    const toRoster = adds[pid]
+    const fromRoster = drops[pid]
+    const fromTeamId = fromRoster !== undefined ? String(fromRoster) : 'fa'
+    const toTeamId = toRoster !== undefined ? String(toRoster) : 'fa'
+    if (fromTeamId !== 'fa' && fromTeamId !== 'waivers') teamSet.add(fromTeamId)
+    if (toTeamId !== 'fa' && toTeamId !== 'waivers') teamSet.add(toTeamId)
+
+    const playerMeta = playerDb?.[pid]
+    const fullName =
+      playerMeta?.full_name ||
+      `${playerMeta?.first_name ?? ''} ${playerMeta?.last_name ?? ''}`.trim() ||
+      `Player ${pid}`
+    movements.push({
+      playerId: pid,
+      playerName: fullName,
+      position: playerMeta?.position,
+      fromTeamId,
+      toTeamId,
+    })
+  }
+  if (movements.length === 0) return null
+
+  // Sleeper timestamps are unix ms.
+  const timestamp = Number(t.created ?? t.status_updated ?? Date.now())
+  const week = clampWeek(t.leg ?? currentWeek)
+
+  return {
+    id: String(t.transaction_id ?? `${t.created}-${kind}`),
+    platform: 'sleeper',
+    kind,
+    timestamp,
+    week,
+    teamIds: Array.from(teamSet),
+    movements,
+    faabBid,
+    waiverPriority: typeof settings.waiver_priority === 'number'
+      ? settings.waiver_priority
+      : undefined,
   }
 }
 

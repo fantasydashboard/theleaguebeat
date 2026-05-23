@@ -18,6 +18,7 @@ import { detect as detectStreaks } from './streaks'
 import { detect as detectSeasonStage } from './seasonStage'
 import { detect as detectCadence } from './cadence'
 import { detect as detectDivisions } from './divisions'
+import { detectTransactionStories } from './transactions'
 
 /** Every detector module that's wired in. New modules get added here. */
 const DETECTORS: DetectFn[] = [
@@ -27,9 +28,9 @@ const DETECTORS: DetectFn[] = [
   detectSeasonStage,
   detectCadence,
   detectDivisions,
+  detectTransactionStories,
   // Future tiers:
   //   detectCategories — needs categoryRanksHistory (Tier 2)
-  //   detectTransactions — needs adapter transaction history (Tier 3a)
   //   detectPlayers — needs daily MLB stats (Tier 3b)
   //   detectPersonalization — needs impression infra (Tier 4)
   //   detectAnniversary — needs season history + member metadata (Tier 2)

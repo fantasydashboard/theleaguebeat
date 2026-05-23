@@ -1806,7 +1806,11 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
 .home {
   display: flex;
   flex-direction: column;
-  gap: 56px;
+  /* Tightened from 56px → 28px. Sections that need more breathing
+     room use their own internal padding or an EditorialBreak. The
+     old 56px stacked with section padding to create excessive
+     dead space between hero and Wire. */
+  gap: 28px;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
 }
@@ -1947,17 +1951,16 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   outline-offset: 2px;
 }
 
-/* ─── 1. HERO ─────────────────────────────────────────────────── */
+/* ─── 1. LEGACY HERO ─────────────────────────────────────────────
+   Old inline hero treatment, only renders when the dynamic
+   composition pipeline doesn't emit a hero section (essentially
+   never in practice). Card chrome (border + radius + radial bg)
+   stripped to match the rest of the editorial layout. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 40px;
-  padding: 36px 36px 32px;
-  background:
-    radial-gradient(ellipse at top right, oklch(0.70 0.27 350 / 0.10), transparent 60%),
-    oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.22 0.015 90);
-  border-radius: 24px;
+  padding: 24px 0 32px;
   align-items: center;
 }
 .hero-eyebrow {

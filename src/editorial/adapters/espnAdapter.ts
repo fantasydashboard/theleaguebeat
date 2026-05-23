@@ -49,6 +49,7 @@ import type {
   CatSide,
   WLT,
 } from '../types'
+import type { LeagueTransaction, TransactionKind, TransactionMovement } from '../transactions/types'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -388,6 +389,12 @@ export async function espnLeagueToCategoryData(
   // 15. Draft (optional).
   const draft = await buildDraft(leagueId, season)
 
+  // 16. League transactions (trades, FAAB winners, waiver claims).
+  //     Failure is non-fatal — when ESPN's transactions endpoint
+  //     errors or returns nothing, transaction detectors quietly
+  //     skip and the rest of the page renders unchanged.
+  const transactions = await buildTransactions(leagueId, season, league)
+
   // Division metadata — drives the new division-aware detection
   // layer (division-race-tight, division-clash, divisional-wild-card,
   // etc.). Returns undefined for single-table leagues; downstream
@@ -414,6 +421,7 @@ export async function espnLeagueToCategoryData(
     draft,
     weeklyCatsWon,
     weeklyLeagueAverage,
+    transactions,
   }
 }
 
@@ -1135,6 +1143,180 @@ async function buildDraft(
     console.warn('[espnAdapter] draft fetch failed:', err)
     return undefined
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   STEP 16 — LEAGUE TRANSACTIONS (trades, FAAB, waivers)
+─────────────────────────────────────────────────────────────────*/
+
+/**
+ * Fetch the league's transaction history and normalize into the
+ * cross-platform LeagueTransaction shape. Player names are looked
+ * up from the rostered-player metadata embedded in the league
+ * response (mTeam view); when a transaction references a player
+ * not currently rostered, we fall back to "Player #ID".
+ *
+ * Non-fatal: any failure returns undefined and the rest of the
+ * page renders unchanged.
+ */
+async function buildTransactions(
+  leagueId: string,
+  season: number,
+  league: EspnLeague,
+): Promise<LeagueTransaction[] | undefined> {
+  try {
+    const raw = await withCache(
+      cacheKey(leagueId, 'transactions', season),
+      () => espnService.getTransactions('baseball', leagueId, season),
+    )
+    if (!raw || raw.length === 0) return undefined
+
+    // Build playerId → { name, position } map from current rosters.
+    // ESPN's transaction items typically don't include full player
+    // details, so we resolve from whatever roster data we already
+    // pulled. Players who have since moved teams may still be on
+    // SOMEONE's roster.
+    const playerLookup = buildPlayerLookup(league)
+
+    const txs: LeagueTransaction[] = []
+    for (const t of raw) {
+      const normalized = normalizeEspnTransaction(t, playerLookup)
+      if (normalized) txs.push(normalized)
+    }
+
+    // Sort newest first so detectors can short-circuit on freshness.
+    txs.sort((a, b) => b.timestamp - a.timestamp)
+    return txs
+  } catch (err) {
+    console.warn('[espnAdapter] transactions fetch failed:', err)
+    return undefined
+  }
+}
+
+interface PlayerInfo {
+  name: string
+  position?: string
+}
+
+function buildPlayerLookup(league: EspnLeague): Map<string, PlayerInfo> {
+  const m = new Map<string, PlayerInfo>()
+  for (const team of league.teams || []) {
+    const entries = (team.roster?.entries ?? []) as any[]
+    for (const e of entries) {
+      const ppe = e.playerPoolEntry?.player
+      const id = ppe?.id ?? e.playerId
+      if (id == null) continue
+      const name = ppe?.fullName || `Player ${id}`
+      const position = positionLabel(ppe?.defaultPositionId)
+      m.set(String(id), { name, position })
+    }
+  }
+  return m
+}
+
+/** ESPN MLB position IDs → short labels. Partial; covers the
+ *  positions that show up in trade copy. */
+function positionLabel(pid: number | undefined): string | undefined {
+  if (pid == null) return undefined
+  switch (pid) {
+    case 1:  return 'C'
+    case 2:  return '1B'
+    case 3:  return '2B'
+    case 4:  return '3B'
+    case 5:  return 'SS'
+    case 6:  return 'OF'
+    case 9:  return 'DH'
+    case 13: return 'SP'
+    case 14: return 'RP'
+    default: return undefined
+  }
+}
+
+/**
+ * Convert one ESPN transaction object into our LeagueTransaction
+ * shape. Returns null when the transaction wasn't executed (still
+ * pending), had no movements, or had a shape we don't handle.
+ */
+function normalizeEspnTransaction(
+  t: any,
+  playerLookup: Map<string, PlayerInfo>,
+): LeagueTransaction | null {
+  // Skip non-executed (cancelled, vetoed, pending).
+  if (t.status && t.status !== 'EXECUTED' && t.status !== 'STANDARD') return null
+  if (t.executionType && t.executionType !== 'EXECUTE') return null
+
+  const items = (t.items ?? []) as any[]
+  if (items.length === 0) return null
+
+  const kind = classifyEspnKind(t, items)
+  if (!kind) return null
+
+  const movements: TransactionMovement[] = []
+  const teamSet = new Set<string>()
+  for (const it of items) {
+    const playerId = String(it.playerId ?? '')
+    if (!playerId) continue
+    const info = playerLookup.get(playerId)
+    const fromTeamId = espnTeamRef(it.fromTeamId)
+    const toTeamId = espnTeamRef(it.toTeamId)
+    if (fromTeamId !== 'fa' && fromTeamId !== 'waivers') teamSet.add(fromTeamId)
+    if (toTeamId !== 'fa' && toTeamId !== 'waivers') teamSet.add(toTeamId)
+    movements.push({
+      playerId,
+      playerName: info?.name ?? `Player ${playerId}`,
+      position: info?.position,
+      fromTeamId,
+      toTeamId,
+    })
+  }
+  if (movements.length === 0) return null
+
+  return {
+    id: String(t.id ?? `${t.processDate}-${kind}`),
+    platform: 'espn',
+    kind,
+    timestamp: Number(t.processDate ?? t.proposedDate ?? Date.now()),
+    week: Number(t.scoringPeriodId ?? 0) || 1,
+    teamIds: Array.from(teamSet),
+    movements,
+    faabBid: typeof t.bidAmount === 'number' && t.bidAmount > 0 ? t.bidAmount : undefined,
+  }
+}
+
+/** ESPN team IDs use 0 for free agency / waivers; positive integers
+ *  for actual teams. The kind hint tells us which sentinel applies. */
+function espnTeamRef(rawId: number | undefined): string {
+  if (!rawId || rawId <= 0) return 'fa'
+  return String(rawId)
+}
+
+/** Classify an ESPN transaction into our TransactionKind. ESPN's
+ *  `type` field has more granularity than we use; we collapse to
+ *  the editorial categories that matter. */
+function classifyEspnKind(t: any, items: any[]): TransactionKind | null {
+  const type = String(t.type ?? '').toUpperCase()
+
+  // Trades have two or more teams in the items.
+  if (type.includes('TRADE')) return 'trade'
+
+  // FAAB add — non-zero bid amount.
+  if (typeof t.bidAmount === 'number' && t.bidAmount > 0) return 'faab-add'
+
+  // Waiver pickup.
+  if (type.includes('WAIVER')) return 'waiver-add'
+
+  // Free-agent add.
+  if (type.includes('FREEAGENT') || type === 'FREEAGENT') return 'fa-add'
+
+  // Standalone drop (no add half).
+  if (type.includes('DROP')) {
+    const hasAdd = items.some((i: any) => i.type === 'ADD')
+    if (!hasAdd) return 'drop'
+    return 'fa-add'
+  }
+
+  // Unknown — skip rather than mis-categorize.
+  return null
 }
 
 /* ─────────────────────────────────────────────────────────────────

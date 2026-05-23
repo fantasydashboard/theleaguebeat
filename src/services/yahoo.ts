@@ -961,31 +961,60 @@ export class YahooFantasyService {
   }
 
   /**
-   * Get transactions for a league
+   * Get transactions for a league. Returns the rich shape including
+   * per-player movement (source/destination team), bid amounts, and
+   * waiver-priority data needed by the trade-detection layer.
+   *
+   * Yahoo's transaction payload is deeply nested + inconsistent.
+   * This parser extracts only the fields we use downstream and
+   * normalizes the "array sometimes, object sometimes" inconsistency.
    */
   async getTransactions(leagueKey: string): Promise<any[]> {
     try {
       const data = await this.apiRequest(
         `/league/${leagueKey}/transactions?format=json`
       )
-      
+
       const transactions: any[] = []
       const transData = data.fantasy_content?.league?.[1]?.transactions
-      
+
       if (!transData) return transactions
-      
+
       for (const transWrapper of Object.values(transData) as any[]) {
         if (typeof transWrapper !== 'object' || !transWrapper.transaction) continue
-        
-        const trans = transWrapper.transaction[0]
+
+        const transArr = Array.isArray(transWrapper.transaction)
+          ? transWrapper.transaction
+          : [transWrapper.transaction]
+        const meta = transArr[0] ?? {}
+
+        // Player movements live in the SECOND element of the
+        // transaction array, keyed under `players`. Each player
+        // entry holds a `transaction_data` block with source +
+        // destination team info.
+        const playersBlock = transArr[1]?.players
+        const movements = playersBlock
+          ? parseYahooMovements(playersBlock)
+          : []
+
+        // Trades have player movements split across both teams.
+        // For trades, the trader-team is at meta.trader_team_key.
         transactions.push({
-          transaction_key: trans.transaction_key,
-          type: trans.type,
-          status: trans.status,
-          timestamp: trans.timestamp
+          transaction_key: meta.transaction_key,
+          transaction_id: meta.transaction_id,
+          type: meta.type,
+          status: meta.status,
+          timestamp: meta.timestamp ? parseInt(meta.timestamp, 10) : null,
+          trader_team_key: meta.trader_team_key,
+          tradee_team_key: meta.tradee_team_key,
+          faab_bid: meta.faab_bid ? parseInt(meta.faab_bid, 10) : undefined,
+          waiver_priority: meta.waiver_priority
+            ? parseInt(meta.waiver_priority, 10)
+            : undefined,
+          movements,
         })
       }
-      
+
       return transactions
     } catch (e) {
       console.error('Error fetching transactions:', e)
@@ -1745,3 +1774,64 @@ export class YahooFantasyService {
 
 // Export singleton instance
 export const yahooService = new YahooFantasyService()
+
+/* ─────────────────────────────────────────────────────────────────
+   YAHOO TRANSACTION PARSING
+
+   Yahoo's transaction payload nests `players` as either an object
+   ({ "0": {...}, count: 1 }) or an array. Each player wrapper holds
+   a `player` array where the LAST element is a `transaction_data`
+   block with source + destination team info.
+
+   This parser flattens that into a simple array of player movements:
+     [{ player_key, player_name, source_team_key, source_type,
+        destination_team_key, destination_type }, ...]
+───────────────────────────────────────────────────────────────── */
+
+interface YahooMovement {
+  player_key: string
+  player_id: string
+  player_name: string
+  position?: string
+  source_type: string         // 'freeagents' | 'waivers' | 'team' | 'trade'
+  source_team_key?: string    // team_key when source_type === 'team' or 'trade'
+  destination_type: string
+  destination_team_key?: string
+}
+
+function parseYahooMovements(playersBlock: any): YahooMovement[] {
+  const out: YahooMovement[] = []
+  // playersBlock may be { "0": wrapper, "1": wrapper, count: 2 }
+  // or already an array. Normalize.
+  const entries = Array.isArray(playersBlock)
+    ? playersBlock
+    : Object.values(playersBlock).filter((v: any) => typeof v === 'object' && v?.player)
+
+  for (const wrapper of entries as any[]) {
+    if (!wrapper?.player) continue
+    const playerArr = wrapper.player
+    if (!Array.isArray(playerArr)) continue
+
+    // playerArr[0] is an array of meta objects (player_key, name, etc).
+    const meta = Array.isArray(playerArr[0]) ? playerArr[0] : []
+    const flatMeta = Object.assign({}, ...meta.filter((x: any) => typeof x === 'object'))
+
+    // playerArr[1] is { transaction_data: [{...}] | {...} }
+    const td = playerArr[1]?.transaction_data
+    const tdEntry = Array.isArray(td) ? td[0] : td
+    if (!tdEntry) continue
+
+    out.push({
+      player_key: flatMeta.player_key ?? '',
+      player_id: flatMeta.player_id ?? '',
+      player_name: flatMeta.name?.full ?? `Player ${flatMeta.player_id ?? '?'}`,
+      position: flatMeta.display_position ?? undefined,
+      source_type: tdEntry.source_type ?? 'unknown',
+      source_team_key: tdEntry.source_team_key ?? undefined,
+      destination_type: tdEntry.destination_type ?? 'unknown',
+      destination_team_key: tdEntry.destination_team_key ?? undefined,
+    })
+  }
+
+  return out
+}

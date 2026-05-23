@@ -25,6 +25,11 @@ interface IssuePayload {
   regularSeasonEndWeek?: number
   seasonStage?: SeasonStage
   lastUpdated?: Date
+  /** Earliest season we know about for THIS league (same name +
+   *  platform). Drives the volume number on the masthead — Vol 1 in
+   *  the league's first known season, Vol 2 in the second, etc.
+   *  Defaults to currentSeason when unknown, giving Vol 1. */
+  leagueFoundedSeason?: number
 }
 
 export const useIssueStore = defineStore('issue', () => {
@@ -33,6 +38,7 @@ export const useIssueStore = defineStore('issue', () => {
   const regularSeasonEndWeek = ref<number | null>(null)
   const seasonStage = ref<SeasonStage | null>(null)
   const lastUpdated = ref<Date | null>(null)
+  const leagueFoundedSeason = ref<number | null>(null)
 
   /** Views call this on adapter load to publish what week/season the
    *  user is reading. The masthead reactively picks it up. */
@@ -42,6 +48,7 @@ export const useIssueStore = defineStore('issue', () => {
     regularSeasonEndWeek.value = payload.regularSeasonEndWeek ?? null
     seasonStage.value = payload.seasonStage ?? null
     lastUpdated.value = payload.lastUpdated ?? new Date()
+    leagueFoundedSeason.value = payload.leagueFoundedSeason ?? null
   }
 
   /** Reset on logout / league change. */
@@ -51,6 +58,7 @@ export const useIssueStore = defineStore('issue', () => {
     regularSeasonEndWeek.value = null
     seasonStage.value = null
     lastUpdated.value = null
+    leagueFoundedSeason.value = null
   }
 
   return {
@@ -59,6 +67,7 @@ export const useIssueStore = defineStore('issue', () => {
     regularSeasonEndWeek,
     seasonStage,
     lastUpdated,
+    leagueFoundedSeason,
     setIssue,
     clearIssue,
   }

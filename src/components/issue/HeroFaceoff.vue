@@ -35,29 +35,51 @@
       <div class="hero-vignette"></div>
     </div>
 
-    <!-- Photo caption — magazine convention for identifying the
-         secondary subject of a feature image. When the hero is
-         image-led AND there's an antagonist, render a small
-         "VS · [avatar] Team · #rank" tag overlaying the bottom of
-         the image area. Sits in the dimmed bottom-vignette region
-         so it doesn't compete with the main photo. -->
-    <div v-if="hasImage && antagonist" class="hero-photo-caption" aria-label="Opponent">
-      <span class="hero-photo-caption-prefix">VS</span>
-      <div
-        class="hero-photo-caption-avatar"
-        :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }"
+    <!-- Combined meta pill — image-led mode only. Consolidates the
+         antagonist photo caption + byline + share button into one
+         bottom-right pill anchored to the image area. Cleaner than
+         having the antagonist caption AND a separate full-width
+         footer fighting the image for space. -->
+    <div v-if="hasImage" class="hero-image-meta" aria-label="Story meta">
+      <!-- Antagonist segment (only when one exists) -->
+      <template v-if="antagonist">
+        <span class="hero-image-meta-vs">VS</span>
+        <div
+          class="hero-image-meta-avatar"
+          :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }"
+        >
+          <img
+            v-if="antagonist.avatarUrl && !antagonistImgErrored"
+            :src="antagonist.avatarUrl"
+            class="hero-image-meta-avatar-img"
+            alt=""
+            @error="antagonistImgErrored = true"
+          />
+          <span v-else>{{ antagonist.ownerInitials }}</span>
+        </div>
+        <span class="hero-image-meta-name">{{ antagonist.name }}</span>
+        <span class="hero-image-meta-rank">#{{ antagonistRank }}</span>
+        <span class="hero-image-meta-sep" aria-hidden="true">·</span>
+      </template>
+
+      <!-- Byline -->
+      <span class="hero-image-meta-byline">{{ bylineCompact }}</span>
+
+      <!-- Share -->
+      <button
+        v-if="shareable"
+        type="button"
+        class="hero-image-meta-share"
+        :aria-label="`Share ${headline} to your league chat`"
+        @click="emit('share', story)"
       >
-        <img
-          v-if="antagonist.avatarUrl && !antagonistImgErrored"
-          :src="antagonist.avatarUrl"
-          class="hero-photo-caption-avatar-img"
-          alt=""
-          @error="antagonistImgErrored = true"
-        />
-        <span v-else>{{ antagonist.ownerInitials }}</span>
-      </div>
-      <span class="hero-photo-caption-name">{{ antagonist.name }}</span>
-      <span class="hero-photo-caption-rank">#{{ antagonistRank }}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+          <polyline points="16 6 12 2 8 6"/>
+          <line x1="12" y1="2" x2="12" y2="15"/>
+        </svg>
+        Share
+      </button>
     </div>
 
     <div class="hero-grid" :class="{ 'hero-grid-no-image': !hasImage }">
@@ -88,10 +110,10 @@
       </aside>
     </div>
 
-    <!-- Footer: byline + share only. Team identification lives in
-         the sparkline's endpoint labels — repeating it as chips
-         here would be the same information twice. -->
-    <footer class="hero-foot">
+    <!-- Footer: byline + share. Only renders in no-image / type-led
+         mode. In image-led mode the byline + share are consolidated
+         into the .hero-image-meta pill that sits over the image. -->
+    <footer v-if="!hasImage" class="hero-foot">
       <p class="hero-byline">
         <span class="hero-byline-tag">THE BEAT</span>
         <span>{{ byline }}</span>
@@ -299,6 +321,20 @@ const byline = computed(() => {
   return `FILED · ${d} DAY${d === 1 ? '' : 'S'} AGO`
 })
 
+/** Compact byline used inside the image-led meta pill — drops the
+ *  "FILED" prefix to save horizontal space, but keeps the unit
+ *  written out ("MIN" / "HR" / "DAY") so the timestamp scans at a
+ *  glance instead of needing to parse "5M". */
+const bylineCompact = computed(() => {
+  if (!props.story) return ''
+  const minutesAgo = Math.max(5, Math.round((1 - props.story.freshness) * 60 * 6))
+  if (minutesAgo < 60) return `THE BEAT · ${minutesAgo} MIN AGO`
+  const hr = Math.round(minutesAgo / 60)
+  if (hr < 24) return `THE BEAT · ${hr} HR AGO`
+  const d = Math.round(hr / 24)
+  return `THE BEAT · ${d} DAY${d === 1 ? '' : 'S'} AGO`
+})
+
 /* ─────────────────────────────────────────────────────────────────
    Sparkline data — protagonist + antagonist team IDs and tone-
    appropriate colors. The "up" story types color the protagonist
@@ -357,8 +393,13 @@ const focusColors = computed<string[]>(() => {
   position: relative;
   padding: 48px 0;
   isolation: isolate;
-  margin-bottom: 24px;
+  /* No bottom margin — the next section's EditorialBreak provides
+     all the spacing needed. Adding margin here stacked with the
+     break's top margin created the "screen of dead space" gap. */
+  margin-bottom: 0;
   overflow: hidden;
+  border: none;
+  border-radius: 0;
 }
 
 /* Content grid. Default single-column for image-led mode (the
@@ -424,56 +465,57 @@ const focusColors = computed<string[]>(() => {
 .hero-head { position: relative; z-index: 1; }
 .hero-foot { position: relative; z-index: 1; }
 
-/* ── Photo caption (image-led + antagonist) ─────────────────
-   Magazine convention for identifying secondary subjects of a
-   feature photo. Sits in the dimmed bottom region of the image
-   so it doesn't compete with the main photo for attention. */
-.hero-photo-caption {
+/* ── Image-led meta pill ─────────────────────────────────────
+   Consolidates antagonist photo caption + byline + share button
+   into one bottom-right pill anchored to the image area. Replaces
+   the awkward "footer floating over the image" layout that the
+   old separate footer + photo-caption combo produced. */
+.hero-image-meta {
   position: absolute;
   z-index: 2;
-  bottom: 28px;
-  /* Right of center so it sits over the image, not over the
-     headline column. */
-  right: 56px;
+  bottom: 24px;
+  right: 32px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 14px 7px 7px;
-  background: oklch(0.06 0.014 90 / 0.65);
-  backdrop-filter: blur(8px);
-  border: 1px solid oklch(0.97 0.005 90 / 0.10);
+  padding: 6px 6px 6px 14px;
+  background: oklch(0.06 0.014 90 / 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid oklch(0.97 0.005 90 / 0.12);
   border-radius: 999px;
   font-family: 'Barlow Condensed', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.14em;
+  max-width: calc(100% - 64px);
 }
-.hero-photo-caption-prefix {
+
+/* Antagonist segment */
+.hero-image-meta-vs {
   font-weight: 800;
   font-size: 0.72rem;
   color: oklch(0.78 0.18 92);
   letter-spacing: 0.22em;
-  padding-left: 4px;
 }
-.hero-photo-caption-avatar {
-  width: 30px;
-  height: 30px;
+.hero-image-meta-avatar {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   color: oklch(0.10 0.012 90);
   overflow: hidden;
   flex-shrink: 0;
 }
-.hero-photo-caption-avatar-img {
+.hero-image-meta-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.hero-photo-caption-name {
+.hero-image-meta-name {
   font-family: 'Barlow', sans-serif;
   font-weight: 700;
   font-size: 0.82rem;
@@ -481,31 +523,76 @@ const focusColors = computed<string[]>(() => {
   text-transform: none;
   color: oklch(0.97 0.005 90);
   white-space: nowrap;
-  max-width: 18ch;
+  max-width: 16ch;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hero-photo-caption-rank {
+.hero-image-meta-rank {
   font-weight: 800;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: oklch(0.65 0.010 90);
   padding: 2px 7px;
   border-radius: 6px;
   background: oklch(0.97 0.005 90 / 0.08);
   letter-spacing: 0.04em;
 }
+.hero-image-meta-sep {
+  color: oklch(0.40 0.010 90);
+  font-size: 0.9rem;
+  padding: 0 4px;
+}
+
+/* Byline */
+.hero-image-meta-byline {
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: oklch(0.55 0.010 90);
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+}
+
+/* Share button — sits inside the pill so it reads as part of the
+   meta cluster, not a separate floating CTA. */
+.hero-image-meta-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: oklch(0.14 0.018 90);
+  border: 1px solid oklch(0.97 0.005 90 / 0.15);
+  color: oklch(0.97 0.005 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  margin-left: 4px;
+  transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .hero-image-meta-share:hover {
+    background: oklch(0.20 0.015 90);
+    border-color: oklch(0.97 0.005 90 / 0.3);
+  }
+}
+.hero-image-meta-share:active { transform: scale(0.97); }
 
 @media (max-width: 720px) {
-  .hero-photo-caption {
+  .hero-image-meta {
     bottom: 16px;
     right: 16px;
-    padding: 5px 10px 5px 5px;
-    gap: 8px;
+    padding: 5px 5px 5px 10px;
+    gap: 6px;
   }
-  .hero-photo-caption-avatar { width: 24px; height: 24px; font-size: 0.7rem; }
-  .hero-photo-caption-name { font-size: 0.74rem; max-width: 12ch; }
-  .hero-photo-caption-prefix { font-size: 0.66rem; }
-  .hero-photo-caption-rank { font-size: 0.66rem; padding: 1px 5px; }
+  .hero-image-meta-avatar { width: 22px; height: 22px; font-size: 0.66rem; }
+  .hero-image-meta-name { font-size: 0.74rem; max-width: 10ch; }
+  .hero-image-meta-vs { font-size: 0.66rem; }
+  .hero-image-meta-rank { font-size: 0.62rem; padding: 1px 5px; }
+  .hero-image-meta-byline { display: none; }
+  .hero-image-meta-share { padding: 4px 9px; font-size: 0.66rem; }
 }
 
 /* Tone variables drive the atmospheric backdrop palette. */
