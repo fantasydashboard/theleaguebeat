@@ -65,6 +65,55 @@ export interface MlbDayStats {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   ROLLING-WINDOW SHAPES
+   Used by slump-watch: aggregated stats over a multi-day span,
+   not a single date.
+───────────────────────────────────────────────────────────────── */
+
+export interface MlbRollingHitter {
+  mlbId: number
+  name: string
+  position?: string
+  mlbTeam?: string
+  games: number
+  atBats: number
+  hits: number
+  homeRuns: number
+  rbi: number
+  runs: number
+  walks: number
+  strikeouts: number
+  stolenBases: number
+  /** Batting average, 0.000-1.000. */
+  battingAverage: number
+  /** On-base plus slugging, 0.000-x. */
+  ops: number
+}
+
+export interface MlbRollingPitcher {
+  mlbId: number
+  name: string
+  position?: string
+  mlbTeam?: string
+  games: number
+  gamesStarted: number
+  inningsPitched: number
+  earnedRuns: number
+  hits: number
+  walks: number
+  strikeouts: number
+  era: number
+  whip: number
+}
+
+export interface MlbRollingStats {
+  startDate: string
+  endDate: string
+  hitters: MlbRollingHitter[]
+  pitchers: MlbRollingPitcher[]
+}
+
+/* ─────────────────────────────────────────────────────────────────
    IN-MEMORY CACHE
 ───────────────────────────────────────────────────────────────── */
 
@@ -191,6 +240,62 @@ function parseTransaction(t: any): MlbTransaction | null {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   ROLLING STATS — for slump-watch
+───────────────────────────────────────────────────────────────── */
+
+const rollingCache = new Map<string, { data: MlbRollingStats; fetchedAt: number; ttlMs: number }>()
+
+/**
+ * Fetch aggregated hitter + pitcher stats across a multi-day window.
+ *
+ * Same byDateRange endpoint as getDayStats, but the date span is
+ * wider, so the response aggregates each player's totals across
+ * the window. Used by slump detection to find owned players cold
+ * over the last 7-14 days.
+ *
+ * Caching: 12 hours per (start, end) pair. Rolling windows are
+ * stable until the next fantasy-day rollover.
+ */
+export async function getRollingStats(
+  startDate: string,
+  endDate: string,
+): Promise<MlbRollingStats> {
+  const cacheKey = `${startDate}__${endDate}`
+  const hit = rollingCache.get(cacheKey)
+  if (hit && Date.now() - hit.fetchedAt < hit.ttlMs) return hit.data
+
+  try {
+    const [hitters, pitchers] = await Promise.all([
+      fetchRollingGroup('hitting', startDate, endDate),
+      fetchRollingGroup('pitching', startDate, endDate),
+    ])
+    const data: MlbRollingStats = {
+      startDate,
+      endDate,
+      hitters: hitters as MlbRollingHitter[],
+      pitchers: pitchers as MlbRollingPitcher[],
+    }
+    rollingCache.set(cacheKey, {
+      data,
+      fetchedAt: Date.now(),
+      ttlMs: 12 * 60 * 60 * 1000,
+    })
+    return data
+  } catch (err) {
+    console.warn('[mlbStats] getRollingStats failed:', err)
+    return { startDate, endDate, hitters: [], pitchers: [] }
+  }
+}
+
+/** Date N days before `endDate`, as YYYY-MM-DD. Used to compute the
+ *  rolling-window start (e.g., 7 days back from yesterday). */
+export function dateNDaysBefore(endDate: string, n: number): string {
+  const d = new Date(endDate + 'T12:00:00')
+  d.setDate(d.getDate() - n)
+  return formatYMD(d)
+}
+
 /**
  * "Yesterday" in US/Eastern (where MLB games conclude). Returns
  * YYYY-MM-DD. Useful default for the wire — the most recent
@@ -307,6 +412,100 @@ function parsePitcher(split: any): MlbPitcherStat | null {
     perfectGame,
     qualityStart,
   }
+}
+
+async function fetchRollingGroup(
+  group: 'hitting' | 'pitching',
+  startDate: string,
+  endDate: string,
+): Promise<(MlbRollingHitter | MlbRollingPitcher)[]> {
+  const url =
+    `${BASE_URL}/stats?stats=byDateRange` +
+    `&startDate=${encodeURIComponent(startDate)}` +
+    `&endDate=${encodeURIComponent(endDate)}` +
+    `&group=${group}` +
+    `&sportId=1` +
+    `&limit=1500`
+
+  const resp = await fetch(url)
+  if (!resp.ok) throw new Error(`MLB Stats API ${resp.status}`)
+  const data = await resp.json()
+  const splits = data?.stats?.[0]?.splits ?? []
+  if (group === 'hitting') {
+    return splits
+      .map(parseRollingHitter)
+      .filter((x: MlbRollingHitter | null): x is MlbRollingHitter => x !== null)
+  }
+  return splits
+    .map(parseRollingPitcher)
+    .filter((x: MlbRollingPitcher | null): x is MlbRollingPitcher => x !== null)
+}
+
+function parseRollingHitter(split: any): MlbRollingHitter | null {
+  const player = split?.player
+  const stat = split?.stat
+  if (!player || !stat) return null
+  const atBats = numField(stat.atBats)
+  const hits = numField(stat.hits)
+  // Prefer API-supplied avg/ops when present (stringified). Compute
+  // from totals as a fallback for the slump filter to stay reliable.
+  const avg = parseFloatField(stat.avg) ?? (atBats > 0 ? hits / atBats : 0)
+  const ops = parseFloatField(stat.ops) ?? 0
+  return {
+    mlbId: Number(player.id),
+    name: player.fullName || `${player.firstName ?? ''} ${player.lastName ?? ''}`.trim(),
+    position: split.position?.abbreviation,
+    mlbTeam: split.team?.abbreviation,
+    games: numField(stat.gamesPlayed),
+    atBats,
+    hits,
+    homeRuns: numField(stat.homeRuns),
+    rbi: numField(stat.rbi),
+    runs: numField(stat.runs),
+    walks: numField(stat.baseOnBalls),
+    strikeouts: numField(stat.strikeOuts),
+    stolenBases: numField(stat.stolenBases),
+    battingAverage: avg,
+    ops,
+  }
+}
+
+function parseRollingPitcher(split: any): MlbRollingPitcher | null {
+  const player = split?.player
+  const stat = split?.stat
+  if (!player || !stat) return null
+  const ip = parseInningsPitched(stat.inningsPitched)
+  const er = numField(stat.earnedRuns)
+  const hits = numField(stat.hits)
+  const walks = numField(stat.baseOnBalls)
+  const era = parseFloatField(stat.era) ?? (ip > 0 ? (er * 9) / ip : 0)
+  const whip = parseFloatField(stat.whip) ?? (ip > 0 ? (hits + walks) / ip : 0)
+  return {
+    mlbId: Number(player.id),
+    name: player.fullName || `${player.firstName ?? ''} ${player.lastName ?? ''}`.trim(),
+    position: split.position?.abbreviation,
+    mlbTeam: split.team?.abbreviation,
+    games: numField(stat.gamesPlayed),
+    gamesStarted: numField(stat.gamesStarted),
+    inningsPitched: ip,
+    earnedRuns: er,
+    hits,
+    walks,
+    strikeouts: numField(stat.strikeOuts),
+    era,
+    whip,
+  }
+}
+
+/** Parse a numeric string field that may include ".000" formatting.
+ *  MLB API returns rate stats as strings ("0.230"). */
+function parseFloatField(v: unknown): number | null {
+  if (typeof v === 'number') return v
+  if (typeof v === 'string') {
+    const n = parseFloat(v)
+    if (!Number.isNaN(n)) return n
+  }
+  return null
 }
 
 function numField(v: unknown): number {

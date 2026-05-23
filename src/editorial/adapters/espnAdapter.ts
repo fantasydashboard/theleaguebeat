@@ -53,6 +53,7 @@ import type { LeagueTransaction, TransactionKind, TransactionMovement } from '..
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
+import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -408,6 +409,7 @@ export async function espnLeagueToCategoryData(
   //     is our only path.
   const playerNights = await buildEspnPlayerNights(league)
   const injuryReports = await buildEspnInjuryReports(league)
+  const slumpReports = await buildEspnSlumpReports(league)
   const myBenchedPlayers = buildEspnMyBench(league, teamsOut)
 
   // Division metadata — drives the new division-aware detection
@@ -441,6 +443,7 @@ export async function espnLeagueToCategoryData(
     transactions,
     playerNights,
     injuryReports,
+    slumpReports,
     myBenchedPlayers,
   }
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
@@ -476,6 +479,16 @@ async function buildEspnInjuryReports(league: EspnLeague): Promise<InjuryReport[
     return await buildInjuryReports({ rosterByName, includeUnowned: false })
   } catch (err) {
     console.warn('[espnAdapter] injury reports failed:', err)
+    return []
+  }
+}
+
+async function buildEspnSlumpReports(league: EspnLeague): Promise<SlumpReport[]> {
+  try {
+    const rosterByName = buildEspnRosterByName(league)
+    return await buildSlumpReports({ rosterByName, includeUnowned: false })
+  } catch (err) {
+    console.warn('[espnAdapter] slump reports failed:', err)
     return []
   }
 }

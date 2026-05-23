@@ -51,6 +51,7 @@ import type {
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
+import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -295,6 +296,9 @@ export async function sleeperLeagueToCategoryData(
   const injuryReports = league.sport === 'mlb'
     ? await buildSleeperInjuryReports(rosters)
     : undefined
+  const slumpReports = league.sport === 'mlb'
+    ? await buildSleeperSlumpReports(rosters)
+    : undefined
   const myBenchedPlayers = league.sport === 'mlb'
     ? await buildSleeperMyBench(rosters, teams)
     : undefined
@@ -324,6 +328,7 @@ export async function sleeperLeagueToCategoryData(
     transactions,
     playerNights,
     injuryReports,
+    slumpReports,
     myBenchedPlayers,
   }
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
@@ -365,6 +370,19 @@ async function buildSleeperInjuryReports(
     return await buildInjuryReports({ rosterByMlbId, includeUnowned: false })
   } catch (err) {
     console.warn('[sleeperAdapter] injury reports failed:', err)
+    return []
+  }
+}
+
+async function buildSleeperSlumpReports(
+  rosters: SleeperRoster[],
+): Promise<SlumpReport[]> {
+  try {
+    const rosterByMlbId = await buildSleeperRosterByMlbId(rosters)
+    if (!rosterByMlbId) return []
+    return await buildSlumpReports({ rosterByMlbId, includeUnowned: false })
+  } catch (err) {
+    console.warn('[sleeperAdapter] slump reports failed:', err)
     return []
   }
 }

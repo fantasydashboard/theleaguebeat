@@ -227,6 +227,9 @@ const WIRE_STORY_TYPES: StoryType[] = [
   // Wire intel — actionable add / owned disaster
   'streamer-of-day',
   'pitcher-blowup',
+  // Rolling slumps — multi-day cold streaks for owned players
+  'slump-hitter',
+  'slump-pitcher-rolling',
 ]
 
 const issueDate = computed(() => props.issueDate ?? new Date())
@@ -293,7 +296,9 @@ function storyToCard(story: SelectedStory): WireCard {
     story.type === 'il-placement' ||
     story.type === 'il-return' ||
     story.type === 'streamer-of-day' ||
-    story.type === 'pitcher-blowup'
+    story.type === 'pitcher-blowup' ||
+    story.type === 'slump-hitter' ||
+    story.type === 'slump-pitcher-rolling'
 
   // Overnight-delta stories — detector ships a custom headline +
   // summary tailored to whether the viewer's team is involved.
@@ -419,6 +424,8 @@ function eyebrowForStoryType(type: StoryType): string {
     case 'bench-bad-beat':       return 'BAD BEAT'
     case 'streamer-of-day':      return 'OFF THE WIRE'
     case 'pitcher-blowup':       return 'BLOW-UP'
+    case 'slump-hitter':         return 'COLD STREAK'
+    case 'slump-pitcher-rolling': return 'COLD STREAK'
     default:                     return 'THE WIRE'
   }
 }
@@ -459,6 +466,8 @@ function headlineForStoryType(type: StoryType, teamName?: string): string {
     case 'il-return':            return 'Back from the IL just in time.'
     case 'streamer-of-day':      return 'A free agent went off last night.'
     case 'pitcher-blowup':       return 'A start went sideways.'
+    case 'slump-hitter':         return 'A bat has gone quiet.'
+    case 'slump-pitcher-rolling': return 'An arm has gone cold.'
     default:                     return 'A new beat from your league.'
   }
 }
@@ -507,6 +516,8 @@ function toneForStoryType(type: StoryType): Tone {
     case 'three-week-collapse':
     case 'il-placement':
     case 'pitcher-blowup':
+    case 'slump-hitter':
+    case 'slump-pitcher-rolling':
     case 'blowout':              return 'down'
     case 'streamer-of-day':      return 'gold'
     case 'photo-finish':

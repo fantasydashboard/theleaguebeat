@@ -160,6 +160,8 @@ export type StoryType =
   /* H4. Wire intel (actionable add, owned-disaster) */
   | 'streamer-of-day'       // unowned pitcher gem from yesterday — go grab them
   | 'pitcher-blowup'        // your pitcher got shelled yesterday — single-game pain
+  | 'slump-hitter'          // owned hitter cold over the last 7 days
+  | 'slump-pitcher-rolling' // owned pitcher cold over the last 14 days
 
   /* I. Personalization (future) */
   | 'your-team-first-feature'

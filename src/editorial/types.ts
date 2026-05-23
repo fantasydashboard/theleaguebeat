@@ -271,6 +271,12 @@ export interface CategoryLeagueData {
    *  cards. Optional. */
   injuryReports?: import('./players/injuries').InjuryReport[]
 
+  /** Multi-day slump reports for rostered players. Hitters cold
+   *  over last 7 days, pitchers cold over last 14. Fed by the
+   *  MLB Stats API rolling-window endpoint; detector emits
+   *  slump-hitter / slump-pitcher-rolling Wire cards. Optional. */
+  slumpReports?: import('./players/slumps').SlumpReport[]
+
   /** Normalized player names on the viewer's bench (or IL slot)
    *  today. Used as a proxy for "who you sat yesterday" to detect
    *  bench-bad-beat stories — when a benched player had a notable

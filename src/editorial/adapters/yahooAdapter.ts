@@ -54,6 +54,7 @@ import type {
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
+import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -369,11 +370,13 @@ async function buildYahooLeagueData(
   }))
   const yahooRosterByName = yahooRosterResult.rosterByName
   const myBenchedPlayers = yahooRosterResult.myBenchedPlayers
-  const [playerNights, injuryReports] = await Promise.all([
+  const [playerNights, injuryReports, slumpReports] = await Promise.all([
     buildPlayerNights({ rosterByName: yahooRosterByName, includeUnowned: true })
       .catch(() => [] as PlayerNight[]),
     buildInjuryReports({ rosterByName: yahooRosterByName, includeUnowned: false })
       .catch(() => [] as InjuryReport[]),
+    buildSlumpReports({ rosterByName: yahooRosterByName, includeUnowned: false })
+      .catch(() => [] as SlumpReport[]),
   ])
 
   const partialData: CategoryLeagueData = {
@@ -398,6 +401,7 @@ async function buildYahooLeagueData(
     transactions,
     playerNights,
     injuryReports,
+    slumpReports,
     myBenchedPlayers,
   }
   // Snapshot delta — overnight cat-tips, matchup pulse, rank shifts.

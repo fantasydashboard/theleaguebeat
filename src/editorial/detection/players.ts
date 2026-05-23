@@ -20,6 +20,7 @@ import { ALL_ACTIVE_STAGES } from './types'
 import { signature } from './helpers'
 import type { PlayerNight } from '../players/types'
 import type { InjuryReport } from '../players/injuries'
+import type { SlumpReport } from '../players/slumps'
 import { normalizeName } from '../players/buildPlayerNights'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -67,7 +68,130 @@ export function detectPlayerStories(
     if (card) out.push(card)
   }
 
+  // Slump reports — multi-day cold streaks for rostered players.
+  for (const s of data.slumpReports ?? []) {
+    const card = classifySlumpReport(s, data, myTeamId)
+    if (card) out.push(card)
+  }
+
   return out
+}
+
+function classifySlumpReport(
+  s: SlumpReport,
+  data: CategoryLeagueData,
+  myTeamId: string | null,
+): StoryCandidate | null {
+  if (s.ownedByTeamIds.length === 0) return null
+
+  const teamIds = s.ownedByTeamIds
+  const teamNames = teamIds.map((id) => teamNameOf(data, id))
+  const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
+  const type = s.kind === 'hitter' ? 'slump-hitter' : 'slump-pitcher-rolling'
+
+  // Weight scales with how bad the slump is. Truly miserable lines
+  // outrank routine cold streaks.
+  let weight = 60
+  if (s.kind === 'hitter') {
+    const ba = s.summary.battingAverage ?? 0
+    if (ba <= 0.100) weight = 78
+    else if (ba <= 0.140) weight = 72
+    else weight = 66
+  } else {
+    const era = s.summary.era ?? 0
+    if (era >= 9.0) weight = 80
+    else if (era >= 7.5) weight = 74
+    else weight = 68
+  }
+
+  return {
+    type,
+    category: 'player',
+    weight: isMyGuy ? weight + 12 : weight,
+    // Slumps are by definition multi-day. Freshness reflects "data
+    // is current" rather than "event happened today" — keep it high
+    // since the report just rolled forward this morning.
+    freshness: 0.85,
+    scope: teamIds.length === 1 ? 'team' : 'matchup',
+    teamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: s.mlbId,
+      playerName: s.playerName,
+      position: s.position,
+      mlbTeam: s.mlbTeam,
+      gameDate: s.endDate,
+      windowDays: s.windowDays,
+      ownedByTeamIds: teamIds,
+      ownedByTeamNames: teamNames,
+      isMyGuy,
+      kind: s.kind,
+      summary: s.summary,
+      headline: slumpHeadline(s, isMyGuy),
+      summaryLine: slumpSummaryLine(s),
+    },
+    signature: signature(['slump', s.mlbId, s.endDate, String(s.windowDays)]),
+  }
+}
+
+function slumpHeadline(s: SlumpReport, isMyGuy: boolean): string {
+  if (s.kind === 'hitter') {
+    const ba = s.summary.battingAverage ?? 0
+    const ops = s.summary.ops ?? 0
+    if (ba <= 0.100) {
+      return isMyGuy
+        ? `${s.playerName} cannot find a hit for you.`
+        : `${s.playerName} cannot buy a hit.`
+    }
+    if (ops <= 0.450) {
+      return isMyGuy
+        ? `${s.playerName} is dragging your week down.`
+        : `${s.playerName} has gone cold.`
+    }
+    return isMyGuy
+      ? `${s.playerName} is in a funk on your roster.`
+      : `${s.playerName} is in a funk.`
+  }
+  // pitcher
+  const era = s.summary.era ?? 0
+  if (era >= 9.0) {
+    return isMyGuy
+      ? `${s.playerName} is wrecking your ratios.`
+      : `${s.playerName} cannot get outs.`
+  }
+  if (era >= 7.5) {
+    return isMyGuy
+      ? `${s.playerName} has been a problem on your roster.`
+      : `${s.playerName} has been a problem.`
+  }
+  return isMyGuy
+    ? `${s.playerName} is sitting on a rough stretch for you.`
+    : `${s.playerName} is sitting on a rough stretch.`
+}
+
+function slumpSummaryLine(s: SlumpReport): string {
+  if (s.kind === 'hitter') {
+    const ba = formatAverage(s.summary.battingAverage)
+    const ops = formatAverage(s.summary.ops)
+    const hits = s.summary.hits ?? 0
+    const ab = s.summary.atBats ?? 0
+    return `${hits}-for-${ab}, ${ba} / ${ops} OPS over the last ${s.windowDays} days.`
+  }
+  const era = formatRate(s.summary.era, 2)
+  const whip = formatRate(s.summary.whip, 2)
+  const ip = formatRate(s.summary.inningsPitched, 1)
+  return `${ip} IP, ${era} ERA, ${whip} WHIP over the last ${s.windowDays} days.`
+}
+
+function formatAverage(v: number | undefined): string {
+  if (v == null) return '.000'
+  // ".321" style — leading dot, three digits.
+  return v.toFixed(3).replace(/^0/, '')
+}
+
+function formatRate(v: number | undefined, digits: number): string {
+  if (v == null) return '0'
+  return v.toFixed(digits)
 }
 
 function classifyInjuryReport(
