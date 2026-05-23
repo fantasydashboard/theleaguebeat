@@ -20,6 +20,7 @@ import { detect as detectCadence } from './cadence'
 import { detect as detectDivisions } from './divisions'
 import { detectTransactionStories } from './transactions'
 import { detectPlayerStories } from './players'
+import { detectOvernightStories } from './overnight'
 
 /** Every detector module that's wired in. New modules get added here. */
 const DETECTORS: DetectFn[] = [
@@ -31,6 +32,7 @@ const DETECTORS: DetectFn[] = [
   detectDivisions,
   detectTransactionStories,
   detectPlayerStories,
+  detectOvernightStories,
   // Future tiers:
   //   detectCategories — needs categoryRanksHistory (Tier 2)
   //   detectPersonalization — needs impression infra (Tier 4)

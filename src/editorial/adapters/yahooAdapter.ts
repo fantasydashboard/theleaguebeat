@@ -51,6 +51,7 @@ import type {
   TransactionKind,
   TransactionMovement,
 } from '../transactions/types'
+import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -152,6 +153,9 @@ export interface AdapterOptions {
     yahooGuid?: string
     espnSwid?: string
   }
+  /** Supabase `leagues.id` UUID — enables daily-snapshot delta
+   *  detection. Skipped when omitted. */
+  leagueRowId?: string
 }
 
 export async function yahooLeagueToCategoryData(
@@ -347,15 +351,12 @@ async function buildYahooLeagueData(
   // errors. Transaction detectors quietly no-op when missing.
   const transactions = await buildYahooTransactions(leagueKey, metadata.currentWeek)
 
-  return {
+  const partialData: CategoryLeagueData = {
     leagueId: leagueKey,
     leagueName: deriveLeagueName(leagueSettingsRaw, leagueKey),
     currentWeek,
     currentSeason,
     playoffCutoff,
-    // Yahoo's metadata exposes the final regular-season week directly.
-    // Editorial consumers use this for accurate "weeks left" copy
-    // instead of assuming a 12-week season (the demo league's length).
     regularSeasonEndWeek: metadata.endWeek,
     teams: teamList,
     categories,
@@ -370,6 +371,13 @@ async function buildYahooLeagueData(
     weeklyCatsWon,
     weeklyLeagueAverage,
     transactions,
+  }
+  // Snapshot delta — overnight cat-tips, matchup pulse, rank shifts.
+  const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
+
+  return {
+    ...partialData,
+    snapshotDelta,
   }
 }
 

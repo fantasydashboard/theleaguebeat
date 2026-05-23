@@ -1330,7 +1330,14 @@ async function loadLiveData() {
   liveLoading.value = true
   liveError.value = null
   try {
-    const opts = { userIdentity: collectUserIdentity() }
+    // leagueRowId is the Supabase UUID (route param) — needed by
+    // the snapshot helper so each adapter can save today's snapshot
+    // and diff against yesterday's for overnight Wire stories.
+    const leagueRowId =
+      typeof route.params.leagueId === 'string'
+        ? route.params.leagueId
+        : undefined
+    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)

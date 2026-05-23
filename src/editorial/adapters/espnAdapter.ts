@@ -52,6 +52,7 @@ import type {
 import type { LeagueTransaction, TransactionKind, TransactionMovement } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
+import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -221,6 +222,9 @@ export interface AdapterOptions {
     yahooGuid?: string
     espnSwid?: string
   }
+  /** Supabase `leagues.id` UUID — enables daily-snapshot delta
+   *  detection. Skipped when omitted. */
+  leagueRowId?: string
 }
 
 export async function espnLeagueToCategoryData(
@@ -409,7 +413,9 @@ export async function espnLeagueToCategoryData(
   // detectors no-op when the field is absent.
   const divisions = buildDivisions(league)
 
-  return {
+  // 18. Snapshot delta — save today's snapshot (idempotent) and
+  //     diff against the previous snapshot for overnight stories.
+  const partialData: CategoryLeagueData = {
     leagueId,
     leagueName: league.name || `ESPN League ${leagueId}`,
     currentWeek,
@@ -431,6 +437,12 @@ export async function espnLeagueToCategoryData(
     weeklyLeagueAverage,
     transactions,
     playerNights,
+  }
+  const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
+
+  return {
+    ...partialData,
+    snapshotDelta,
   }
 }
 

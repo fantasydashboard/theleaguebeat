@@ -147,6 +147,13 @@ export type StoryType =
   | 'sunday-final-push'
   | 'off-day-deep-dive'
 
+  /* H2. Overnight delta (snapshot-driven) */
+  | 'matchup-tipped'        // your matchup flipped sides overnight
+  | 'matchup-pulse-up'      // your matchup score improved
+  | 'matchup-pulse-down'    // your matchup score worsened
+  | 'rank-shift-up'         // a team climbed ≥2 ranks overnight
+  | 'rank-shift-down'       // a team fell ≥2 ranks overnight
+
   /* I. Personalization (future) */
   | 'your-team-first-feature'
   | 'your-rivals-hot-streak'

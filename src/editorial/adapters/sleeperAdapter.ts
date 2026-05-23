@@ -50,6 +50,7 @@ import type {
 } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights } from '../players/buildPlayerNights'
+import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -139,6 +140,11 @@ export interface AdapterOptions {
     /** ESPN `swid` of the signed-in account, if cookies are loaded. */
     espnSwid?: string
   }
+  /** Supabase `leagues.id` UUID for this league connection. Enables
+   *  daily-snapshot save + previous-snapshot fetch (for overnight
+   *  delta detection). When omitted (demo route, anonymous viewer)
+   *  the snapshot path is skipped silently. */
+  leagueRowId?: string
 }
 
 export async function sleeperLeagueToCategoryData(
@@ -286,7 +292,11 @@ export async function sleeperLeagueToCategoryData(
     ? await buildSleeperPlayerNights(rosters)
     : undefined
 
-  return {
+  // 20. Snapshot delta — fetch the most recent previous snapshot
+  //     before today so the overnight-delta detectors can emit
+  //     "since your last visit" Wire stories. Skipped when no
+  //     Supabase row id is provided (demo route, anonymous viewer).
+  const partialData: CategoryLeagueData = {
     leagueId,
     leagueName: league.name || 'Sleeper League',
     currentWeek,
@@ -306,6 +316,12 @@ export async function sleeperLeagueToCategoryData(
     weeklyLeagueAverage,
     transactions,
     playerNights,
+  }
+  const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
+
+  return {
+    ...partialData,
+    snapshotDelta,
   }
 }
 

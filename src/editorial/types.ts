@@ -254,6 +254,16 @@ export interface CategoryLeagueData {
    *  "MY guys" stories vs generic league-wide gossip. Optional —
    *  player detectors no-op when missing. */
   playerNights?: import('./players/types').PlayerNight[]
+
+  /** Snapshot delta vs the previous saved snapshot for this league
+   *  (typically yesterday's first-visit snapshot). Drives The Wire's
+   *  "since your last visit" stories: cat-tipped, matchup-pulse,
+   *  rank-shift-overnight. Adapters compute via the snapshots
+   *  helper; detectors in detection/overnight.ts consume.
+   *
+   *  Optional — null when no prior snapshot exists (first visit
+   *  ever to this league) or when supabase isn't reachable. */
+  snapshotDelta?: import('./snapshots/types').SnapshotDelta | null
 }
 
 /* ─────────────────────────────────────────────────────────────────

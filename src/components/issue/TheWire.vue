@@ -210,12 +210,18 @@ const WIRE_STORY_TYPES: StoryType[] = [
   'lopsided-trade',
   'faab-blowout',
   'waiver-winner',
-  // Player stories (Tier 3b — pending player-stats ingester)
+  // Player stories (Tier 3b — wired via detection/players.ts)
   'monster-night',
   'three-hr-game',
   'twelve-k-game',
   'il-placement',
   'il-return',
+  // Overnight delta (Tier 3c — wired via detection/overnight.ts)
+  'matchup-tipped',
+  'matchup-pulse-up',
+  'matchup-pulse-down',
+  'rank-shift-up',
+  'rank-shift-down',
 ]
 
 const issueDate = computed(() => props.issueDate ?? new Date())
@@ -280,10 +286,27 @@ function storyToCard(story: SelectedStory): WireCard {
     story.type === 'twelve-k-game' ||
     story.type === 'monster-night'
 
+  // Overnight-delta stories — detector ships a custom headline +
+  // summary tailored to whether the viewer's team is involved.
+  const isOvernightStory =
+    story.type === 'matchup-tipped' ||
+    story.type === 'matchup-pulse-up' ||
+    story.type === 'matchup-pulse-down' ||
+    story.type === 'rank-shift-up' ||
+    story.type === 'rank-shift-down'
+
   let eyebrow = eyebrowForStoryType(story.type)
   let headline = headlineForStoryType(story.type, teamName)
   let body: string | undefined = bodyForStoryType(story.type, teamName)
   let player: WireCard['player'] | undefined
+
+  if (isOvernightStory) {
+    // Prefer the detector's tailored copy — it knows "involvesMe"
+    // and tunes the second-person ("you climbed") vs third-person
+    // ("Goof Juice climbed") framing.
+    if (typeof ctx.headline === 'string') headline = ctx.headline
+    if (typeof ctx.summary === 'string') body = ctx.summary as string
+  }
 
   if (isPlayerStory && typeof ctx?.mlbId === 'number') {
     // Override the generic copy with the rich player headline /
@@ -359,6 +382,11 @@ function eyebrowForStoryType(type: StoryType): string {
     case 'lopsided-trade':       return 'TRADE'
     case 'faab-blowout':         return 'FAAB WAR'
     case 'waiver-winner':        return 'WAIVER WIN'
+    case 'matchup-tipped':       return 'OVERNIGHT FLIP'
+    case 'matchup-pulse-up':     return 'OVERNIGHT GAIN'
+    case 'matchup-pulse-down':   return 'OVERNIGHT SLIP'
+    case 'rank-shift-up':        return 'OVERNIGHT CLIMB'
+    case 'rank-shift-down':      return 'OVERNIGHT FALL'
     case 'monster-night':        return 'MONSTER NIGHT'
     case 'three-hr-game':        return '3-HR GAME'
     case 'twelve-k-game':        return '12-K GAME'
@@ -392,6 +420,11 @@ function headlineForStoryType(type: StoryType, teamName?: string): string {
     case 'lopsided-trade':       return `${t} made a move.`
     case 'faab-blowout':         return `${t} won the FAAB war.`
     case 'waiver-winner':        return `${t} snagged off waivers.`
+    case 'matchup-tipped':       return `${t}'s matchup flipped overnight.`
+    case 'matchup-pulse-up':     return `${t} picked up ground overnight.`
+    case 'matchup-pulse-down':   return `${t} lost ground overnight.`
+    case 'rank-shift-up':        return `${t} climbed overnight.`
+    case 'rank-shift-down':      return `${t} slipped overnight.`
     case 'monster-night':        return 'Monster line off the bat last night.'
     case 'three-hr-game':        return 'A 3-HR night moved the math.'
     case 'twelve-k-game':        return 'Twelve strikeouts. The K race tightened.'
@@ -421,6 +454,11 @@ function bodyForStoryType(type: StoryType, _teamName?: string): string | undefin
     case 'lopsided-trade':       return 'Trade processed. Both sides bet on a future state.'
     case 'faab-blowout':         return 'Outbid the rest of the league. The waiver pool just got thinner.'
     case 'waiver-winner':        return 'Top of the waiver order, used wisely. A roster move with stakes.'
+    case 'matchup-tipped':       return 'The cats moved enough to flip which side leads.'
+    case 'matchup-pulse-up':     return 'You gained ground without flipping the lead.'
+    case 'matchup-pulse-down':   return 'You lost ground without losing the lead yet.'
+    case 'rank-shift-up':        return 'A real climb in the standings since yesterday.'
+    case 'rank-shift-down':      return 'A real drop in the standings since yesterday.'
     default:                     return undefined
   }
 }
@@ -448,6 +486,11 @@ function toneForStoryType(type: StoryType): Tone {
     case 'faab-blowout':         return 'gold'
     case 'lopsided-trade':
     case 'waiver-winner':        return 'teal'
+    case 'matchup-tipped':       return 'magenta'
+    case 'matchup-pulse-up':
+    case 'rank-shift-up':        return 'up'
+    case 'matchup-pulse-down':
+    case 'rank-shift-down':      return 'down'
     case 'off-day-deep-dive':    return 'neutral'
     default:                     return 'magenta'
   }
