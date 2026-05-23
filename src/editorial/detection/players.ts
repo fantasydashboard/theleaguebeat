@@ -287,33 +287,39 @@ function classifyPitcherNight(
   myTeamId: string | null,
 ): StoryCandidate | null {
   const p = n.pitching!
+  const isUnowned = n.ownedByTeamIds.length === 0
 
-  let storyType: 'twelve-k-game' | 'monster-night' | null = null
+  // Blow-up routing: only surface as a story when owned. An unowned
+  // pitcher giving up 7 ER is nobody's story; an owned pitcher giving
+  // up 7 ER is a roster crisis.
+  if (p.earnedRuns >= 7 && !isUnowned) {
+    return buildPitcherBlowup(n, data, myTeamId)
+  }
+
+  // Streamer routing: unowned pitcher that hit the notable threshold
+  // is an actionable add. Different editorial frame from "look what
+  // this superstar did."
+  let storyType: 'twelve-k-game' | 'monster-night' | 'streamer-of-day' | null = null
   let weight = 60
 
   if (p.perfectGame) {
-    storyType = 'monster-night'
+    storyType = isUnowned ? 'streamer-of-day' : 'monster-night'
     weight = 100
   } else if (p.noHitter) {
-    storyType = 'monster-night'
+    storyType = isUnowned ? 'streamer-of-day' : 'monster-night'
     weight = 98
   } else if (p.strikeouts >= 12) {
-    storyType = 'twelve-k-game'
-    weight = 88
+    storyType = isUnowned ? 'streamer-of-day' : 'twelve-k-game'
+    weight = isUnowned ? 78 : 88
   } else if (p.completeGame) {
-    storyType = 'monster-night'
-    weight = 86
+    storyType = isUnowned ? 'streamer-of-day' : 'monster-night'
+    weight = isUnowned ? 76 : 86
   } else if (p.strikeouts >= 10) {
-    storyType = 'twelve-k-game'
-    weight = 78
+    storyType = isUnowned ? 'streamer-of-day' : 'twelve-k-game'
+    weight = isUnowned ? 72 : 78
   } else if (p.inningsPitched >= 7 && p.earnedRuns === 0) {
-    storyType = 'monster-night'
-    weight = 72
-  } else if (p.earnedRuns >= 7) {
-    // Blow-up start — editorial bad-news angle. Lower weight, only
-    // surfaces when owned.
-    storyType = 'monster-night'
-    weight = 58
+    storyType = isUnowned ? 'streamer-of-day' : 'monster-night'
+    weight = isUnowned ? 70 : 72
   }
 
   if (!storyType) return null
@@ -322,8 +328,73 @@ function classifyPitcherNight(
   const teamNames = teamIds.map((id) => teamNameOf(data, id))
   const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
 
+  // Streamers don't get the my-team boost (they're unowned by
+  // definition). Owned-pitcher stories keep the +12 boost.
+  const finalWeight = storyType === 'streamer-of-day'
+    ? weight
+    : isMyGuy ? weight + 12 : weight
+
   return {
     type: storyType,
+    category: 'player',
+    weight: finalWeight,
+    freshness: freshnessForGameDate(n.gameDate),
+    scope: storyType === 'streamer-of-day' ? 'league' : teamIds.length === 1 ? 'team' : 'matchup',
+    teamIds: storyType === 'streamer-of-day' ? [] : teamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: n.mlbId,
+      playerName: n.name,
+      position: n.position,
+      mlbTeam: n.mlbTeam,
+      gameDate: n.gameDate,
+      ownedByTeamIds: teamIds,
+      ownedByTeamNames: teamNames,
+      isMyGuy: storyType === 'streamer-of-day' ? false : isMyGuy,
+      kind: 'pitcher',
+      line: {
+        inningsPitched: p.inningsPitched,
+        hits: p.hits,
+        runs: p.runs,
+        earnedRuns: p.earnedRuns,
+        walks: p.walks,
+        strikeouts: p.strikeouts,
+        decision: p.decision,
+        completeGame: p.completeGame,
+        noHitter: p.noHitter,
+        perfectGame: p.perfectGame,
+      },
+      headline: storyType === 'streamer-of-day'
+        ? streamerHeadline(n.name, p)
+        : pitcherHeadline(n.name, p, isMyGuy),
+      summaryLine: pitcherSummary(p),
+    },
+    signature: signature([storyType, n.mlbId, n.gameDate]),
+  }
+}
+
+/**
+ * Pitcher blow-up — owned, gave up 7+ ER. Its own story type so the
+ * editorial voice can lean into the pain instead of pretending it
+ * was a "monster night."
+ */
+function buildPitcherBlowup(
+  n: PlayerNight,
+  data: CategoryLeagueData,
+  myTeamId: string | null,
+): StoryCandidate {
+  const p = n.pitching!
+  const teamIds = n.ownedByTeamIds
+  const teamNames = teamIds.map((id) => teamNameOf(data, id))
+  const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
+
+  // Weight scales with damage. 7 ER stings; 10+ ER is a 5-alarm fire.
+  let weight = 58
+  if (p.earnedRuns >= 10) weight = 74
+  else if (p.earnedRuns >= 8) weight = 66
+
+  return {
+    type: 'pitcher-blowup',
     category: 'player',
     weight: isMyGuy ? weight + 12 : weight,
     freshness: freshnessForGameDate(n.gameDate),
@@ -342,21 +413,43 @@ function classifyPitcherNight(
       kind: 'pitcher',
       line: {
         inningsPitched: p.inningsPitched,
-        hits: p.hits,
-        runs: p.runs,
         earnedRuns: p.earnedRuns,
+        hits: p.hits,
         walks: p.walks,
         strikeouts: p.strikeouts,
         decision: p.decision,
-        completeGame: p.completeGame,
-        noHitter: p.noHitter,
-        perfectGame: p.perfectGame,
       },
-      headline: pitcherHeadline(n.name, p, isMyGuy),
+      headline: pitcherBlowupHeadline(n.name, p, isMyGuy),
       summaryLine: pitcherSummary(p),
     },
-    signature: signature(['player-night', n.mlbId, n.gameDate]),
+    signature: signature(['pitcher-blowup', n.mlbId, n.gameDate]),
   }
+}
+
+function streamerHeadline(name: string, p: PlayerNight['pitching'] & object): string {
+  if (p.perfectGame) return `Off the wire: ${name} threw a perfect game.`
+  if (p.noHitter) return `Off the wire: ${name} threw a no-hitter.`
+  if (p.strikeouts >= 12) return `Free agent gem: ${name} carved.`
+  if (p.completeGame) return `${name} is sitting on waivers. He went the distance.`
+  if (p.strikeouts >= 10) return `${name} is sitting on waivers. ${p.strikeouts} K.`
+  if (p.inningsPitched >= 7 && p.earnedRuns === 0) {
+    return `${name} is sitting on waivers. Shutout.`
+  }
+  return `${name} is available. Worth a look.`
+}
+
+function pitcherBlowupHeadline(
+  name: string,
+  p: PlayerNight['pitching'] & object,
+  isMyGuy: boolean,
+): string {
+  if (p.earnedRuns >= 10) {
+    return isMyGuy ? `${name} buried you.` : `${name} got buried.`
+  }
+  if (p.earnedRuns >= 8) {
+    return isMyGuy ? `${name} torched your ratios.` : `${name} got torched.`
+  }
+  return isMyGuy ? `${name} got shelled on you.` : `${name} got shelled.`
 }
 
 function pitcherHeadline(

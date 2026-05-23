@@ -224,6 +224,9 @@ const WIRE_STORY_TYPES: StoryType[] = [
   'rank-shift-down',
   // Bad beats — psychological hook, MY-team only
   'bench-bad-beat',
+  // Wire intel — actionable add / owned disaster
+  'streamer-of-day',
+  'pitcher-blowup',
 ]
 
 const issueDate = computed(() => props.issueDate ?? new Date())
@@ -288,7 +291,9 @@ function storyToCard(story: SelectedStory): WireCard {
     story.type === 'twelve-k-game' ||
     story.type === 'monster-night' ||
     story.type === 'il-placement' ||
-    story.type === 'il-return'
+    story.type === 'il-return' ||
+    story.type === 'streamer-of-day' ||
+    story.type === 'pitcher-blowup'
 
   // Overnight-delta stories — detector ships a custom headline +
   // summary tailored to whether the viewer's team is involved.
@@ -397,6 +402,8 @@ function eyebrowForStoryType(type: StoryType): string {
     case 'il-placement':         return 'INJURY WIRE'
     case 'il-return':            return 'BACK FROM IL'
     case 'bench-bad-beat':       return 'BAD BEAT'
+    case 'streamer-of-day':      return 'OFF THE WIRE'
+    case 'pitcher-blowup':       return 'BLOW-UP'
     default:                     return 'THE WIRE'
   }
 }
@@ -435,6 +442,8 @@ function headlineForStoryType(type: StoryType, teamName?: string): string {
     case 'twelve-k-game':        return 'Twelve strikeouts. The K race tightened.'
     case 'il-placement':         return 'Key player landed on the IL.'
     case 'il-return':            return 'Back from the IL just in time.'
+    case 'streamer-of-day':      return 'A free agent went off last night.'
+    case 'pitcher-blowup':       return 'A start went sideways.'
     default:                     return 'A new beat from your league.'
   }
 }
@@ -481,7 +490,9 @@ function toneForStoryType(type: StoryType): Tone {
     case 'streak-broken':
     case 'three-week-collapse':
     case 'il-placement':
+    case 'pitcher-blowup':
     case 'blowout':              return 'down'
+    case 'streamer-of-day':      return 'gold'
     case 'photo-finish':
     case 'razor-close':          return 'teal'
     case 'monster-night':

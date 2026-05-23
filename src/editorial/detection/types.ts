@@ -157,6 +157,10 @@ export type StoryType =
   /* H3. Bad beats (you sat the right guy) */
   | 'bench-bad-beat'        // a player you benched had a notable night
 
+  /* H4. Wire intel (actionable add, owned-disaster) */
+  | 'streamer-of-day'       // unowned pitcher gem from yesterday — go grab them
+  | 'pitcher-blowup'        // your pitcher got shelled yesterday — single-game pain
+
   /* I. Personalization (future) */
   | 'your-team-first-feature'
   | 'your-rivals-hot-streak'
