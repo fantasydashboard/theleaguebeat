@@ -48,6 +48,8 @@ import type {
   TransactionKind,
   TransactionMovement,
 } from '../transactions/types'
+import type { PlayerNight } from '../players/types'
+import { buildPlayerNights } from '../players/buildPlayerNights'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -277,6 +279,13 @@ export async function sleeperLeagueToCategoryData(
   //     at a time). Non-fatal on failure.
   const transactions = await buildSleeperTransactions(leagueId, currentWeek, league.sport)
 
+  // 19. Yesterday's player nights (baseball only). Sleeper's player
+  //     DB carries `mlb_id` mappings so we get high-fidelity
+  //     ownership matching by MLB ID. Non-fatal on failure.
+  const playerNights = league.sport === 'mlb'
+    ? await buildSleeperPlayerNights(rosters)
+    : undefined
+
   return {
     leagueId,
     leagueName: league.name || 'Sleeper League',
@@ -296,6 +305,46 @@ export async function sleeperLeagueToCategoryData(
     weeklyCatsWon,
     weeklyLeagueAverage,
     transactions,
+    playerNights,
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SLEEPER PLAYER NIGHTS (baseball only)
+
+   Sleeper's player DB exposes `mlb_id` for most MLB players, so we
+   can build a clean MLB-ID → rosterTeamIds index. The shared
+   buildPlayerNights helper then fetches yesterday's stats from
+   MLB Stats API and filters to notable performances.
+───────────────────────────────────────────────────────────────── */
+
+async function buildSleeperPlayerNights(
+  rosters: SleeperRoster[],
+): Promise<PlayerNight[]> {
+  try {
+    // Get the player DB (cached 24h). Sleeper's MLB player DB has
+    // `mlb_id` on each entry pointing back to MLB Stats API IDs.
+    const players = await sleeperService.getPlayersBySport('mlb').catch(() => null)
+    if (!players) return []
+
+    // Build mlbId → rosterTeamIds[].
+    const rosterByMlbId = new Map<number, string[]>()
+    for (const roster of rosters) {
+      const teamId = String(roster.roster_id)
+      for (const playerId of roster.players ?? []) {
+        const p = players[playerId] as any
+        const mlbId = p?.mlb_id ? Number(p.mlb_id) : null
+        if (!mlbId) continue
+        const existing = rosterByMlbId.get(mlbId)
+        if (existing) existing.push(teamId)
+        else rosterByMlbId.set(mlbId, [teamId])
+      }
+    }
+
+    return await buildPlayerNights({ rosterByMlbId, includeUnowned: true })
+  } catch (err) {
+    console.warn('[sleeperAdapter] player nights failed:', err)
+    return []
   }
 }
 

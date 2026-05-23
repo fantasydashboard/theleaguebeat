@@ -50,6 +50,8 @@ import type {
   WLT,
 } from '../types'
 import type { LeagueTransaction, TransactionKind, TransactionMovement } from '../transactions/types'
+import type { PlayerNight } from '../players/types'
+import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { teamColorHash } from './colorHash'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -395,6 +397,12 @@ export async function espnLeagueToCategoryData(
   //     skip and the rest of the page renders unchanged.
   const transactions = await buildTransactions(leagueId, season, league)
 
+  // 17. Yesterday's player nights — match rostered players by
+  //     normalized name against MLB Stats API box scores. ESPN
+  //     uses its own player IDs (not MLB IDs), so name matching
+  //     is our only path.
+  const playerNights = await buildEspnPlayerNights(league)
+
   // Division metadata — drives the new division-aware detection
   // layer (division-race-tight, division-clash, divisional-wild-card,
   // etc.). Returns undefined for single-table leagues; downstream
@@ -422,6 +430,38 @@ export async function espnLeagueToCategoryData(
     weeklyCatsWon,
     weeklyLeagueAverage,
     transactions,
+    playerNights,
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ESPN PLAYER NIGHTS — name-based matching
+
+   ESPN player IDs are platform-specific; they don't map to MLB
+   Stats API IDs. We build a normalized-name → teamId[] index from
+   each team's roster entries, then the shared buildPlayerNights
+   helper uses that for ownership matching.
+─────────────────────────────────────────────────────────────────*/
+
+async function buildEspnPlayerNights(league: EspnLeague): Promise<PlayerNight[]> {
+  try {
+    const rosterByName = new Map<string, string[]>()
+    for (const team of league.teams ?? []) {
+      const teamId = String(team.id)
+      const entries = (team.roster?.entries ?? []) as any[]
+      for (const e of entries) {
+        const fullName = e.playerPoolEntry?.player?.fullName
+        if (!fullName) continue
+        const key = normalizeName(fullName)
+        const existing = rosterByName.get(key)
+        if (existing) existing.push(teamId)
+        else rosterByName.set(key, [teamId])
+      }
+    }
+    return await buildPlayerNights({ rosterByName, includeUnowned: true })
+  } catch (err) {
+    console.warn('[espnAdapter] player nights failed:', err)
+    return []
   }
 }
 

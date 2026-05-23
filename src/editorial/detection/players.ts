@@ -1,0 +1,295 @@
+/**
+ * Player-night detectors — emit StoryCandidate per notable
+ * yesterday performance. Powers The Wire's daily player cards.
+ *
+ * Six detectors:
+ *   - three-hr-game   : hitter with 3+ HR
+ *   - twelve-k-game   : pitcher with 12+ K (start)
+ *   - monster-night   : multi-HR + 5+ RBI + 4+ R combos
+ *   - no-hitter / perfect-game (folded into monster-night)
+ *   - quality-start (folded — too common to surface alone)
+ *
+ * My-team-first ordering: weight is boosted when ANY of the
+ * viewing user's teams roster the player. Editorial signal:
+ * "your guy did X" beats "some guy did X."
+ */
+
+import type { CategoryLeagueData } from '../types'
+import type { IssueContext, StoryCandidate } from './types'
+import { ALL_ACTIVE_STAGES } from './types'
+import { signature } from './helpers'
+import type { PlayerNight } from '../players/types'
+
+/* ─────────────────────────────────────────────────────────────────
+   ENTRY POINT
+───────────────────────────────────────────────────────────────── */
+
+export function detectPlayerStories(
+  data: CategoryLeagueData,
+  _context: IssueContext,
+): StoryCandidate[] {
+  const nights = data.playerNights
+  if (!nights || nights.length === 0) return []
+
+  const out: StoryCandidate[] = []
+  const myTeamId = data.teams.find((t) => t.isMyTeam)?.id ?? null
+
+  for (const n of nights) {
+    if (n.hitting) {
+      const hitter = classifyHitterNight(n, data, myTeamId)
+      if (hitter) out.push(hitter)
+    }
+    if (n.pitching) {
+      const pitcher = classifyPitcherNight(n, data, myTeamId)
+      if (pitcher) out.push(pitcher)
+    }
+  }
+
+  return out
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   HITTER NIGHTS
+───────────────────────────────────────────────────────────────── */
+
+function classifyHitterNight(
+  n: PlayerNight,
+  data: CategoryLeagueData,
+  myTeamId: string | null,
+): StoryCandidate | null {
+  const h = n.hitting!
+
+  // Story type + base weight depend on the line.
+  let storyType: 'three-hr-game' | 'monster-night' | null = null
+  let weight = 60
+
+  if (h.homeRuns >= 3) {
+    storyType = 'three-hr-game'
+    weight = 96
+  } else if (h.homeRuns >= 2 && h.rbi >= 5) {
+    storyType = 'monster-night'
+    weight = 84
+  } else if (h.hits >= 5) {
+    storyType = 'monster-night'
+    weight = 80
+  } else if (h.homeRuns >= 2) {
+    storyType = 'monster-night'
+    weight = 72
+  } else if (h.hits >= 4 && (h.runs >= 3 || h.rbi >= 4)) {
+    storyType = 'monster-night'
+    weight = 68
+  } else if (h.stolenBases >= 3) {
+    storyType = 'monster-night'
+    weight = 66
+  } else if (h.doubles + h.triples + h.homeRuns >= 3) {
+    storyType = 'monster-night'
+    weight = 64
+  }
+
+  if (!storyType) return null
+
+  const teamIds = n.ownedByTeamIds
+  const teamNames = teamIds.map((id) => teamNameOf(data, id))
+  const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
+
+  return {
+    type: storyType,
+    category: 'player',
+    weight: isMyGuy ? weight + 12 : weight,
+    freshness: freshnessForGameDate(n.gameDate),
+    scope: teamIds.length === 1 ? 'team' : 'matchup',
+    teamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: n.mlbId,
+      playerName: n.name,
+      position: n.position,
+      mlbTeam: n.mlbTeam,
+      gameDate: n.gameDate,
+      ownedByTeamIds: teamIds,
+      ownedByTeamNames: teamNames,
+      isMyGuy,
+      kind: 'hitter',
+      line: {
+        atBats: h.atBats,
+        hits: h.hits,
+        runs: h.runs,
+        rbi: h.rbi,
+        homeRuns: h.homeRuns,
+        doubles: h.doubles,
+        triples: h.triples,
+        walks: h.walks,
+        strikeouts: h.strikeouts,
+        stolenBases: h.stolenBases,
+      },
+      headline: hitterHeadline(n.name, h, isMyGuy),
+      summaryLine: hitterSummary(h),
+    },
+    signature: signature(['player-night', n.mlbId, n.gameDate]),
+  }
+}
+
+function hitterHeadline(
+  name: string,
+  h: PlayerNight['hitting'] & object,
+  isMyGuy: boolean,
+): string {
+  if (h.homeRuns >= 3) return `${name} hit three.`
+  if (h.homeRuns >= 2) return `${name} went deep twice.`
+  if (h.hits >= 5) return `${name} had a five-hit night.`
+  if (h.stolenBases >= 3) return `${name} stole ${h.stolenBases} bags.`
+  return isMyGuy ? `${name} carried for you.` : `${name} went off.`
+}
+
+function hitterSummary(h: PlayerNight['hitting'] & object): string {
+  const parts: string[] = []
+  parts.push(`${h.hits}-for-${h.atBats}`)
+  if (h.homeRuns > 0) parts.push(`${h.homeRuns} HR`)
+  if (h.rbi > 0) parts.push(`${h.rbi} RBI`)
+  if (h.runs > 0) parts.push(`${h.runs} R`)
+  if (h.stolenBases > 0) parts.push(`${h.stolenBases} SB`)
+  return parts.join(', ')
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PITCHER NIGHTS
+───────────────────────────────────────────────────────────────── */
+
+function classifyPitcherNight(
+  n: PlayerNight,
+  data: CategoryLeagueData,
+  myTeamId: string | null,
+): StoryCandidate | null {
+  const p = n.pitching!
+
+  let storyType: 'twelve-k-game' | 'monster-night' | null = null
+  let weight = 60
+
+  if (p.perfectGame) {
+    storyType = 'monster-night'
+    weight = 100
+  } else if (p.noHitter) {
+    storyType = 'monster-night'
+    weight = 98
+  } else if (p.strikeouts >= 12) {
+    storyType = 'twelve-k-game'
+    weight = 88
+  } else if (p.completeGame) {
+    storyType = 'monster-night'
+    weight = 86
+  } else if (p.strikeouts >= 10) {
+    storyType = 'twelve-k-game'
+    weight = 78
+  } else if (p.inningsPitched >= 7 && p.earnedRuns === 0) {
+    storyType = 'monster-night'
+    weight = 72
+  } else if (p.earnedRuns >= 7) {
+    // Blow-up start — editorial bad-news angle. Lower weight, only
+    // surfaces when owned.
+    storyType = 'monster-night'
+    weight = 58
+  }
+
+  if (!storyType) return null
+
+  const teamIds = n.ownedByTeamIds
+  const teamNames = teamIds.map((id) => teamNameOf(data, id))
+  const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
+
+  return {
+    type: storyType,
+    category: 'player',
+    weight: isMyGuy ? weight + 12 : weight,
+    freshness: freshnessForGameDate(n.gameDate),
+    scope: teamIds.length === 1 ? 'team' : 'matchup',
+    teamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: n.mlbId,
+      playerName: n.name,
+      position: n.position,
+      mlbTeam: n.mlbTeam,
+      gameDate: n.gameDate,
+      ownedByTeamIds: teamIds,
+      ownedByTeamNames: teamNames,
+      isMyGuy,
+      kind: 'pitcher',
+      line: {
+        inningsPitched: p.inningsPitched,
+        hits: p.hits,
+        runs: p.runs,
+        earnedRuns: p.earnedRuns,
+        walks: p.walks,
+        strikeouts: p.strikeouts,
+        decision: p.decision,
+        completeGame: p.completeGame,
+        noHitter: p.noHitter,
+        perfectGame: p.perfectGame,
+      },
+      headline: pitcherHeadline(n.name, p, isMyGuy),
+      summaryLine: pitcherSummary(p),
+    },
+    signature: signature(['player-night', n.mlbId, n.gameDate]),
+  }
+}
+
+function pitcherHeadline(
+  name: string,
+  p: PlayerNight['pitching'] & object,
+  isMyGuy: boolean,
+): string {
+  if (p.perfectGame) return `${name} threw a perfect game.`
+  if (p.noHitter) return `${name} threw a no-hitter.`
+  if (p.strikeouts >= 15) return `${name} struck out ${p.strikeouts}.`
+  if (p.strikeouts >= 12) return `${name} carved them up.`
+  if (p.completeGame) return `${name} went the distance.`
+  if (p.earnedRuns >= 7) {
+    return isMyGuy ? `${name} got rocked on you.` : `${name} got rocked.`
+  }
+  if (p.inningsPitched >= 7 && p.earnedRuns === 0) return `${name} shut them down.`
+  return `${name} got a quality start.`
+}
+
+function pitcherSummary(p: PlayerNight['pitching'] & object): string {
+  const parts: string[] = []
+  parts.push(`${formatIp(p.inningsPitched)} IP`)
+  parts.push(`${p.strikeouts} K`)
+  parts.push(`${p.earnedRuns} ER`)
+  if (p.decision && p.decision !== 'ND') parts.push(p.decision)
+  return parts.join(', ')
+}
+
+function formatIp(ip: number): string {
+  const whole = Math.floor(ip)
+  const fractional = ip - whole
+  const outs = Math.round(fractional * 3)
+  return `${whole}.${outs}`
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────────────────────────── */
+
+/**
+ * Freshness: today = 1.0, yesterday-of-current-day = 0.9 (the most
+ * common case), two days = 0.6, then drops fast.
+ *
+ * Player nights age fast — yesterday's monster night is gold today
+ * and irrelevant by Friday. Faster decay than trades.
+ */
+function freshnessForGameDate(gameDate: string): number {
+  if (!gameDate) return 0.5
+  const game = new Date(gameDate + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const daysAgo = Math.round((today.getTime() - game.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysAgo <= 0) return 1.0
+  if (daysAgo === 1) return 0.95
+  if (daysAgo === 2) return 0.60
+  if (daysAgo === 3) return 0.35
+  return 0.15
+}
+
+function teamNameOf(data: CategoryLeagueData, teamId: string): string {
+  return data.teams.find((t) => t.id === teamId)?.name ?? `Team ${teamId}`
+}

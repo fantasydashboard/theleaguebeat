@@ -68,7 +68,32 @@
         <h3 class="wire-card-headline">{{ card.headline }}</h3>
         <p v-if="card.body" class="wire-card-body">{{ card.body }}</p>
 
-        <div v-if="card.teamId && teamLookup(card.teamId)" class="wire-card-team">
+        <!-- Player card variant — headshot + owner attribution.
+             Used for monster-night / three-hr-game / twelve-k-game
+             stories where the player IS the subject. -->
+        <div v-if="card.player" class="wire-card-player">
+          <img
+            :src="card.player.headshotUrl"
+            :alt="card.player.name"
+            class="wire-card-player-headshot"
+            loading="lazy"
+          />
+          <div class="wire-card-player-meta">
+            <p class="wire-card-player-name">{{ card.player.name }}</p>
+            <p class="wire-card-player-team">
+              <span v-if="card.player.mlbTeam">{{ card.player.mlbTeam }}</span>
+              <span v-if="card.player.position">{{ card.player.position }}</span>
+            </p>
+            <p v-if="card.player.ownedByTeamNames.length > 0" class="wire-card-player-owner">
+              <span v-if="card.player.isMyGuy" class="wire-card-player-yours">YOUR ROSTER</span>
+              <span v-else>Owned by {{ formatOwnersList(card.player.ownedByTeamNames) }}</span>
+            </p>
+            <p v-else class="wire-card-player-owner wire-card-player-owner-fa">Free agent</p>
+          </div>
+        </div>
+
+        <!-- Team card variant — used for non-player stories. -->
+        <div v-else-if="card.teamId && teamLookup(card.teamId)" class="wire-card-team">
           <div
             class="wire-card-team-avatar"
             :style="{ background: `linear-gradient(135deg, ${teamLookup(card.teamId)!.avatarColor})` }"
@@ -109,6 +134,7 @@ import type {
   SelectedStory,
   StoryType,
 } from '@/editorial/detection/types'
+import { playerHeadshotUrl, playerHeadshotFallback } from '@/utils/playerHeadshot'
 
 const props = defineProps<{
   /** Stories selected from the detection pipeline. The Wire pulls
@@ -140,6 +166,19 @@ interface WireCard {
   byline: string
   tone: Tone
   placeholder?: boolean
+  /** Player-card extras — populated for player-night stories so the
+   *  carousel can render a headshot + stat line + owner attribution
+   *  instead of the generic team-chip layout. */
+  player?: {
+    mlbId: number
+    name: string
+    position?: string
+    mlbTeam?: string
+    headshotUrl: string
+    summaryLine: string         // e.g. "3-for-5, 2 HR, 5 RBI"
+    ownedByTeamNames: string[]  // owner attribution
+    isMyGuy: boolean
+  }
 }
 
 /** Story types The Wire owns. These get pulled OUT of the regular
@@ -199,18 +238,83 @@ const wireStories = computed(() => {
   const wireTypes = new Set<StoryType>(WIRE_STORY_TYPES)
   return props.stories
     .filter((s) => wireTypes.has(s.type))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
+    .sort((a, b) => {
+      // My-team-first ordering: stories about MY roster outrank
+      // league-wide gossip of similar weight. Editorial signal:
+      // "your guy went off" beats "some guy went off."
+      const aMine = isMyStory(a)
+      const bMine = isMyStory(b)
+      if (aMine && !bMine) return -1
+      if (!aMine && bMine) return 1
+      // Within the same my-vs-not bucket, sort by score (weight × freshness).
+      return b.score - a.score
+    })
+    // No artificial cap — show all real cards. Carousel handles overflow.
 })
+
+/**
+ * "My story" = the viewer's team is involved. Covers two cases:
+ *  - story.teamIds includes my team (most stories)
+ *  - player-night story whose context.isMyGuy === true
+ */
+function isMyStory(story: SelectedStory): boolean {
+  const ctx = story.context as Record<string, unknown>
+  if (ctx?.isMyGuy === true) return true
+  const myTeamId = props.data?.teams.find((t) => t.isMyTeam)?.id
+  if (!myTeamId) return false
+  return (story.teamIds ?? []).includes(myTeamId)
+}
 
 function storyToCard(story: SelectedStory): WireCard {
   const tone = toneForStoryType(story.type)
   const team = story.teamIds?.[0]
   const teamName = team ? teamLookup(team)?.name : undefined
 
-  const eyebrow = eyebrowForStoryType(story.type)
-  const headline = headlineForStoryType(story.type, teamName)
-  const body = bodyForStoryType(story.type, teamName)
+  // Player-night context — populated by detection/players.ts. When
+  // present, we use the player headline + stat-line summary instead
+  // of the generic copy maps, and attach a `player` block for the
+  // template's headshot + owner-attribution rendering.
+  const ctx = story.context as Record<string, unknown>
+  const isPlayerStory =
+    story.type === 'three-hr-game' ||
+    story.type === 'twelve-k-game' ||
+    story.type === 'monster-night'
+
+  let eyebrow = eyebrowForStoryType(story.type)
+  let headline = headlineForStoryType(story.type, teamName)
+  let body: string | undefined = bodyForStoryType(story.type, teamName)
+  let player: WireCard['player'] | undefined
+
+  if (isPlayerStory && typeof ctx?.mlbId === 'number') {
+    // Override the generic copy with the rich player headline /
+    // summary computed by the detector.
+    if (typeof ctx.headline === 'string') headline = ctx.headline
+    if (typeof ctx.summaryLine === 'string') body = ctx.summaryLine
+    if (ctx.isMyGuy === true) {
+      // My-guy variant gets a louder eyebrow.
+      eyebrow = 'YOUR GUY'
+    }
+
+    const ownedByTeamNames = Array.isArray(ctx.ownedByTeamNames)
+      ? (ctx.ownedByTeamNames as string[])
+      : []
+
+    player = {
+      mlbId: ctx.mlbId as number,
+      name: (ctx.playerName as string) ?? 'Player',
+      position: ctx.position as string | undefined,
+      mlbTeam: ctx.mlbTeam as string | undefined,
+      headshotUrl:
+        playerHeadshotUrl({
+          platform: 'espn', // ESPN headshot CDN is the most reliable cross-sport
+          sport: 'mlb',
+          playerId: ctx.mlbId,
+        }) || playerHeadshotFallback('mlb'),
+      summaryLine: (ctx.summaryLine as string) ?? '',
+      ownedByTeamNames,
+      isMyGuy: ctx.isMyGuy === true,
+    }
+  }
 
   return {
     kind: story.type,
@@ -222,6 +326,7 @@ function storyToCard(story: SelectedStory): WireCard {
     byline: formatByline(story, issueDate.value),
     tone,
     placeholder: false,
+    player,
   }
 }
 
@@ -351,6 +456,19 @@ function toneForStoryType(type: StoryType): Tone {
 /* ─────────────────────────────────────────────────────────────────
    Bylines — magazine-y "FILED · 3H AGO" line.
 ───────────────────────────────────────────────────────────────── */
+
+/**
+ * Format a list of owner team names for the player-card attribution
+ * line. "Goof Juice" → "Goof Juice"; ["A", "B"] → "A and B"; 3+
+ * collapses to "A, B and 2 more."
+ */
+function formatOwnersList(names: string[]): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  const extra = names.length - 2
+  return `${names[0]}, ${names[1]} and ${extra} more`
+}
 
 function formatByline(story: SelectedStory, _now: Date): string {
   // One relative-time stamp ("3 HR AGO") — the section header
@@ -690,6 +808,74 @@ onMounted(() => onTrackScroll())
   font-weight: 700;
   font-size: 0.92rem;
   color: oklch(0.97 0.005 90);
+}
+
+/* Player-card variant — headshot + meta. Replaces the team-chip
+   row when the story is about a single player's performance. */
+.wire-card-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.wire-card-player-headshot {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: oklch(0.14 0.018 90);
+  flex-shrink: 0;
+  /* MLB headshot crops are head-and-shoulders against a transparent
+     PNG — the dark background fills the transparent area cleanly. */
+}
+.wire-card-player-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.wire-card-player-name {
+  margin: 0;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: 0.98rem;
+  color: oklch(0.97 0.005 90);
+  letter-spacing: -0.005em;
+}
+.wire-card-player-team {
+  margin: 0;
+  display: inline-flex;
+  gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+}
+.wire-card-player-owner {
+  margin: 2px 0 0;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 500;
+  font-size: 0.78rem;
+  color: oklch(0.65 0.010 90);
+}
+.wire-card-player-owner-fa {
+  color: oklch(0.45 0.010 90);
+  font-style: italic;
+}
+.wire-card-player-yours {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.70rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: oklch(0.78 0.18 92 / 0.18);
+  color: oklch(0.85 0.20 92);
 }
 
 .wire-card-soon {

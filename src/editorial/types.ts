@@ -244,6 +244,16 @@ export interface CategoryLeagueData {
    *  detectors are skipped (no error, just no Wire stories from
    *  trades). */
   transactions?: import('./transactions/types').LeagueTransaction[]
+
+  /** Yesterday's MLB player stat lines, filtered to rostered players
+   *  (or notable league-wide performances). Adapters populate via
+   *  the MLB Stats API; detectors in detection/players.ts consume
+   *  to emit 3-HR-game, 12-K-game, monster-night, etc.
+   *
+   *  Each entry carries `ownedByTeamIds` so detectors can flag
+   *  "MY guys" stories vs generic league-wide gossip. Optional —
+   *  player detectors no-op when missing. */
+  playerNights?: import('./players/types').PlayerNight[]
 }
 
 /* ─────────────────────────────────────────────────────────────────
