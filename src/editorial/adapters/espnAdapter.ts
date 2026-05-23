@@ -52,6 +52,7 @@ import type {
 import type { LeagueTransaction, TransactionKind, TransactionMovement } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
+import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -406,6 +407,8 @@ export async function espnLeagueToCategoryData(
   //     uses its own player IDs (not MLB IDs), so name matching
   //     is our only path.
   const playerNights = await buildEspnPlayerNights(league)
+  const injuryReports = await buildEspnInjuryReports(league)
+  const myBenchedPlayers = buildEspnMyBench(league, teamsOut)
 
   // Division metadata — drives the new division-aware detection
   // layer (division-race-tight, division-clash, divisional-wild-card,
@@ -437,6 +440,8 @@ export async function espnLeagueToCategoryData(
     weeklyLeagueAverage,
     transactions,
     playerNights,
+    injuryReports,
+    myBenchedPlayers,
   }
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
 
@@ -457,24 +462,69 @@ export async function espnLeagueToCategoryData(
 
 async function buildEspnPlayerNights(league: EspnLeague): Promise<PlayerNight[]> {
   try {
-    const rosterByName = new Map<string, string[]>()
-    for (const team of league.teams ?? []) {
-      const teamId = String(team.id)
-      const entries = (team.roster?.entries ?? []) as any[]
-      for (const e of entries) {
-        const fullName = e.playerPoolEntry?.player?.fullName
-        if (!fullName) continue
-        const key = normalizeName(fullName)
-        const existing = rosterByName.get(key)
-        if (existing) existing.push(teamId)
-        else rosterByName.set(key, [teamId])
-      }
-    }
+    const rosterByName = buildEspnRosterByName(league)
     return await buildPlayerNights({ rosterByName, includeUnowned: true })
   } catch (err) {
     console.warn('[espnAdapter] player nights failed:', err)
     return []
   }
+}
+
+async function buildEspnInjuryReports(league: EspnLeague): Promise<InjuryReport[]> {
+  try {
+    const rosterByName = buildEspnRosterByName(league)
+    return await buildInjuryReports({ rosterByName, includeUnowned: false })
+  } catch (err) {
+    console.warn('[espnAdapter] injury reports failed:', err)
+    return []
+  }
+}
+
+/**
+ * Build the viewer's bench-name set for bench-bad-beat detection.
+ * ESPN MLB lineup slots: 0-15 are positional (C, 1B, OF, SP, RP,
+ * UTIL, etc.), 16 = Bench, 17 = IL. Anything 16+ is "not in the
+ * lineup today" and counts as a bench candidate for the bad-beat
+ * detector.
+ */
+function buildEspnMyBench(
+  league: EspnLeague,
+  teamsOut: CategoryLeagueDataTeam[],
+): Set<string> | undefined {
+  const myTeam = teamsOut.find((t) => t.isMyTeam)
+  if (!myTeam) return undefined
+  const myEspnTeam = (league.teams ?? []).find((t) => String(t.id) === myTeam.id)
+  if (!myEspnTeam) return undefined
+
+  const BENCH_SLOTS = new Set([16, 17]) // 16 = BE, 17 = IL
+  const out = new Set<string>()
+  for (const e of (myEspnTeam.roster?.entries ?? []) as any[]) {
+    const slotId = e.lineupSlotId
+    if (slotId == null || !BENCH_SLOTS.has(Number(slotId))) continue
+    const fullName = e.playerPoolEntry?.player?.fullName
+    if (!fullName) continue
+    out.add(normalizeName(fullName))
+  }
+  return out
+}
+
+/** Shared roster-name index — same logic for player nights AND
+ *  injury reports. */
+function buildEspnRosterByName(league: EspnLeague): Map<string, string[]> {
+  const rosterByName = new Map<string, string[]>()
+  for (const team of league.teams ?? []) {
+    const teamId = String(team.id)
+    const entries = (team.roster?.entries ?? []) as any[]
+    for (const e of entries) {
+      const fullName = e.playerPoolEntry?.player?.fullName
+      if (!fullName) continue
+      const key = normalizeName(fullName)
+      const existing = rosterByName.get(key)
+      if (existing) existing.push(teamId)
+      else rosterByName.set(key, [teamId])
+    }
+  }
+  return rosterByName
 }
 
 /* ─────────────────────────────────────────────────────────────────

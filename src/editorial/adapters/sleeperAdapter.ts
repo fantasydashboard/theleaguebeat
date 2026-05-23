@@ -49,7 +49,8 @@ import type {
   TransactionMovement,
 } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
-import { buildPlayerNights } from '../players/buildPlayerNights'
+import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
+import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -291,6 +292,12 @@ export async function sleeperLeagueToCategoryData(
   const playerNights = league.sport === 'mlb'
     ? await buildSleeperPlayerNights(rosters)
     : undefined
+  const injuryReports = league.sport === 'mlb'
+    ? await buildSleeperInjuryReports(rosters)
+    : undefined
+  const myBenchedPlayers = league.sport === 'mlb'
+    ? await buildSleeperMyBench(rosters, teams)
+    : undefined
 
   // 20. Snapshot delta — fetch the most recent previous snapshot
   //     before today so the overnight-delta detectors can emit
@@ -316,6 +323,8 @@ export async function sleeperLeagueToCategoryData(
     weeklyLeagueAverage,
     transactions,
     playerNights,
+    injuryReports,
+    myBenchedPlayers,
   }
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
 
@@ -338,30 +347,81 @@ async function buildSleeperPlayerNights(
   rosters: SleeperRoster[],
 ): Promise<PlayerNight[]> {
   try {
-    // Get the player DB (cached 24h). Sleeper's MLB player DB has
-    // `mlb_id` on each entry pointing back to MLB Stats API IDs.
-    const players = await sleeperService.getPlayersBySport('mlb').catch(() => null)
-    if (!players) return []
-
-    // Build mlbId → rosterTeamIds[].
-    const rosterByMlbId = new Map<number, string[]>()
-    for (const roster of rosters) {
-      const teamId = String(roster.roster_id)
-      for (const playerId of roster.players ?? []) {
-        const p = players[playerId] as any
-        const mlbId = p?.mlb_id ? Number(p.mlb_id) : null
-        if (!mlbId) continue
-        const existing = rosterByMlbId.get(mlbId)
-        if (existing) existing.push(teamId)
-        else rosterByMlbId.set(mlbId, [teamId])
-      }
-    }
-
+    const rosterByMlbId = await buildSleeperRosterByMlbId(rosters)
+    if (!rosterByMlbId) return []
     return await buildPlayerNights({ rosterByMlbId, includeUnowned: true })
   } catch (err) {
     console.warn('[sleeperAdapter] player nights failed:', err)
     return []
   }
+}
+
+async function buildSleeperInjuryReports(
+  rosters: SleeperRoster[],
+): Promise<InjuryReport[]> {
+  try {
+    const rosterByMlbId = await buildSleeperRosterByMlbId(rosters)
+    if (!rosterByMlbId) return []
+    return await buildInjuryReports({ rosterByMlbId, includeUnowned: false })
+  } catch (err) {
+    console.warn('[sleeperAdapter] injury reports failed:', err)
+    return []
+  }
+}
+
+/**
+ * Build the viewer's bench-name set for bench-bad-beat detection.
+ * Identifies the viewer's roster via the team where isMyTeam=true,
+ * then everything in roster.players that's NOT in roster.starters
+ * is on the bench. Maps to normalized player names so the detector
+ * can match against MLB-Stats-API-derived player nights.
+ */
+async function buildSleeperMyBench(
+  rosters: SleeperRoster[],
+  teams: CategoryLeagueDataTeam[],
+): Promise<Set<string> | undefined> {
+  const myTeam = teams.find((t) => t.isMyTeam)
+  if (!myTeam) return undefined
+  const myRoster = rosters.find((r) => String(r.roster_id) === myTeam.id)
+  if (!myRoster) return undefined
+
+  const players = await sleeperService.getPlayersBySport('mlb').catch(() => null)
+  if (!players) return undefined
+
+  const starterSet = new Set(myRoster.starters ?? [])
+  const out = new Set<string>()
+  for (const playerId of myRoster.players ?? []) {
+    if (starterSet.has(playerId)) continue
+    const p = players[playerId] as any
+    const fullName =
+      p?.full_name ||
+      `${p?.first_name ?? ''} ${p?.last_name ?? ''}`.trim()
+    if (!fullName) continue
+    out.add(normalizeName(fullName))
+  }
+  return out
+}
+
+/** Shared MLB-ID roster index — built once from Sleeper's player
+ *  DB and reused for both player nights and injury reports. */
+async function buildSleeperRosterByMlbId(
+  rosters: SleeperRoster[],
+): Promise<Map<number, string[]> | null> {
+  const players = await sleeperService.getPlayersBySport('mlb').catch(() => null)
+  if (!players) return null
+  const rosterByMlbId = new Map<number, string[]>()
+  for (const roster of rosters) {
+    const teamId = String(roster.roster_id)
+    for (const playerId of roster.players ?? []) {
+      const p = players[playerId] as any
+      const mlbId = p?.mlb_id ? Number(p.mlb_id) : null
+      if (!mlbId) continue
+      const existing = rosterByMlbId.get(mlbId)
+      if (existing) existing.push(teamId)
+      else rosterByMlbId.set(mlbId, [teamId])
+    }
+  }
+  return rosterByMlbId
 }
 
 /* ─────────────────────────────────────────────────────────────────

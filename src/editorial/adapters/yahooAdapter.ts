@@ -51,6 +51,9 @@ import type {
   TransactionKind,
   TransactionMovement,
 } from '../transactions/types'
+import type { PlayerNight } from '../players/types'
+import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
+import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 
@@ -351,6 +354,28 @@ async function buildYahooLeagueData(
   // errors. Transaction detectors quietly no-op when missing.
   const transactions = await buildYahooTransactions(leagueKey, metadata.currentWeek)
 
+  // Player nights + injury reports — fetch every team's roster
+  // ONCE in parallel, then reuse the same name index for both
+  // detectors. Yahoo doesn't bundle rosters with the league fetch
+  // so this is an N+1 (one fetch per team). Acceptable for 10-12
+  // team leagues; one shared fetch keeps the cost honest.
+  const myTeamKey = teamList.find((t) => t.isMyTeam)?.id
+  const yahooRosterResult = await fetchYahooRostersOnce(
+    rawStandings,
+    myTeamKey,
+  ).catch(() => ({
+    rosterByName: new Map<string, string[]>(),
+    myBenchedPlayers: undefined as Set<string> | undefined,
+  }))
+  const yahooRosterByName = yahooRosterResult.rosterByName
+  const myBenchedPlayers = yahooRosterResult.myBenchedPlayers
+  const [playerNights, injuryReports] = await Promise.all([
+    buildPlayerNights({ rosterByName: yahooRosterByName, includeUnowned: true })
+      .catch(() => [] as PlayerNight[]),
+    buildInjuryReports({ rosterByName: yahooRosterByName, includeUnowned: false })
+      .catch(() => [] as InjuryReport[]),
+  ])
+
   const partialData: CategoryLeagueData = {
     leagueId: leagueKey,
     leagueName: deriveLeagueName(leagueSettingsRaw, leagueKey),
@@ -371,6 +396,9 @@ async function buildYahooLeagueData(
     weeklyCatsWon,
     weeklyLeagueAverage,
     transactions,
+    playerNights,
+    injuryReports,
+    myBenchedPlayers,
   }
   // Snapshot delta — overnight cat-tips, matchup pulse, rank shifts.
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
@@ -1267,6 +1295,78 @@ async function buildDraft(
     totalPicks: picks.length,
     picks,
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   YAHOO PLAYER NIGHTS + INJURY REPORTS
+
+   Yahoo doesn't bundle rosters with the league fetch — we have to
+   pull each team's roster individually. N+1 endpoint hits per
+   league refresh, but parallelized via Promise.all so the wall
+   time is ~one roster-fetch RTT (~500ms) for 10-12 team leagues.
+
+   Names come from Yahoo's player records via the roster fetch;
+   we don't have Yahoo→MLB id mapping built so we fall back to
+   normalized-name matching against MLB Stats API output.
+───────────────────────────────────────────────────────────────── */
+
+/**
+ * Single pass over every team's roster — returns the name index
+ * (for player-night ownership matching) AND the viewer's bench set
+ * (for bench-bad-beat detection) in one parallel fetch. Avoids
+ * hitting Yahoo's roster endpoint N times for each downstream
+ * consumer.
+ */
+async function fetchYahooRostersOnce(
+  rawStandings: any[],
+  myTeamKey: string | undefined,
+): Promise<{
+  rosterByName: Map<string, string[]>
+  myBenchedPlayers: Set<string> | undefined
+}> {
+  const teamKeys: string[] = rawStandings
+    .map((s: any) => s.team_key)
+    .filter((k: any): k is string => typeof k === 'string')
+
+  // Fetch every team's roster in parallel. Tolerate per-team failures
+  // (one bad fetch shouldn't kill the whole index).
+  const rosters = await Promise.all(
+    teamKeys.map((teamKey) =>
+      yahooService.getRoster(teamKey)
+        .then((players) => ({ teamKey, players }))
+        .catch(() => ({ teamKey, players: [] })),
+    ),
+  )
+
+  const rosterByName = new Map<string, string[]>()
+  let myBenchedPlayers: Set<string> | undefined = myTeamKey ? new Set() : undefined
+
+  // Yahoo bench slot codes: "BN" = bench, "IL" = injured list, "NA" =
+  // not-active minors slot. Everything else is a positional starter.
+  const BENCH_CODES = new Set(['BN', 'IL', 'NA'])
+
+  for (const { teamKey, players } of rosters) {
+    const isMyTeam = teamKey === myTeamKey
+    for (const p of players) {
+      const name = p.name?.full
+      if (!name) continue
+      const key = normalizeName(name)
+      const existing = rosterByName.get(key)
+      if (existing) existing.push(teamKey)
+      else rosterByName.set(key, [teamKey])
+
+      if (isMyTeam && myBenchedPlayers && p.selected_position && BENCH_CODES.has(p.selected_position)) {
+        myBenchedPlayers.add(key)
+      }
+    }
+  }
+
+  // If the viewer's team key wasn't in any roster (orphan), return undefined.
+  if (myBenchedPlayers && myBenchedPlayers.size === 0) {
+    myBenchedPlayers = undefined
+  }
+
+  return { rosterByName, myBenchedPlayers }
 }
 
 /* ─────────────────────────────────────────────────────────────────

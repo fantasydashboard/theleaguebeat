@@ -264,6 +264,22 @@ export interface CategoryLeagueData {
    *  Optional — null when no prior snapshot exists (first visit
    *  ever to this league) or when supabase isn't reachable. */
   snapshotDelta?: import('./snapshots/types').SnapshotDelta | null
+
+  /** Yesterday's IL placements + returns for rostered players. Fed
+   *  by the MLB Stats API transactions endpoint; detector in
+   *  detection/players.ts emits il-placement / il-return Wire
+   *  cards. Optional. */
+  injuryReports?: import('./players/injuries').InjuryReport[]
+
+  /** Normalized player names on the viewer's bench (or IL slot)
+   *  today. Used as a proxy for "who you sat yesterday" to detect
+   *  bench-bad-beat stories — when a benched player had a notable
+   *  night, that's the editorial story.
+   *
+   *  Limitation: today's lineup ≠ yesterday's lineup if the user
+   *  moved players. Acceptable heuristic; most users don't shuffle
+   *  daily lineups across days. */
+  myBenchedPlayers?: Set<string>
 }
 
 /* ─────────────────────────────────────────────────────────────────

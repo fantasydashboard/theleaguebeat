@@ -222,6 +222,8 @@ const WIRE_STORY_TYPES: StoryType[] = [
   'matchup-pulse-down',
   'rank-shift-up',
   'rank-shift-down',
+  // Bad beats — psychological hook, MY-team only
+  'bench-bad-beat',
 ]
 
 const issueDate = computed(() => props.issueDate ?? new Date())
@@ -284,7 +286,9 @@ function storyToCard(story: SelectedStory): WireCard {
   const isPlayerStory =
     story.type === 'three-hr-game' ||
     story.type === 'twelve-k-game' ||
-    story.type === 'monster-night'
+    story.type === 'monster-night' ||
+    story.type === 'il-placement' ||
+    story.type === 'il-return'
 
   // Overnight-delta stories — detector ships a custom headline +
   // summary tailored to whether the viewer's team is involved.
@@ -390,8 +394,9 @@ function eyebrowForStoryType(type: StoryType): string {
     case 'monster-night':        return 'MONSTER NIGHT'
     case 'three-hr-game':        return '3-HR GAME'
     case 'twelve-k-game':        return '12-K GAME'
-    case 'il-placement':         return 'TO THE IL'
+    case 'il-placement':         return 'INJURY WIRE'
     case 'il-return':            return 'BACK FROM IL'
+    case 'bench-bad-beat':       return 'BAD BEAT'
     default:                     return 'THE WIRE'
   }
 }

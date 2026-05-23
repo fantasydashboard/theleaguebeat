@@ -158,6 +158,11 @@ interface YahooPlayer {
   team_abbr: string
   position: string
   status: string
+  /** Lineup slot the player is in TODAY: "BN" = bench, "IL" = IL,
+   *  positional codes ("C", "1B", "OF", "P", "Util", etc.) for
+   *  starters. Optional — only populated by the roster fetch path
+   *  that parses the `selected_position` nested block. */
+  selected_position?: string
 }
 
 interface YahooMatchup {
@@ -548,8 +553,22 @@ export class YahooFantasyService {
 
     for (const playerWrapper of Object.values(rosterData) as any[]) {
       if (typeof playerWrapper !== 'object' || !playerWrapper.player) continue
-      
+
       const playerInfo = playerWrapper.player[0]
+      // selected_position lives in the SECOND element of the player
+      // array as { selected_position: [{coverage_type, coverage_value}, {position}, ...] }
+      // — Yahoo's API is awful here. Find the {position: 'XX'} entry.
+      const selectedBlock = playerWrapper.player[1]?.selected_position
+      let selectedPosition: string | undefined
+      if (Array.isArray(selectedBlock)) {
+        for (const entry of selectedBlock) {
+          if (entry && typeof entry === 'object' && typeof entry.position === 'string') {
+            selectedPosition = entry.position
+            break
+          }
+        }
+      }
+
       players.push({
         player_key: playerInfo[0]?.player_key,
         player_id: playerInfo[1]?.player_id,
@@ -560,7 +579,8 @@ export class YahooFantasyService {
         },
         team_abbr: playerInfo[6]?.editorial_team_abbr,
         position: playerInfo[9]?.display_position,
-        status: playerInfo[10]?.status || ''
+        status: playerInfo[10]?.status || '',
+        selected_position: selectedPosition,
       })
     }
 

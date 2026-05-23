@@ -19,6 +19,8 @@ import type { IssueContext, StoryCandidate } from './types'
 import { ALL_ACTIVE_STAGES } from './types'
 import { signature } from './helpers'
 import type { PlayerNight } from '../players/types'
+import type { InjuryReport } from '../players/injuries'
+import { normalizeName } from '../players/buildPlayerNights'
 
 /* ─────────────────────────────────────────────────────────────────
    ENTRY POINT
@@ -34,6 +36,8 @@ export function detectPlayerStories(
   const out: StoryCandidate[] = []
   const myTeamId = data.teams.find((t) => t.isMyTeam)?.id ?? null
 
+  const myBench = data.myBenchedPlayers
+
   for (const n of nights) {
     if (n.hitting) {
       const hitter = classifyHitterNight(n, data, myTeamId)
@@ -43,9 +47,131 @@ export function detectPlayerStories(
       const pitcher = classifyPitcherNight(n, data, myTeamId)
       if (pitcher) out.push(pitcher)
     }
+    // Bench bad-beat: an owned player on YOUR bench had a notable
+    // night. Only fires when the player passed the "notable" filter
+    // upstream AND is on the viewer's roster but benched today.
+    if (
+      myTeamId &&
+      myBench &&
+      n.ownedByTeamIds.includes(myTeamId) &&
+      myBench.has(normalizeName(n.name))
+    ) {
+      const badBeat = buildBenchBadBeat(n, data)
+      if (badBeat) out.push(badBeat)
+    }
+  }
+
+  // Injury reports — IL placements and returns for rostered players.
+  for (const r of data.injuryReports ?? []) {
+    const card = classifyInjuryReport(r, data, myTeamId)
+    if (card) out.push(card)
   }
 
   return out
+}
+
+function classifyInjuryReport(
+  r: InjuryReport,
+  data: CategoryLeagueData,
+  myTeamId: string | null,
+): StoryCandidate | null {
+  if (r.ownedByTeamIds.length === 0) return null
+
+  const teamIds = r.ownedByTeamIds
+  const teamNames = teamIds.map((id) => teamNameOf(data, id))
+  const isMyGuy = myTeamId != null && teamIds.includes(myTeamId)
+  const isReturn = r.kind === 'return'
+
+  return {
+    type: isReturn ? 'il-return' : 'il-placement',
+    category: 'player',
+    // Placements weigh more than returns — bad news travels faster
+    // and demands faster roster response. My-guy +12 as elsewhere.
+    weight: (isReturn ? 64 : 72) + (isMyGuy ? 12 : 0),
+    freshness: freshnessForGameDate(r.date),
+    scope: teamIds.length === 1 ? 'team' : 'matchup',
+    teamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: r.mlbId,
+      playerName: r.playerName,
+      gameDate: r.date,
+      ownedByTeamIds: teamIds,
+      ownedByTeamNames: teamNames,
+      isMyGuy,
+      kind: isReturn ? 'il-return' : 'il-placement',
+      headline: injuryHeadline(r.playerName, isReturn, isMyGuy),
+      summaryLine: r.description,
+    },
+    signature: signature([isReturn ? 'il-return' : 'il-placement', r.mlbId, r.date]),
+  }
+}
+
+function injuryHeadline(name: string, isReturn: boolean, isMyGuy: boolean): string {
+  if (isReturn) {
+    return isMyGuy ? `${name} is back for you.` : `${name} is back.`
+  }
+  return isMyGuy ? `${name} hit the IL on you.` : `${name} hit the IL.`
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   BENCH BAD-BEAT — you sat the right guy
+───────────────────────────────────────────────────────────────── */
+
+function buildBenchBadBeat(
+  n: PlayerNight,
+  data: CategoryLeagueData,
+): StoryCandidate | null {
+  // Compute the "regret weight" — bigger lines = sharper sting.
+  let regretWeight = 60
+  let summary = ''
+  if (n.hitting) {
+    const h = n.hitting
+    if (h.homeRuns >= 3) { regretWeight = 96; summary = `${h.hits}-for-${h.atBats}, ${h.homeRuns} HR.` }
+    else if (h.homeRuns >= 2) { regretWeight = 82; summary = `${h.hits}-for-${h.atBats}, ${h.homeRuns} HR, ${h.rbi} RBI.` }
+    else if (h.hits >= 4) { regretWeight = 76; summary = `${h.hits}-for-${h.atBats}, ${h.rbi} RBI.` }
+    else if (h.stolenBases >= 3) { regretWeight = 74; summary = `${h.stolenBases} SB.` }
+    else { regretWeight = 68; summary = `${h.hits}-for-${h.atBats}, ${h.homeRuns} HR, ${h.rbi} RBI.` }
+  } else if (n.pitching) {
+    const p = n.pitching
+    if (p.noHitter || p.perfectGame) { regretWeight = 98; summary = `${formatIp(p.inningsPitched)} IP, ${p.strikeouts} K. No-hitter.` }
+    else if (p.completeGame) { regretWeight = 88; summary = `Complete game, ${p.strikeouts} K.` }
+    else if (p.strikeouts >= 12) { regretWeight = 84; summary = `${formatIp(p.inningsPitched)} IP, ${p.strikeouts} K.` }
+    else { regretWeight = 70; summary = `${formatIp(p.inningsPitched)} IP, ${p.strikeouts} K, ${p.earnedRuns} ER.` }
+  } else {
+    return null
+  }
+
+  return {
+    type: 'bench-bad-beat',
+    category: 'player',
+    // Bad-beat stories are personal — always boost above generic
+    // player-night gossip. Weight is regretWeight + 8 so a benched
+    // 3-HR night reads as more important than a started 3-HR night.
+    weight: regretWeight + 8,
+    freshness: freshnessForGameDate(n.gameDate),
+    scope: 'team',
+    teamIds: n.ownedByTeamIds,
+    seasonStages: ALL_ACTIVE_STAGES,
+    context: {
+      mlbId: n.mlbId,
+      playerName: n.name,
+      position: n.position,
+      mlbTeam: n.mlbTeam,
+      gameDate: n.gameDate,
+      ownedByTeamIds: n.ownedByTeamIds,
+      ownedByTeamNames: n.ownedByTeamIds.map((id) => teamNameOf(data, id)),
+      isMyGuy: true,
+      kind: n.hitting ? 'hitter' : 'pitcher',
+      headline: benchBadBeatHeadline(n.name),
+      summaryLine: summary,
+    },
+    signature: signature(['bench-bad-beat', n.mlbId, n.gameDate]),
+  }
+}
+
+function benchBadBeatHeadline(name: string): string {
+  return `You benched ${name}. He went off.`
 }
 
 /* ─────────────────────────────────────────────────────────────────

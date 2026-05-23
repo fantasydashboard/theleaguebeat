@@ -154,6 +154,9 @@ export type StoryType =
   | 'rank-shift-up'         // a team climbed ≥2 ranks overnight
   | 'rank-shift-down'       // a team fell ≥2 ranks overnight
 
+  /* H3. Bad beats (you sat the right guy) */
+  | 'bench-bad-beat'        // a player you benched had a notable night
+
   /* I. Personalization (future) */
   | 'your-team-first-feature'
   | 'your-rivals-hot-streak'

@@ -127,6 +127,71 @@ export async function getDayStats(date: string): Promise<MlbDayStats> {
 }
 
 /**
+ * Real-life MLB transaction (IL placement, callup, DFA, etc.). One
+ * entry per transaction; players may have multiple per day.
+ */
+export interface MlbTransaction {
+  id: number
+  mlbId: number              // player ID
+  playerName: string
+  date: string               // YYYY-MM-DD
+  /** MLB's typeCode — "SC" = status change (IL moves), "TR" = trade,
+   *  "DFA" = designated for assignment, "SE" = sent to minors, etc. */
+  typeCode: string
+  /** Human description (e.g., "OF Mike Trout placed on the 10-day
+   *  injured list, retroactive to May 19"). We parse this for the
+   *  story type — IL placement, IL return, etc. */
+  description: string
+  /** True when this is an IL placement (10-day or 60-day). */
+  isIlPlacement: boolean
+  /** True when this is an IL activation / return. */
+  isIlReturn: boolean
+}
+
+/**
+ * Fetch all MLB transactions for a date range. Used by the injury
+ * detector to surface IL placements + returns in The Wire.
+ */
+export async function getDayTransactions(date: string): Promise<MlbTransaction[]> {
+  try {
+    const url =
+      `${BASE_URL}/transactions` +
+      `?startDate=${encodeURIComponent(date)}` +
+      `&endDate=${encodeURIComponent(date)}` +
+      `&sportId=1`
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error(`MLB Stats API ${resp.status}`)
+    const data = await resp.json()
+    const raw = (data?.transactions ?? []) as any[]
+    return raw.map(parseTransaction).filter((t): t is MlbTransaction => t !== null)
+  } catch (err) {
+    console.warn('[mlbStats] getDayTransactions failed:', err)
+    return []
+  }
+}
+
+function parseTransaction(t: any): MlbTransaction | null {
+  const personId = t?.person?.id
+  if (typeof personId !== 'number') return null
+  const description = String(t.description ?? '').trim()
+  const desc = description.toLowerCase()
+  const isIlPlacement =
+    /placed on the .*injured list/.test(desc) ||
+    /transferred to the 60-day injured list/.test(desc)
+  const isIlReturn = /reinstated from the .*injured list/.test(desc)
+  return {
+    id: Number(t.id ?? 0),
+    mlbId: personId,
+    playerName: t.person?.fullName ?? `Player ${personId}`,
+    date: t.date ?? '',
+    typeCode: String(t.typeCode ?? ''),
+    description,
+    isIlPlacement,
+    isIlReturn,
+  }
+}
+
+/**
  * "Yesterday" in US/Eastern (where MLB games conclude). Returns
  * YYYY-MM-DD. Useful default for the wire — the most recent
  * complete day of games.
