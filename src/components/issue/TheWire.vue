@@ -304,6 +304,14 @@ function storyToCard(story: SelectedStory): WireCard {
     story.type === 'rank-shift-up' ||
     story.type === 'rank-shift-down'
 
+  // Transaction stories — detector ships a name-rich headline +
+  // body that beats the generic "team pulled the trigger" fallback.
+  const isTransactionStory =
+    story.type === 'blockbuster-trade' ||
+    story.type === 'lopsided-trade' ||
+    story.type === 'faab-blowout' ||
+    story.type === 'waiver-winner'
+
   let eyebrow = eyebrowForStoryType(story.type)
   let headline = headlineForStoryType(story.type, teamName)
   let body: string | undefined = bodyForStoryType(story.type, teamName)
@@ -315,6 +323,13 @@ function storyToCard(story: SelectedStory): WireCard {
     // ("Goof Juice climbed") framing.
     if (typeof ctx.headline === 'string') headline = ctx.headline
     if (typeof ctx.summary === 'string') body = ctx.summary as string
+  }
+
+  if (isTransactionStory) {
+    // Same pattern as overnight — detector knows the players involved
+    // and writes a name-rich headline that the copy map can't.
+    if (typeof ctx.headline === 'string') headline = ctx.headline
+    if (typeof ctx.summaryLine === 'string') body = ctx.summaryLine as string
   }
 
   if (isPlayerStory && typeof ctx?.mlbId === 'number') {
@@ -450,29 +465,30 @@ function headlineForStoryType(type: StoryType, teamName?: string): string {
 
 function bodyForStoryType(type: StoryType, _teamName?: string): string | undefined {
   switch (type) {
-    case 'cat-sweep':            return 'All decided cats, one direction. Cleanest result of the night.'
-    case 'cat-shutout':          return 'Bad night, every cat. Better luck tomorrow.'
-    case 'photo-finish':
-    case 'razor-close':          return 'Decided by one cat. The kind of margin that defines a week.'
-    case 'comeback-win':         return 'Came back from down 7+ cats. The week looked different at noon.'
-    case 'blowout':              return 'A lopsided board on every front. Nothing close.'
-    case 'streak-built':         return 'Three straight wins. The conversation just changed.'
-    case 'streak-broken':        return 'The run ends. Time to see what comes next.'
-    case 'hot-climber':          return 'Big move up the table. The middle is shuffling.'
-    case 'monday-recap':         return 'The full slate is in the books. Read every result.'
-    case 'midweek-trade-talk':   return 'The week is half over. Watch for the desperate offers.'
-    case 'friday-preview':       return 'Whatever is decided this weekend probably decides the week.'
-    case 'sunday-final-push':    return 'Save situations and cat-leads still up for grabs.'
-    case 'off-day-deep-dive':    return 'A quiet day on the board. A good day to read the matchup.'
-    case 'blockbuster-trade':    return 'Multi-player swap reshapes both rosters. The standings notice.'
-    case 'lopsided-trade':       return 'Trade processed. Both sides bet on a future state.'
-    case 'faab-blowout':         return 'Outbid the rest of the league. The waiver pool just got thinner.'
-    case 'waiver-winner':        return 'Top of the waiver order, used wisely. A roster move with stakes.'
-    case 'matchup-tipped':       return 'The cats moved enough to flip which side leads.'
-    case 'matchup-pulse-up':     return 'You gained ground without flipping the lead.'
-    case 'matchup-pulse-down':   return 'You lost ground without losing the lead yet.'
-    case 'rank-shift-up':        return 'A real climb in the standings since yesterday.'
-    case 'rank-shift-down':      return 'A real drop in the standings since yesterday.'
+    case 'cat-sweep':            return 'Every decided cat fell one way. A clean board.'
+    case 'cat-shutout':          return 'A zero across the board. The kind of week you bury fast.'
+    case 'photo-finish':         return 'One cat decided it. The thinnest margin on the docket.'
+    case 'razor-close':          return 'Down to the final cat. A coin-flip week.'
+    case 'comeback-win':         return 'Down seven cats by Friday. Closed it on Sunday.'
+    case 'blowout':              return 'A double-digit cat gap. Not a contest, a coronation.'
+    case 'streak-built':         return 'Three straight wins. The room is paying attention.'
+    case 'streak-broken':        return 'The run ends. What was inevitable now feels mortal.'
+    case 'hot-climber':          return 'A real move up the table. The middle is reshuffling.'
+    case 'comeback-team':        return 'Out of the basement, back into the conversation.'
+    case 'monday-recap':         return 'The slate is in. Here is the read.'
+    case 'midweek-trade-talk':   return 'Half the week is gone. The desperate offers are coming.'
+    case 'friday-preview':       return 'Whatever happens this weekend likely decides it.'
+    case 'sunday-final-push':    return 'Save chances and cat leads still on the table.'
+    case 'off-day-deep-dive':    return 'No box scores today. A good day to read the standings.'
+    case 'blockbuster-trade':    return 'Multi-player swap. Rosters reshape, the standings notice.'
+    case 'lopsided-trade':       return 'A trade clears. Both sides took the bet.'
+    case 'faab-blowout':         return 'Outbid the room. The wire just thinned.'
+    case 'waiver-winner':        return 'A top-priority claim, spent with intent.'
+    case 'matchup-tipped':       return 'Enough cats moved overnight to flip the lead.'
+    case 'matchup-pulse-up':     return 'You gained without flipping the lead.'
+    case 'matchup-pulse-down':   return 'You lost ground without losing the lead. Yet.'
+    case 'rank-shift-up':        return 'A real climb since yesterday. Not noise.'
+    case 'rank-shift-down':      return 'A real drop since yesterday. Not noise.'
     default:                     return undefined
   }
 }

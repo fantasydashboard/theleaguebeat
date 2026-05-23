@@ -87,6 +87,11 @@ function buildBlockbusterTrade(
   const partyCount = teams.length
   const playerCount = tx.movements.length
   const teamNames = teams.map((id) => teamNameOf(data, id))
+  const acquiredByTeam = teams.map((id) => ({
+    teamId: id,
+    teamName: teamNameOf(data, id),
+    players: playersAcquiredBy(tx, id).map(formatMovementPlayer),
+  }))
 
   return {
     type: 'blockbuster-trade',
@@ -102,11 +107,7 @@ function buildBlockbusterTrade(
       playerCount,
       partyCount,
       teamNames,
-      acquiredByTeam: teams.map((id) => ({
-        teamId: id,
-        teamName: teamNameOf(data, id),
-        players: playersAcquiredBy(tx, id).map(formatMovementPlayer),
-      })),
+      acquiredByTeam,
       sentByTeam: teams.map((id) => ({
         teamId: id,
         teamName: teamNameOf(data, id),
@@ -114,6 +115,8 @@ function buildBlockbusterTrade(
       })),
       week: tx.week,
       timestamp: tx.timestamp,
+      headline: blockbusterHeadline(partyCount, playerCount, teamNames),
+      summaryLine: tradeBodyLine(acquiredByTeam),
     },
     signature: signature(['blockbuster-trade', tx.id]),
   }
@@ -127,6 +130,11 @@ function buildStandardTrade(
   const teams = acquiringTeams(tx)
   const teamNames = teams.map((id) => teamNameOf(data, id))
   const playerCount = tx.movements.length
+  const acquiredByTeam = teams.map((id) => ({
+    teamId: id,
+    teamName: teamNameOf(data, id),
+    players: playersAcquiredBy(tx, id).map(formatMovementPlayer),
+  }))
 
   return {
     type: 'lopsided-trade',
@@ -141,11 +149,7 @@ function buildStandardTrade(
       teamIds: teams,
       teamNames,
       playerCount,
-      acquiredByTeam: teams.map((id) => ({
-        teamId: id,
-        teamName: teamNameOf(data, id),
-        players: playersAcquiredBy(tx, id).map(formatMovementPlayer),
-      })),
+      acquiredByTeam,
       sentByTeam: teams.map((id) => ({
         teamId: id,
         teamName: teamNameOf(data, id),
@@ -153,6 +157,8 @@ function buildStandardTrade(
       })),
       week: tx.week,
       timestamp: tx.timestamp,
+      headline: standardTradeHeadline(acquiredByTeam),
+      summaryLine: tradeBodyLine(acquiredByTeam),
     },
     signature: signature(['standard-trade', tx.id]),
   }
@@ -185,6 +191,8 @@ function buildFaabBlowout(
       faabBid: bid,
       week: tx.week,
       timestamp: tx.timestamp,
+      headline: faabHeadline(teamName, player?.playerName, bid),
+      summaryLine: faabBodyLine(bid, player?.position),
     },
     signature: signature(['faab-blowout', tx.id]),
   }
@@ -217,6 +225,8 @@ function buildWaiverWinner(
       waiverPriority: pri,
       week: tx.week,
       timestamp: tx.timestamp,
+      headline: waiverHeadline(teamName, player?.playerName, pri),
+      summaryLine: waiverBodyLine(pri, player?.position),
     },
     signature: signature(['waiver-winner', tx.id]),
   }
@@ -308,4 +318,107 @@ function formatMovementPlayer(m: TransactionMovement): {
     playerName: m.playerName,
     position: m.position,
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   COPY — magazine voice for the Wire
+───────────────────────────────────────────────────────────────── */
+
+type AcquiredSide = {
+  teamId: string
+  teamName: string
+  players: { playerId: string; playerName: string; position?: string }[]
+}
+
+/** "A and B" / "A, B and C" / "A, B, C and 2 more." */
+function joinNames(names: string[], cap = 3): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  if (names.length <= cap) {
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  }
+  const shown = names.slice(0, cap)
+  const rest = names.length - cap
+  return `${shown.join(', ')} and ${rest} more`
+}
+
+function blockbusterHeadline(
+  partyCount: number,
+  playerCount: number,
+  teamNames: string[],
+): string {
+  if (partyCount >= 3) {
+    return `${joinNames(teamNames)} pulled off a three-way swap.`
+  }
+  const [a, b] = teamNames
+  if (a && b) return `${a} and ${b} swapped ${playerCount} pieces.`
+  return `A blockbuster cleared.`
+}
+
+function standardTradeHeadline(acquired: AcquiredSide[]): string {
+  if (acquired.length === 2) {
+    const [a, b] = acquired
+    const aGot = a.players[0]?.playerName
+    const bGot = b.players[0]?.playerName
+    if (aGot && bGot) {
+      return `${a.teamName} got ${aGot}. ${b.teamName} got ${bGot}.`
+    }
+  }
+  const teamNames = acquired.map((s) => s.teamName)
+  return `${joinNames(teamNames)} swung a deal.`
+}
+
+/**
+ * Per-side detail line: who got what. Used as the card body for
+ * both blockbuster and standard trades.
+ *
+ *   "Goof Juice gets Acuña, Strider. Sandlot gets Yelich, Castillo."
+ */
+function tradeBodyLine(acquired: AcquiredSide[]): string {
+  return acquired
+    .filter((s) => s.players.length > 0)
+    .map((s) => {
+      const names = joinNames(s.players.map((p) => p.playerName), 3)
+      return `${s.teamName} gets ${names}`
+    })
+    .join('. ') + '.'
+}
+
+function faabHeadline(teamName: string, playerName: string | undefined, bid: number): string {
+  if (playerName) {
+    return `${teamName} paid $${bid} for ${playerName}.`
+  }
+  return `${teamName} dropped $${bid} on the wire.`
+}
+
+function faabBodyLine(bid: number, position?: string): string {
+  const pos = position ? `${position} pickup. ` : ''
+  if (bid >= 50) return `${pos}Half the budget gone in a single move.`
+  if (bid >= 30) return `${pos}Aggressive bid. Someone wanted this badly.`
+  return `${pos}Outbid the room. The wire just thinned out.`
+}
+
+function waiverHeadline(
+  teamName: string,
+  playerName: string | undefined,
+  priority: number,
+): string {
+  if (playerName) {
+    return `${teamName} burned ${ordinal(priority)} waiver on ${playerName}.`
+  }
+  return `${teamName} spent ${ordinal(priority)} priority.`
+}
+
+function waiverBodyLine(priority: number, position?: string): string {
+  const pos = position ? `${position} addition. ` : ''
+  if (priority === 1) return `${pos}Top of the order. They wanted it most.`
+  if (priority === 2) return `${pos}Second priority. Worth the slide.`
+  return `${pos}Top-3 claim. A roster move with intent.`
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
