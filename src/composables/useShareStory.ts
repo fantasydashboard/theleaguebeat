@@ -26,7 +26,10 @@
 
 import { createApp, h, ref, type App } from 'vue'
 import { toPng } from 'html-to-image'
-import ShareCard from '@/components/share/ShareCard.vue'
+import ByNumbersCard from '@/components/share/ByNumbersCard.vue'
+import WireBriefCard from '@/components/share/WireBriefCard.vue'
+import CoverCard from '@/components/share/CoverCard.vue'
+import { pickFormat } from '@/editorial/shareability'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData } from '@/editorial/types'
 
@@ -54,7 +57,11 @@ export function useShareStory(): UseShareStoryReturn {
     story: SelectedStory,
     data?: CategoryLeagueData,
   ): Promise<void> {
-    if (isSharing.value) return
+    if (isSharing.value) {
+      console.log('[useShareStory] already sharing, skip')
+      return
+    }
+    console.log('[useShareStory] start', story.type, 'data?', !!data)
     isSharing.value = true
     shareError.value = null
 
@@ -70,11 +77,13 @@ export function useShareStory(): UseShareStoryReturn {
           mountEl = el
         },
       })
+      console.log('[useShareStory] PNG generated', png.size, 'bytes')
 
       const filename = buildFilename(story)
       await shareOrDownload(png, filename, story)
+      console.log('[useShareStory] shareOrDownload returned')
     } catch (err) {
-      console.warn('[useShareStory] failed:', err)
+      console.error('[useShareStory] failed:', err)
       shareError.value = (err as Error).message || 'Could not generate share.'
     } finally {
       if (mountedApp) {
@@ -110,10 +119,19 @@ async function renderCardToPng(opts: {
   host.style.zIndex = '-1'
   document.body.appendChild(host)
 
-  // 2. Mount a fresh Vue app rendering only the ShareCard
+  // 2. Pick the right card component for this story type. The
+  //    editorial layer (shareability.ts) decides which format —
+  //    we just render the chosen template.
+  const format = pickFormat(opts.story.type)
+  const Component =
+    format === 'cover'   ? CoverCard
+  : format === 'numbers' ? ByNumbersCard
+  :                        WireBriefCard
+  console.log('[useShareStory] format=', format, '→', Component.__name ?? 'card')
+
   const app = createApp({
     render() {
-      return h(ShareCard, { story: opts.story, data: opts.data })
+      return h(Component, { story: opts.story, data: opts.data })
     },
   })
   app.mount(host)
@@ -132,12 +150,15 @@ async function renderCardToPng(opts: {
   await new Promise<void>((r) => requestAnimationFrame(() => r()))
   await new Promise<void>((r) => setTimeout(r, SETTLE_DELAY_MS))
 
-  // 4. Find the actual card element to capture (the .share-card
-  //    rendered inside ShareCard).
-  const cardEl = host.querySelector<HTMLElement>('.share-card') ?? host
+  // 4. Find the actual card element to capture. Each format has its
+  //    own root class (.bnc, .wbc, .cvr); fall back to the legacy
+  //    .share-card and then the host itself.
+  const cardEl =
+    host.querySelector<HTMLElement>('.bnc, .wbc, .cvr, .share-card') ?? host
 
   // 5. html-to-image to a PNG data URL, then decode to a Blob so we
   //    can hand it to navigator.share or a download link.
+  console.log('[useShareStory] capturing card element', cardEl)
   const dataUrl = await toPng(cardEl, {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
@@ -146,6 +167,7 @@ async function renderCardToPng(opts: {
     // Inline external resources so the capture isn't broken by CORS.
     skipFonts: false,
   })
+  console.log('[useShareStory] toPng returned, length:', dataUrl.length)
 
   const blob = await dataUrlToBlob(dataUrl)
   return blob
@@ -187,11 +209,23 @@ async function shareOrDownload(
 
   // Prefer the native share sheet when available + we can attach
   // a file. Mobile Safari / Chrome on iOS, Android Chrome.
+  // Touch-primary check — on desktop browsers that happen to expose
+  // navigator.share + canShare (Chrome on macOS 14+), the native share
+  // path opens an OS dialog that's confusing and easy to miss. We only
+  // want native share on actual phones / tablets. Desktop falls through
+  // to download + clipboard, which is what desktop users expect.
+  const isTouchPrimary =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches
+
   const canShareFile =
+    isTouchPrimary &&
     typeof navigator !== 'undefined' &&
     typeof navigator.share === 'function' &&
     typeof navigator.canShare === 'function' &&
     navigator.canShare({ files: [file] })
+  console.log('[useShareStory] isTouchPrimary=', isTouchPrimary, 'canShareFile=', canShareFile)
 
   if (canShareFile) {
     try {
@@ -211,8 +245,10 @@ async function shareOrDownload(
 
   // Desktop fallback: trigger a download AND try to write to the
   // clipboard so power-users can paste straight into chat.
+  console.log('[useShareStory] desktop fallback → downloadBlob + clipboard')
   await downloadBlob(blob, filename)
   await tryClipboardWrite(blob)
+  console.log('[useShareStory] desktop fallback complete')
 }
 
 function buildShareText(story: SelectedStory): string {

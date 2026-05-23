@@ -29,7 +29,13 @@
           :style="{ background: `linear-gradient(135deg, ${team.avatarColor})` }"
           :class="{ 'sw-avatar-placeholder': !hasTeam }"
         >
-          <img v-if="team.avatarUrl" :src="team.avatarUrl" class="sw-avatar-img" alt="" />
+          <img
+            v-if="team.avatarUrl && !imgErrored"
+            :src="team.avatarUrl"
+            class="sw-avatar-img"
+            alt=""
+            @error="imgErrored = true"
+          />
           <span v-else>{{ team.ownerInitials }}</span>
         </div>
         <div class="sw-team-meta">
@@ -64,6 +70,7 @@
     <p class="sw-desc">{{ description }}</p>
 
     <button
+      v-if="shareable"
       type="button"
       class="issue-section-share"
       :aria-label="`Share ${story.type} story to your league chat`"
@@ -80,13 +87,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type {
   CategoryLeagueData,
   CategoryLeagueDataTeam,
   WLT,
 } from '@/editorial/types'
+import { canShare } from '@/editorial/shareability'
 
 const props = defineProps<{
   story: SelectedStory
@@ -94,6 +102,11 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
+
+const shareable = computed(() => canShare(props.story))
+
+/** Image-error fallback for ESPN custom-uploaded logos that 401. */
+const imgErrored = ref(false)
 
 const componentId = Math.random().toString(36).slice(2, 8)
 
@@ -224,7 +237,12 @@ const description = computed(() => {
       if (brokenStreakLength) return `The ${brokenStreakLength}-week run ends. Time to see what comes next.`
       return 'A long run ends with a quiet loss.'
     case 'consistency-award':
-      if (wins != null && ties != null) return `${wins} wins and ${ties} ties over the last six. Steady is the look.`
+      if (wins != null && ties != null) {
+        const winWord = wins === 1 ? 'win' : 'wins'
+        const tieWord = ties === 1 ? 'tie' : 'ties'
+        if (ties === 0) return `${wins} ${winWord} over the last six. Steady is the look.`
+        return `${wins} ${winWord} and ${ties} ${tieWord} over the last six. Steady is the look.`
+      }
       return 'Four of six. Hard to bet against.'
     case 'inconsistency-award':
       return 'Alternating wins and losses for six straight weeks.'
@@ -284,13 +302,20 @@ const byline = computed(() => {
   --accent-up:        oklch(0.74 0.18 145);
   --accent-down:      oklch(0.65 0.20 25);
 
+  /* Brief-strip layout — no card. Tone-colored vertical bar on the
+     left edge replaces the rounded container as the signature. */
   position: relative;
-  padding: 24px 24px 22px;
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 18px;
-  background: oklch(0.10 0.015 90);
+  padding: 20px 0 20px 28px;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
+}
+.sw::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 3px;
+  background: var(--tone);
+  border-radius: 2px;
 }
 
 .sw-tone-gold    { --tone: var(--accent-primary); }

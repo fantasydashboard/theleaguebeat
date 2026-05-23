@@ -505,7 +505,11 @@ function buildTeams(
       name: teamName,
       ownerName,
       ownerInitials: initialsOf(ownerName),
-      avatarUrl: t.logo || undefined,
+      // ESPN logo URLs go through our image proxy so that the
+      // auth-gated mystique-api.fantasy.espn.com custom uploads
+      // actually load. See proxyEspnAvatarUrl below for the rewrite
+      // logic + cookie forwarding.
+      avatarUrl: t.logo ? proxyEspnAvatarUrl(t.logo) : undefined,
       avatarColor: teamColorHash(`espn:${t.id}:${teamName}`),
       isMyTeam,
       // ESPN divisions: each team carries a numeric `divisionId`;
@@ -557,6 +561,63 @@ function getSwid(): string | null {
   } catch {
     return null
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   AVATAR URL PROXYING
+───────────────────────────────────────────────────────────────── */
+
+/** ESPN domains that gate their image responses behind the user's
+ *  espn_s2 + swid cookies. <img> tags can't pass cookies cross-
+ *  origin so these always 401 when loaded directly. We rewrite them
+ *  to hit /api/proxy-image instead, which adds the cookies server-
+ *  side and re-serves with permissive CORS. */
+const ESPN_AUTH_AVATAR_HOSTS = new Set([
+  'mystique-api.fantasy.espn.com',
+])
+
+/**
+ * Rewrite an ESPN team-logo URL so it loads through our image proxy.
+ * No-op for URLs that don't need proxying (public ESPN CDNs work
+ * fine cross-origin).
+ *
+ * For auth-gated hosts, we attach the user's espn_s2 + swid as
+ * query params so the proxy can forward them as a Cookie header.
+ * The cookies live in platformsStore; if they're not available the
+ * proxy will still try without them (will 401 → transparent PNG).
+ */
+function proxyEspnAvatarUrl(url: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return url
+  }
+
+  if (!ESPN_AUTH_AVATAR_HOSTS.has(parsed.hostname)) {
+    // Public CDN — return as-is. <img> tags load these cross-origin
+    // without issue.
+    return url
+  }
+
+  // Auth-gated — rewrite to proxy. Pull cookies from the platforms
+  // store; if missing, the proxy will return a transparent PNG and
+  // the @error handler downstream falls back to the type-led layout.
+  const proxied = new URL('/api/proxy-image', window.location.origin)
+  proxied.searchParams.set('url', url)
+
+  try {
+    const platformsStore = usePlatformsStore()
+    const creds = platformsStore.getEspnCredentials()
+    if (creds?.espn_s2 && creds?.swid) {
+      proxied.searchParams.set('espn_s2', creds.espn_s2)
+      proxied.searchParams.set('swid', creds.swid)
+    }
+  } catch {
+    /* No credentials available — proxy will try without and 401. */
+  }
+
+  return proxied.toString()
 }
 
 function normalizeSwid(swid: string | null): string | null {

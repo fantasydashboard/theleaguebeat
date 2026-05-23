@@ -29,7 +29,13 @@
           :style="{ background: `linear-gradient(135deg, ${home.avatarColor})` }"
           :class="{ 'mow-avatar-placeholder': !hasHome }"
         >
-          <img v-if="home.avatarUrl" :src="home.avatarUrl" class="mow-avatar-img" alt="" />
+          <img
+            v-if="home.avatarUrl && !homeImgErrored"
+            :src="home.avatarUrl"
+            class="mow-avatar-img"
+            alt=""
+            @error="homeImgErrored = true"
+          />
           <span v-else>{{ home.ownerInitials }}</span>
         </div>
         <div class="mow-side-meta">
@@ -51,7 +57,13 @@
           :style="{ background: `linear-gradient(135deg, ${away.avatarColor})` }"
           :class="{ 'mow-avatar-placeholder': !hasAway }"
         >
-          <img v-if="away.avatarUrl" :src="away.avatarUrl" class="mow-avatar-img" alt="" />
+          <img
+            v-if="away.avatarUrl && !awayImgErrored"
+            :src="away.avatarUrl"
+            class="mow-avatar-img"
+            alt=""
+            @error="awayImgErrored = true"
+          />
           <span v-else>{{ away.ownerInitials }}</span>
         </div>
         <div class="mow-side-meta">
@@ -65,6 +77,7 @@
     <p class="mow-stakes">{{ stakes }}</p>
 
     <button
+      v-if="shareable"
       type="button"
       class="issue-section-share"
       :aria-label="`Share ${story.type} story to your league chat`"
@@ -81,9 +94,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+import { canShare } from '@/editorial/shareability'
+
+/** Image-error fallbacks for ESPN custom-uploaded logos that 401. */
+const homeImgErrored = ref(false)
+const awayImgErrored = ref(false)
 
 const props = defineProps<{
   story: SelectedStory
@@ -91,6 +109,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
+
+const shareable = computed(() => canShare(props.story))
 
 const componentId = Math.random().toString(36).slice(2, 8)
 
@@ -256,16 +276,23 @@ const byline = computed(() => {
   --accent-secondary: oklch(0.70 0.27 350);
   --accent-tertiary:  oklch(0.72 0.18 195);
 
+  /* Card-stripped layout: no rounded container, no fill. The
+     section bleeds against the page background. A short tone-
+     colored accent rule along the top edge replaces the container
+     as the visual signature. */
   position: relative;
-  padding: 28px 28px 26px;
-  border: 1px solid oklch(0.22 0.015 90);
-  border-radius: 22px;
-  background:
-    radial-gradient(ellipse at top left, oklch(0.72 0.18 195 / 0.10), transparent 55%),
-    radial-gradient(ellipse at bottom right, oklch(0.70 0.27 350 / 0.08), transparent 55%),
-    oklch(0.10 0.015 90);
+  padding: 36px 0 32px;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
+}
+.mow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 72px;
+  height: 3px;
+  background: var(--accent-tertiary);
 }
 
 .mow-head { margin-bottom: 22px; }
@@ -287,22 +314,25 @@ const byline = computed(() => {
   background: var(--accent-tertiary);
 }
 .mow-headline {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
-  line-height: 1;
-  letter-spacing: -0.012em;
+  /* Capped at 3.6rem so long real-data matchup headlines (with two
+     team names + seed callout) don't crowd into the avatar pair. */
+  font-size: clamp(2rem, 4.4vw, 3.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.022em;
   color: var(--ink-1);
   margin: 0;
+  max-width: min(28ch, 100%);
   overflow-wrap: anywhere;
 }
 
 .mow-pair {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 16px;
+  gap: 32px;
   align-items: center;
-  margin: 6px 0 18px;
+  margin: 28px 0 32px;
 }
 
 .mow-side {
@@ -314,17 +344,20 @@ const byline = computed(() => {
 }
 
 .mow-avatar {
-  width: 76px;
-  height: 76px;
+  /* Feature-spread scale matching HeroFaceoff. Smaller radius reads
+     as editorial photo, not app icon; subtler shadow without the
+     inner highlight ring. */
+  width: 280px;
+  height: 280px;
   border-radius: 18px;
   display: grid;
   place-items: center;
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 1.25rem;
+  font-weight: 900;
+  font-size: 4.4rem;
   letter-spacing: 0.04em;
   color: oklch(0.12 0.012 90);
-  box-shadow: 0 10px 28px -14px oklch(0 0 0 / 0.55);
+  box-shadow: 0 30px 80px oklch(0 0 0 / 0.55);
   overflow: hidden;
 }
 .mow-avatar-img {
@@ -345,14 +378,15 @@ const byline = computed(() => {
   gap: 2px;
 }
 .mow-side-name {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 1.02rem;
-  letter-spacing: 0.02em;
+  font-size: 1.5rem;
+  letter-spacing: -0.005em;
   color: var(--ink-1);
   margin: 0;
-  max-width: 18ch;
+  max-width: 16ch;
   overflow-wrap: anywhere;
+  text-align: center;
 }
 .mow-side-rank {
   font-family: 'Barlow Condensed', sans-serif;

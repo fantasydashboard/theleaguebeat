@@ -49,7 +49,13 @@
             class="dr-avatar"
             :style="{ background: `linear-gradient(135deg, ${col.leader.avatarColor})` }"
           >
-            <img v-if="col.leader.avatarUrl" :src="col.leader.avatarUrl" class="dr-avatar-img" alt="" />
+            <img
+              v-if="col.leader.avatarUrl && !erroredIds.has(col.leader.id)"
+              :src="col.leader.avatarUrl"
+              class="dr-avatar-img"
+              alt=""
+              @error="erroredIds.add(col.leader.id)"
+            />
             <span v-else>{{ col.leader.ownerInitials }}</span>
           </div>
           <div class="dr-team-meta">
@@ -64,7 +70,13 @@
             class="dr-avatar dr-avatar-dim"
             :style="{ background: `linear-gradient(135deg, ${col.challenger.avatarColor})` }"
           >
-            <img v-if="col.challenger.avatarUrl" :src="col.challenger.avatarUrl" class="dr-avatar-img" alt="" />
+            <img
+              v-if="col.challenger.avatarUrl && !erroredIds.has(col.challenger.id)"
+              :src="col.challenger.avatarUrl"
+              class="dr-avatar-img"
+              alt=""
+              @error="erroredIds.add(col.challenger.id)"
+            />
             <span v-else>{{ col.challenger.ownerInitials }}</span>
           </div>
           <div class="dr-team-meta">
@@ -86,6 +98,7 @@
     <p v-if="stakes" class="dr-stakes">{{ stakes }}</p>
 
     <button
+      v-if="shareable"
       type="button"
       class="issue-section-share"
       :aria-label="`Share ${story.type} story to your league chat`"
@@ -102,12 +115,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type {
   CategoryLeagueData,
   CategoryLeagueDataTeam,
 } from '@/editorial/types'
+import { canShare } from '@/editorial/shareability'
+
+/** Set of team IDs whose avatar image failed to load (ESPN 401 etc).
+ *  When a team is in this set, the template falls back to its
+ *  gradient + initials. */
+const erroredIds = reactive(new Set<string>())
 
 const props = defineProps<{
   story: SelectedStory
@@ -115,6 +134,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
+
+const shareable = computed(() => canShare(props.story))
 
 const componentId = Math.random().toString(36).slice(2, 8)
 
@@ -332,13 +353,20 @@ const byline = computed(() => {
   --accent-secondary: oklch(0.70 0.27 350);
   --accent-tertiary:  oklch(0.72 0.18 195);
 
+  /* Strip the card. Section bleeds against page background; a
+     short tone-colored top rule replaces the container. */
   position: relative;
-  padding: 26px 26px 22px;
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 20px;
-  background: oklch(0.10 0.015 90);
+  padding: 28px 0 24px;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
+}
+.dr::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 64px;
+  height: 3px;
+  background: var(--accent-tertiary);
 }
 
 .dr-head { margin-bottom: 18px; }

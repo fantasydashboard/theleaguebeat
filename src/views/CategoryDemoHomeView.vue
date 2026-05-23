@@ -17,20 +17,37 @@
     <LiveLoadError v-else-if="liveError" :message="liveError" />
 
     <!-- ─────────────────────────────────────────────────────────────
-         ISSUE LEDE — single editorial sentence summarizing what's
-         in this issue, derived from the top selected stories.
-         Magazine's "what to read for" line at the very top.
+         SHARE STATUS TOAST — surfaces the in-flight, success, and
+         error states of the per-story share flow so users get visible
+         feedback rather than silent downloads.
     ────────────────────────────────────────────────────────────── -->
-    <IssueLede :stories="selectedStories" :data="issueData" />
+    <div
+      v-if="isSharing || shareError || shareSuccessToast"
+      class="share-toast"
+      :class="{
+        'share-toast-progress': isSharing,
+        'share-toast-success':  !isSharing && shareSuccessToast,
+        'share-toast-error':    !isSharing && shareError,
+      }"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="share-toast-dot" aria-hidden="true"></span>
+      <span class="share-toast-msg">
+        <template v-if="isSharing">Building your card.</template>
+        <template v-else-if="shareError">Share failed: {{ shareError }}</template>
+        <template v-else>{{ shareSuccessToast }}</template>
+      </span>
+    </div>
 
     <!-- ─────────────────────────────────────────────────────────────
-         NEW ISSUE COMPOSITION — dynamic section list driven by the
-         detection + selection + composition pipeline. See
-         docs/EDITORIAL_ARCHITECTURE.md. Sections render in priority
-         order; the legacy hero face-off below still renders for
-         compatibility until Tier 1 finishes replacing it.
+         HERO SLOT — magazine cover. Sits right after the masthead;
+         no lede sentence intervenes (the hero is the lede). Just the hero (faceoff/solo/
+         quiet) sits here so it carries the page on its own; the
+         non-hero stories render further down so the scroll has
+         rhythm instead of a single mega-block of dynamic sections.
     ────────────────────────────────────────────────────────────── -->
-    <template v-for="section in dynamicIssueSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
+    <template v-for="section in dynamicHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
       <HeroFaceoff
         v-if="section.type === 'hero-faceoff' && section.story"
         :story="section.story"
@@ -49,32 +66,45 @@
         :data="issueData"
         @share="onShareStory"
       />
-      <MatchupOfWeek
-        v-else-if="section.type === 'matchup-of-week' && section.story"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
-      <StreakWatch
-        v-else-if="section.type === 'streak-watch' && section.story"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
-      <DivisionRace
-        v-else-if="section.type === 'division-race' && section.story"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
     </template>
 
-    <!-- THE WIRE — daily news carousel below the hero. Magazine's
-         daily-cadence section: yesterday's matchup swings, streak
-         events, cadence beats, plus honest "coming soon" placeholders
-         for player + transaction stories until those data pipelines
-         ship in a future tier. -->
+    <!-- ─────────────────────────────────────────────────────────────
+         DAILY BREAK + THE WIRE — promoted to position 2 right after
+         the hero. The reason to check back daily: new filings appear
+         here every day. Date stamp anchors the cadence.
+    ────────────────────────────────────────────────────────────── -->
+    <EditorialBreak kicker="Today's filings" :date="nowDate" tone="up" />
     <TheWire :stories="selectedStories" :data="issueData" />
+
+    <!-- ─────────────────────────────────────────────────────────────
+         WEEKLY BREAK + ANYTHING ELSE WORTH SAYING this week —
+         non-hero dynamic stories (matchup of week, streak watch,
+         division race) render here. Far enough from the hero to
+         function as a "feature spread" page rather than a sidebar.
+    ────────────────────────────────────────────────────────────── -->
+    <template v-if="dynamicNonHeroSections.length > 0">
+      <EditorialBreak kicker="This week" tone="teal" />
+      <template v-for="section in dynamicNonHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
+        <MatchupOfWeek
+          v-if="section.type === 'matchup-of-week' && section.story"
+          :story="section.story"
+          :data="issueData"
+          @share="onShareStory"
+        />
+        <StreakWatch
+          v-else-if="section.type === 'streak-watch' && section.story"
+          :story="section.story"
+          :data="issueData"
+          @share="onShareStory"
+        />
+        <DivisionRace
+          v-else-if="section.type === 'division-race' && section.story"
+          :story="section.story"
+          :data="issueData"
+          @share="onShareStory"
+        />
+      </template>
+    </template>
 
     <!-- ─────────────────────────────────────────────────────────────
          1. LEGACY HERO — kept for fallback only. The composition
@@ -449,6 +479,10 @@
       </div>
     </section>
 
+    <!-- Live-this-week break — separates the editorial story sections
+         above from the live scoreboard data below. -->
+    <EditorialBreak kicker="Live this week" tone="teal" />
+
     <!-- ─────────────────────────────────────────────────────────────
          4. WEEK 8 — LIVE TODAY (cat status row per matchup)
     ────────────────────────────────────────────────────────────── -->
@@ -528,6 +562,9 @@
         </li>
       </ul>
     </section>
+
+    <!-- Standings break — agate-section divider. -->
+    <EditorialBreak kicker="The board" tone="magenta" />
 
     <!-- ─────────────────────────────────────────────────────────────
          5. STANDINGS — Compact (top 6 playoff line)
@@ -774,6 +811,11 @@
       <p class="ppw-caption">Tap a team in the standings above to see their full weekly trajectory.</p>
     </section>
 
+    <!-- Season-arc break — shifts the cadence from weekly back to
+         cumulative. Feature-size break since this is a major mode
+         shift in the page. -->
+    <EditorialBreak kicker="The season so far" size="feature" tone="gold" />
+
     <!-- ─────────────────────────────────────────────────────────────
          7. SEASON ARCS — five accumulating storylines.
          Differs from The Wire (top of page) by cadence: The Wire is
@@ -853,7 +895,7 @@ import MatchupOfWeek from '@/components/issue/MatchupOfWeek.vue'
 import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
-import IssueLede from '@/components/issue/IssueLede.vue'
+import EditorialBreak from '@/components/issue/EditorialBreak.vue'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -1171,13 +1213,47 @@ const hasDynamicHero = computed(() =>
  *  paths log to console and surface a UI toast via shareError. */
 const { shareStory: triggerShare, isSharing, shareError } = useShareStory()
 
+/** Transient "downloaded / copied" confirmation after a successful
+ *  desktop share. Cleared automatically after a beat. */
+const shareSuccessToast = ref<string | null>(null)
+
 function onShareStory(story: import('@/editorial/detection').SelectedStory) {
-  void triggerShare(story, issueData.value)
+  console.log('[share] click → onShareStory', story.type, story.signature)
+  shareSuccessToast.value = null
+  triggerShare(story, issueData.value)
+    .then(() => {
+      // navigator.share resolves whether or not the user actually
+      // shared; the file download fallback always runs on desktop.
+      // Either way, surface a confirmation if there was no error.
+      if (!shareError.value) {
+        shareSuccessToast.value = 'Card ready. Check Downloads or paste from clipboard.'
+        setTimeout(() => { shareSuccessToast.value = null }, 4000)
+      }
+    })
+    .catch((err) => {
+      console.error('[share] triggerShare rejected:', err)
+    })
 }
 
 const dynamicIssueSections = computed(() =>
   issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type)),
 )
+
+/** Split into hero vs non-hero so the home page can render the
+ *  hero immediately, then The Wire and the live scoreboard, then
+ *  come back to the non-hero stories further down. This is what
+ *  drives the "magazine scroll rhythm" — different content blocks
+ *  in different positions instead of one big section run. */
+const dynamicHeroSections = computed(() =>
+  dynamicIssueSections.value.filter((s) => HERO_SECTION_TYPES.has(s.type)),
+)
+const dynamicNonHeroSections = computed(() =>
+  dynamicIssueSections.value.filter((s) => !HERO_SECTION_TYPES.has(s.type)),
+)
+
+/** "Now" stamp for the daily EditorialBreak — uses the issue store's
+ *  lastUpdated or falls back to now. */
+const nowDate = computed(() => new Date())
 
 /** Source league data passed to section components for team lookups. */
 const issueData = computed(
@@ -2045,10 +2121,18 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
 
 /* ─── 2. BUBBLE ───────────────────────────────────────────────── */
 .bubble {
-  background: oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 20px;
-  padding: 28px 28px 26px;
+  /* Strip the card; the magenta accent rule on the section header
+     carries the visual signature. */
+  padding: 28px 0 26px;
+  position: relative;
+}
+.bubble::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 64px;
+  height: 3px;
+  background: var(--accent-secondary);
 }
 .bubble-headline {
   font-family: 'Barlow Condensed', sans-serif;
@@ -2583,43 +2667,51 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   margin: 0;
 }
 .live-list {
+  /* Scoreboard table — no row gap; the bottom-rule on each row
+     does the separation. */
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid oklch(0.16 0.015 90);
 }
 .live-row {
+  /* Scoreboard row — no card. Reads as agate-type tabular data.
+     A thin bottom rule replaces the rounded container so the
+     section feels like a sports-section back page, not a list of
+     cards. */
   position: relative;
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 12px 16px;
-  background: oklch(0.11 0.015 90);
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 12px;
+  padding: 16px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid oklch(0.16 0.015 90);
+  border-radius: 0;
   cursor: pointer;
-  transition: border-color 160ms cubic-bezier(0.22, 1, 0.36, 1), transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
 }
-.live-row:hover { border-color: oklch(0.30 0.015 90); }
-@media (prefers-reduced-motion: no-preference) {
-  .live-row:hover { transform: translateY(-1px); }
-}
+.live-row:hover { background: oklch(0.10 0.015 90); }
 .live-row:active {
-  transform: scale(0.99);
+  transform: scale(0.995);
   transition-duration: 100ms;
 }
 .live-row:focus-visible {
   outline: 2px solid var(--accent-tertiary);
   outline-offset: 2px;
 }
+.live-row:last-child { border-bottom: none; }
 .live-row-spotlight {
-  border-color: oklch(0.70 0.27 350 / 0.40);
-  background:
-    linear-gradient(90deg, oklch(0.70 0.27 350 / 0.06), oklch(0.11 0.015 90) 30%);
+  background: linear-gradient(
+    90deg,
+    oklch(0.70 0.27 350 / 0.10),
+    transparent 40%
+  );
 }
 .live-spotlight-edge {
   position: absolute;
@@ -3195,5 +3287,53 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   display: block;
   object-fit: cover;
   border-radius: inherit;
+}
+
+/* ─── Share toast — fixed position, bottom-center, pill ──────── */
+.share-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: oklch(0.10 0.015 90 / 0.96);
+  border: 1px solid oklch(0.20 0.015 90);
+  color: oklch(0.97 0.005 90);
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 12px 36px oklch(0 0 0 / 0.45);
+  max-width: calc(100vw - 32px);
+}
+.share-toast-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(0.78 0.18 92);
+}
+.share-toast-progress .share-toast-dot {
+  background: oklch(0.78 0.18 92);
+  animation: share-toast-pulse 1s infinite cubic-bezier(0.22, 1, 0.36, 1);
+}
+.share-toast-success {
+  border-color: oklch(0.74 0.18 145 / 0.5);
+}
+.share-toast-success .share-toast-dot {
+  background: oklch(0.74 0.18 145);
+}
+.share-toast-error {
+  border-color: oklch(0.65 0.20 25 / 0.5);
+}
+.share-toast-error .share-toast-dot {
+  background: oklch(0.65 0.20 25);
+}
+@keyframes share-toast-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
 }
 </style>

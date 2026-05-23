@@ -28,7 +28,13 @@
         class="hero-quiet-avatar"
         :style="{ background: `linear-gradient(135deg, ${topTeam.avatarColor})` }"
       >
-        <img v-if="topTeam.avatarUrl" :src="topTeam.avatarUrl" class="hero-quiet-avatar-img" alt="" />
+        <img
+          v-if="topTeam.avatarUrl && !imgErrored"
+          :src="topTeam.avatarUrl"
+          class="hero-quiet-avatar-img"
+          alt=""
+          @error="imgErrored = true"
+        />
         <span v-else>{{ topTeam.ownerInitials }}</span>
       </div>
       <div class="hero-quiet-card-meta">
@@ -39,7 +45,7 @@
     </aside>
 
     <button
-      v-if="story"
+      v-if="story && shareable"
       type="button"
       class="issue-section-share"
       :aria-label="`Share ${story.type} story to your league chat`"
@@ -56,9 +62,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+import { canShare } from '@/editorial/shareability'
+
+/** Image-error fallback for ESPN custom-uploaded logos that 401. */
+const imgErrored = ref(false)
 
 const props = defineProps<{
   /** Story is optional — composition emits a hero-quiet even without
@@ -70,6 +80,12 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
 
 const componentId = Math.random().toString(36).slice(2, 8)
+
+/** Editorial gate — Tier C stories (quiet-day, identity-shift, etc)
+ *  return false from canShare, hiding the button entirely. */
+const shareable = computed(() =>
+  props.story ? canShare(props.story) : false,
+)
 
 /** The team at rank 1 in the current standings, if we have it.
  *  Falls back to whichever team the story attached to, otherwise null. */
@@ -141,14 +157,9 @@ const byline = computed(() => {
   --ink-4: oklch(0.32 0.012 90);
 
   display: grid;
-  /* Slightly narrower copy column than HeroSolo; the calm tone is
-     served by a less dominant headline. */
   grid-template-columns: 1.2fr 1fr;
-  gap: 32px;
-  padding: 32px 32px 28px;
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 22px;
-  background: oklch(0.10 0.015 90);
+  gap: 48px;
+  padding: 24px 0 48px;
   align-items: center;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
@@ -173,44 +184,45 @@ const byline = computed(() => {
 }
 
 .hero-quiet-headline {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  /* Capped smaller than HeroSolo. The quieter the story, the smaller
-     the headline. */
-  font-size: clamp(2rem, 4.4vw, 3.4rem);
+  /* Bumped substantially. Still less aggressive than HeroSolo
+     since the calm tone earns restraint, but no longer dwarfed
+     by the section labels downstream. */
+  font-size: clamp(2.6rem, 5.6vw, 5rem);
   line-height: 0.96;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.025em;
   color: var(--ink-1);
-  margin: 0 0 14px;
+  margin: 0 0 18px;
+  max-width: 16ch;
   overflow-wrap: anywhere;
 }
 
 .hero-quiet-body {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--ink-2);
+  font-size: 1.15rem;
+  line-height: 1.5;
+  color: oklch(0.85 0.008 90);
   margin: 0;
-  max-width: 52ch;
+  max-width: 40ch;
+  font-weight: 500;
 }
 
 .hero-quiet-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: oklch(0.13 0.015 90);
-  border: 1px solid oklch(0.20 0.015 90);
+  gap: 20px;
+  /* Strip the inner card chrome — the avatar carries the visual,
+     and the page background unifies the section. */
 }
 .hero-quiet-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 144px;
+  height: 144px;
+  border-radius: 28px;
   display: grid;
   place-items: center;
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 1.05rem;
+  font-weight: 900;
+  font-size: 2.4rem;
   letter-spacing: 0.02em;
   color: oklch(0.12 0.012 90);
   overflow: hidden;

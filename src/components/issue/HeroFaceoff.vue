@@ -1,105 +1,131 @@
 <template>
-  <section class="hero" :aria-labelledby="`hero-headline-${story.signature}`">
-    <div class="hero-copy">
-      <p class="hero-eyebrow">
-        <span class="hero-eyebrow-bar" aria-hidden="true"></span>
-        {{ eyebrow }}
-        <span class="issue-cadence issue-cadence-teal" aria-label="Updates weekly">WEEKLY</span>
-      </p>
-      <h1 class="hero-headline" :id="`hero-headline-${story.signature}`">{{ headline }}</h1>
-      <p v-if="body" class="hero-body">{{ body }}</p>
-      <p class="issue-byline">
-        <span class="issue-byline-tag">THE BEAT</span>
+  <!--
+    HERO — type-led magazine cover. The headline carries the entire
+    composition. Eyebrow at top, massive headline spans the section
+    full width, body line beneath, then a compact "featuring" row
+    at the bottom shows the involved teams as small chips alongside
+    the byline + share button.
+
+    This is the editorial answer to "icon next to text dashboard
+    cards." The avatars don't compete with the headline for cover
+    real estate; they sit at the bottom as bylines do in a real
+    magazine spread.
+  -->
+  <section
+    class="hero"
+    :class="[`hero-tone-${tone}`, { 'hero-no-image': !hasImage }]"
+    :aria-labelledby="`hero-headline-${story.signature}`"
+  >
+    <!-- Atmospheric backdrop layers — washes + grain -->
+    <div class="hero-backdrop" aria-hidden="true"></div>
+    <div class="hero-grain" aria-hidden="true"></div>
+
+    <!-- Image stage — only when the protagonist has a real avatar.
+         The image bleeds off the right edge; a left-to-right
+         vignette ensures the headline keeps contrast. When the
+         image 401s the @error handler flips hasImage and we fall
+         back to the sparkline treatment. -->
+    <div v-if="hasImage" class="hero-stage" aria-hidden="true">
+      <img
+        :src="protagonist!.avatarUrl"
+        class="hero-art"
+        alt=""
+        @error="protagonistImgErrored = true"
+      />
+      <div class="hero-vignette"></div>
+    </div>
+
+    <!-- Photo caption — magazine convention for identifying the
+         secondary subject of a feature image. When the hero is
+         image-led AND there's an antagonist, render a small
+         "VS · [avatar] Team · #rank" tag overlaying the bottom of
+         the image area. Sits in the dimmed bottom-vignette region
+         so it doesn't compete with the main photo. -->
+    <div v-if="hasImage && antagonist" class="hero-photo-caption" aria-label="Opponent">
+      <span class="hero-photo-caption-prefix">VS</span>
+      <div
+        class="hero-photo-caption-avatar"
+        :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }"
+      >
+        <img
+          v-if="antagonist.avatarUrl && !antagonistImgErrored"
+          :src="antagonist.avatarUrl"
+          class="hero-photo-caption-avatar-img"
+          alt=""
+          @error="antagonistImgErrored = true"
+        />
+        <span v-else>{{ antagonist.ownerInitials }}</span>
+      </div>
+      <span class="hero-photo-caption-name">{{ antagonist.name }}</span>
+      <span class="hero-photo-caption-rank">#{{ antagonistRank }}</span>
+    </div>
+
+    <div class="hero-grid" :class="{ 'hero-grid-no-image': !hasImage }">
+      <header class="hero-head">
+        <p class="hero-eyebrow">
+          <span class="hero-eyebrow-bar" aria-hidden="true"></span>
+          {{ eyebrow }}
+        </p>
+
+        <h1 class="hero-headline" :id="`hero-headline-${story.signature}`">
+          {{ headline }}
+        </h1>
+
+        <p v-if="body" class="hero-body">{{ body }}</p>
+      </header>
+
+      <!-- Rank-trajectory sparkline. Only renders in no-image mode —
+           when the protagonist's image carries the cover, the spark
+           would compete with it visually. -->
+      <aside v-if="!hasImage && data && hasRankHistory" class="hero-spark" aria-label="Rank trajectory">
+        <p class="hero-spark-label">RANK · LAST {{ historyWeeks }} WEEKS</p>
+        <RankSparkline
+          :data="data"
+          :focus-team-ids="focusTeamIds"
+          :focus-colors="focusColors"
+          :aria-label="`Rank trajectory: ${protagonist?.name ?? 'leader'} vs ${antagonist?.name ?? 'challenger'}`"
+        />
+      </aside>
+    </div>
+
+    <!-- Footer: byline + share only. Team identification lives in
+         the sparkline's endpoint labels — repeating it as chips
+         here would be the same information twice. -->
+    <footer class="hero-foot">
+      <p class="hero-byline">
+        <span class="hero-byline-tag">THE BEAT</span>
         <span>{{ byline }}</span>
       </p>
       <button
+        v-if="shareable"
         type="button"
         class="hero-share"
         :aria-label="`Share ${headline} to your league chat`"
         @click="emit('share', story)"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
           <polyline points="16 6 12 2 8 6"/>
           <line x1="12" y1="2" x2="12" y2="15"/>
         </svg>
-        Share this story
+        Share
       </button>
-    </div>
-
-    <div
-      class="hero-faceoff"
-      :class="{ 'hero-faceoff-solo': !antagonist }"
-      :aria-label="antagonist
-        ? `${protagonist?.name} overtaking ${antagonist.name}`
-        : `${protagonist?.name} feature`"
-    >
-      <article v-if="protagonist" class="faceoff-team faceoff-rise">
-        <div class="faceoff-avatar" :style="{ background: `linear-gradient(135deg, ${protagonist.avatarColor})` }">
-          <img v-if="protagonist.avatarUrl" :src="protagonist.avatarUrl" class="avatar-image" alt="" />
-          <span v-else>{{ protagonist.ownerInitials }}</span>
-        </div>
-        <div class="faceoff-meta">
-          <p class="faceoff-name">{{ protagonist.name }}</p>
-          <p class="faceoff-owner">{{ protagonist.ownerName }}</p>
-          <div class="faceoff-rankrow">
-            <span class="faceoff-rankchip faceoff-rankchip-now">#{{ protagonistRank }}</span>
-            <span
-              v-if="protagonistDelta !== 0"
-              class="faceoff-trend"
-              :class="protagonistDelta > 0 ? 'faceoff-trend-up' : 'faceoff-trend-down'"
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline v-if="protagonistDelta > 0" points="6 15 12 9 18 15"/>
-                <polyline v-else points="6 9 12 15 18 9"/>
-              </svg>
-              {{ protagonistDelta > 0 ? '+' : '' }}{{ protagonistDelta }}
-            </span>
-          </div>
-        </div>
-      </article>
-
-      <div v-if="antagonist" class="faceoff-verb" aria-hidden="true">
-        <span class="faceoff-verb-line"></span>
-        <span class="faceoff-verb-word">{{ verb }}</span>
-        <span class="faceoff-verb-line"></span>
-      </div>
-
-      <article v-if="antagonist" class="faceoff-team faceoff-fall">
-        <div class="faceoff-avatar faceoff-avatar-dim" :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }">
-          <img v-if="antagonist.avatarUrl" :src="antagonist.avatarUrl" class="avatar-image" alt="" />
-          <span v-else>{{ antagonist.ownerInitials }}</span>
-        </div>
-        <div class="faceoff-meta">
-          <p class="faceoff-name">{{ antagonist.name }}</p>
-          <p class="faceoff-owner">{{ antagonist.ownerName }}</p>
-          <div class="faceoff-rankrow">
-            <span class="faceoff-rankchip faceoff-rankchip-fell">#{{ antagonistRank }}</span>
-            <span
-              v-if="antagonistDelta !== 0"
-              class="faceoff-trend"
-              :class="antagonistDelta > 0 ? 'faceoff-trend-up' : 'faceoff-trend-down'"
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline v-if="antagonistDelta > 0" points="6 15 12 9 18 15"/>
-                <polyline v-else points="6 9 12 15 18 9"/>
-              </svg>
-              {{ antagonistDelta > 0 ? '+' : '' }}{{ antagonistDelta }}
-            </span>
-          </div>
-        </div>
-      </article>
-    </div>
+    </footer>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type {
   CategoryLeagueData,
   CategoryLeagueDataTeam,
 } from '@/editorial/types'
+import { canShare } from '@/editorial/shareability'
+import RankSparkline from '@/components/issue/RankSparkline.vue'
+
+const protagonistImgErrored = ref(false)
+const antagonistImgErrored = ref(false)
 
 const props = defineProps<{
   story: SelectedStory
@@ -108,10 +134,36 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'share', story: SelectedStory): void }>()
 
+const shareable = computed(() => canShare(props.story))
+
 /* ─────────────────────────────────────────────────────────────────
-   Eyebrow / headline / body / verb — driven by the story type so
-   the hero copy actually matches the underlying detection signal.
+   Tone — drives the atmospheric backdrop. Each story type picks a
+   color palette that gives the cover mood without imagery.
 ───────────────────────────────────────────────────────────────── */
+
+type Tone = 'magenta' | 'down' | 'up' | 'teal' | 'gold'
+
+const tone = computed<Tone>(() => {
+  switch (props.story.type) {
+    case 'dynasty-falling':
+    case 'spoiler-watch':
+      return 'down'
+    case 'new-throne':
+    case 'division-lead-change':
+      return 'up'
+    case 'matchup-of-week':
+    case 'rematch':
+    case 'playoff-rematch':
+    case 'division-clash':
+    case 'photo-finish':
+    case 'razor-close':
+      return 'teal'
+    case 'dethroned-rivalry':
+      return 'gold'
+    default:
+      return 'magenta'
+  }
+})
 
 const eyebrow = computed(() => {
   switch (props.story.type) {
@@ -198,7 +250,7 @@ const body = computed<string>(() => {
 const verb = computed(() => {
   switch (props.story.type) {
     case 'new-throne':         return 'overtakes'
-    case 'dynasty-falling':    return 'overtakes'
+    case 'dynasty-falling':    return 'falls to'
     case 'dethroned-rivalry':  return 'trades with'
     case 'matchup-of-week':    return 'draws'
     case 'rematch':
@@ -237,32 +289,8 @@ function rankForTeam(teamId: string | undefined): number | undefined {
 const protagonistRank = computed(() => rankForTeam(protagonist.value?.id) ?? 1)
 const antagonistRank = computed(() => rankForTeam(antagonist.value?.id) ?? 2)
 
-/** Rank delta vs week 1 (positive = climbed). */
-function week1Rank(teamId: string | undefined): number | undefined {
-  if (!teamId || !props.data) return undefined
-  const wk1 = props.data.seasonRankHistory.find((w) => w.week === 1)
-  return wk1?.ranks[teamId]
-}
-
-const protagonistDelta = computed(() => {
-  const w1 = week1Rank(protagonist.value?.id)
-  if (typeof w1 !== 'number') {
-    // For matchup heroes (where protagonist is just the higher seed),
-    // no delta is meaningful — return 0 to hide the trend chip.
-    return 0
-  }
-  return w1 - protagonistRank.value
-})
-
-const antagonistDelta = computed(() => {
-  const w1 = week1Rank(antagonist.value?.id)
-  if (typeof w1 !== 'number') return 0
-  return w1 - antagonistRank.value
-})
-
 const byline = computed(() => {
   if (!props.story) return ''
-  // Freshness is 0-1; convert to a rough "X hours ago" feel.
   const minutesAgo = Math.max(5, Math.round((1 - props.story.freshness) * 60 * 6))
   if (minutesAgo < 60) return `FILED · ${minutesAgo} MIN AGO`
   const hr = Math.round(minutesAgo / 60)
@@ -270,70 +298,370 @@ const byline = computed(() => {
   const d = Math.round(hr / 24)
   return `FILED · ${d} DAY${d === 1 ? '' : 'S'} AGO`
 })
+
+/* ─────────────────────────────────────────────────────────────────
+   Sparkline data — protagonist + antagonist team IDs and tone-
+   appropriate colors. The "up" story types color the protagonist
+   green and the antagonist red; "down" stories invert that.
+───────────────────────────────────────────────────────────────── */
+
+const hasRankHistory = computed(
+  () => (props.data?.seasonRankHistory.length ?? 0) >= 2,
+)
+
+/** Switch to image-led layout when the protagonist has a real
+ *  working avatar image. Otherwise the section falls back to the
+ *  type-led + sparkline treatment. Mirrors HeroSolo's pattern so
+ *  the visual language is consistent across hero types. */
+const hasImage = computed(
+  () => Boolean(protagonist.value?.avatarUrl) && !protagonistImgErrored.value,
+)
+
+const historyWeeks = computed(
+  () => props.data?.seasonRankHistory.length ?? 0,
+)
+
+const focusTeamIds = computed(() => {
+  const ids: string[] = []
+  if (protagonist.value) ids.push(protagonist.value.id)
+  if (antagonist.value) ids.push(antagonist.value.id)
+  return ids
+})
+
+/** Pair the two focus lines with colors that map to the story.
+ *  - new-throne: protagonist climbing (green), antagonist falling (red)
+ *  - dynasty-falling: protagonist falling (red), antagonist climbing (green)
+ *  - matchup/rematch/division-clash: gold + magenta (no value judgment) */
+const focusColors = computed<string[]>(() => {
+  switch (props.story.type) {
+    case 'new-throne':
+    case 'division-lead-change':
+      return ['oklch(0.74 0.18 145)', 'oklch(0.65 0.20 25)']
+    case 'dynasty-falling':
+    case 'spoiler-watch':
+      return ['oklch(0.65 0.20 25)', 'oklch(0.74 0.18 145)']
+    default:
+      return ['oklch(0.78 0.18 92)', 'oklch(0.70 0.27 350)']
+  }
+})
 </script>
 
 <style scoped>
-/* These styles mirror the legacy inline hero face-off in
-   CategoryDemoHomeView. Keeping them scoped to the component so
-   removing the inline version doesn't break this rendering. */
+/* ─────────────────────────────────────────────────────────────────
+   HERO — type-led cover. Layout flows top to bottom: eyebrow,
+   massive headline, body, then a compact featuring + byline row.
+   No grid columns competing for space; the headline owns the page.
+───────────────────────────────────────────────────────────────── */
 
 .hero {
   position: relative;
+  padding: 48px 0;
+  isolation: isolate;
+  margin-bottom: 24px;
   overflow: hidden;
-  background: oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.20 0.015 90);
-  border-radius: 18px;
-  padding: 48px 56px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 56px;
-  align-items: center;
-  margin-bottom: 48px;
 }
-.hero::before {
-  content: '';
+
+/* Content grid. Default single-column for image-led mode (the
+   image sits absolutely positioned beside via .hero-stage). In
+   no-image mode the grid splits 2fr/1fr so the sparkline fills
+   the right column. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.hero-grid-no-image {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 56px;
+}
+
+/* In image-led mode the copy column is capped to the left half so
+   the image has room to breathe on the right. */
+.hero:not(.hero-no-image) .hero-head { max-width: 56ch; }
+
+/* ── Image stage (image-led mode only) ─────────────────────
+   The protagonist's avatar bleeds off the right edge of the
+   section. A multi-stop left-to-right vignette + bottom shadow
+   keeps the headline legible regardless of how light or dark
+   the underlying image is. */
+.hero-stage {
+  position: absolute;
+  top: -40px;
+  bottom: -40px;
+  right: -160px;
+  width: 780px;
+  z-index: 0;
+  overflow: hidden;
+}
+.hero-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(1.05) contrast(1.05);
+}
+.hero-vignette {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 0% 0%, oklch(0.70 0.27 350 / 0.10), transparent 55%),
-    radial-gradient(ellipse at 100% 100%, oklch(0.72 0.18 195 / 0.06), transparent 55%);
-  pointer-events: none;
+    linear-gradient(
+      90deg,
+      oklch(0.05 0.012 90) 0%,
+      oklch(0.05 0.012 90 / 0.92) 18%,
+      oklch(0.05 0.012 90 / 0.55) 38%,
+      oklch(0.05 0.012 90 / 0.15) 60%,
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      transparent 60%,
+      oklch(0.05 0.012 90 / 0.6) 100%
+    );
 }
 
-.hero-copy { position: relative; max-width: 60ch; }
-.hero-eyebrow {
+/* Copy + footer sit above the image stage. */
+.hero-head { position: relative; z-index: 1; }
+.hero-foot { position: relative; z-index: 1; }
+
+/* ── Photo caption (image-led + antagonist) ─────────────────
+   Magazine convention for identifying secondary subjects of a
+   feature photo. Sits in the dimmed bottom region of the image
+   so it doesn't compete with the main photo for attention. */
+.hero-photo-caption {
+  position: absolute;
+  z-index: 2;
+  bottom: 28px;
+  /* Right of center so it sits over the image, not over the
+     headline column. */
+  right: 56px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 18px;
+  padding: 7px 14px 7px 7px;
+  background: oklch(0.06 0.014 90 / 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid oklch(0.97 0.005 90 / 0.10);
+  border-radius: 999px;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: oklch(0.70 0.27 350);
+  letter-spacing: 0.14em;
+}
+.hero-photo-caption-prefix {
+  font-weight: 800;
+  font-size: 0.72rem;
+  color: oklch(0.78 0.18 92);
+  letter-spacing: 0.22em;
+  padding-left: 4px;
+}
+.hero-photo-caption-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 0.78rem;
+  color: oklch(0.10 0.012 90);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.hero-photo-caption-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.hero-photo-caption-name {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: oklch(0.97 0.005 90);
+  white-space: nowrap;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hero-photo-caption-rank {
+  font-weight: 800;
+  font-size: 0.72rem;
+  color: oklch(0.65 0.010 90);
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: oklch(0.97 0.005 90 / 0.08);
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 720px) {
+  .hero-photo-caption {
+    bottom: 16px;
+    right: 16px;
+    padding: 5px 10px 5px 5px;
+    gap: 8px;
+  }
+  .hero-photo-caption-avatar { width: 24px; height: 24px; font-size: 0.7rem; }
+  .hero-photo-caption-name { font-size: 0.74rem; max-width: 12ch; }
+  .hero-photo-caption-prefix { font-size: 0.66rem; }
+  .hero-photo-caption-rank { font-size: 0.66rem; padding: 1px 5px; }
+}
+
+/* Tone variables drive the atmospheric backdrop palette. */
+.hero-tone-magenta { --hero-hue: 350; --hero-accent: oklch(0.70 0.27 350); }
+.hero-tone-down    { --hero-hue: 25;  --hero-accent: oklch(0.65 0.20 25);  }
+.hero-tone-up      { --hero-hue: 145; --hero-accent: oklch(0.74 0.18 145); }
+.hero-tone-teal    { --hero-hue: 195; --hero-accent: oklch(0.72 0.18 195); }
+.hero-tone-gold    { --hero-hue: 92;  --hero-accent: oklch(0.78 0.18 92);  }
+
+/* Atmospheric backdrop — layered radial washes in the story's tone.
+   Anchored at the corners; sits behind everything. Bleeds past the
+   parent padding so the wash reads as a full-bleed page treatment,
+   not a "background of a section." */
+.hero-backdrop {
+  position: absolute;
+  inset: -80px -100px;
+  z-index: -2;
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 15% 30%,
+      oklch(0.22 0.14 var(--hero-hue) / 0.55) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50% 50% at 90% 100%,
+      oklch(0.18 0.10 var(--hero-hue) / 0.30) 0%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, oklch(0.07 0.014 90) 0%, oklch(0.05 0.012 90) 100%);
+  pointer-events: none;
+}
+
+/* Subtle film grain for editorial texture. SVG fractal noise inlined
+   so it works offline + doesn't trigger network requests. */
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Bumped from 0.07 to 0.14 so the grain actually registers as
+     editorial texture instead of being invisible against the dark
+     background. */
+  opacity: 0.14;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* ── Eyebrow ──────────────────────────────────────────────── */
+.hero-head { margin-bottom: 48px; }
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 32px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.88rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--hero-accent);
 }
 .hero-eyebrow-bar {
   display: inline-block;
-  width: 28px;
+  width: 36px;
   height: 2px;
   background: currentColor;
 }
+.hero-cadence {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: oklch(0.10 0.015 90);
+  border: 1px solid oklch(0.20 0.015 90);
+  color: oklch(0.65 0.010 90);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* ── Headline — feature scale ─────────────────────────────
+   3.6rem cap is the sweet spot for category-league team names.
+   At this size + a 2fr column width, "Cracks in Port Angeles
+   Roughriders. Real ones." reads as 2-3 lines (not 6). */
 .hero-headline {
-  margin: 0 0 16px;
+  margin: 0 0 24px;
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: clamp(2.8rem, 6vw, 5.2rem);
+  font-size: clamp(2rem, 4.2vw, 3.6rem);
+  line-height: 0.98;
   letter-spacing: -0.03em;
-  line-height: 0.96;
   color: oklch(0.97 0.005 90);
+  text-wrap: balance;
 }
+
+/* ── Body ─────────────────────────────────────────────────── */
 .hero-body {
-  margin: 0 0 24px;
-  font-size: 1.05rem;
-  line-height: 1.55;
+  margin: 0;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 500;
+  font-size: 1.35rem;
+  line-height: 1.4;
+  color: oklch(0.85 0.008 90);
+  max-width: 58ch;
+}
+
+/* ── Sparkline aside (right column) ─────────────────────── */
+.hero-spark {
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 8px;
+  min-height: 240px;
+}
+.hero-spark-label {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: oklch(0.50 0.010 90);
+}
+
+/* ── Footer: byline + share, full width below the grid ───── */
+.hero-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding-top: 28px;
+  margin-top: 32px;
+  border-top: 1px solid oklch(0.18 0.015 90);
+  flex-wrap: wrap;
+}
+
+.hero-byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+}
+.hero-byline-tag {
+  background: oklch(0.14 0.018 90);
   color: oklch(0.78 0.008 90);
-  max-width: 48ch;
+  padding: 3px 8px;
+  border-radius: 4px;
 }
 
 .hero-share {
@@ -351,178 +679,47 @@ const byline = computed(() => {
   letter-spacing: 0.10em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-              background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
-  .hero-share:hover { border-color: oklch(0.55 0.010 90); background: oklch(0.14 0.018 90); }
+  .hero-share:hover {
+    border-color: oklch(0.55 0.010 90);
+    background: oklch(0.14 0.018 90);
+  }
 }
 .hero-share:active { transform: scale(0.97); }
 
-.hero-faceoff {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto auto auto;
-  gap: 36px;
-  align-items: center;
-  justify-content: end;
-}
-.hero-faceoff-solo {
-  grid-template-columns: auto;
-}
-
-.faceoff-team {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  text-align: center;
-}
-.faceoff-avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Barlow', sans-serif;
-  font-weight: 900;
-  font-size: 1.8rem;
-  color: oklch(0.10 0.012 90);
-  overflow: hidden;
-}
-.faceoff-avatar-dim {
-  opacity: 0.62;
-  filter: saturate(0.8);
-}
-.avatar-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  border-radius: inherit;
-}
-.faceoff-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.faceoff-name {
-  margin: 0;
-  font-family: 'Barlow', sans-serif;
-  font-weight: 800;
-  font-size: 1rem;
-  letter-spacing: -0.005em;
-  color: oklch(0.97 0.005 90);
-}
-.faceoff-owner {
-  margin: 0;
-  font-family: 'Barlow', sans-serif;
-  font-size: 0.85rem;
-  color: oklch(0.55 0.010 90);
-}
-.faceoff-rankrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-.faceoff-rankchip {
-  display: inline-flex;
-  align-items: center;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.faceoff-rankchip-now {
-  background: oklch(0.70 0.27 350 / 0.18);
-  color: oklch(0.85 0.20 350);
-}
-.faceoff-rankchip-fell {
-  background: oklch(0.20 0.015 90);
-  color: oklch(0.55 0.010 90);
-}
-.faceoff-trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-.faceoff-trend-up   { color: oklch(0.74 0.18 145); }
-.faceoff-trend-down { color: oklch(0.65 0.20 25); }
-
-.faceoff-verb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: oklch(0.55 0.010 90);
-}
-.faceoff-verb-line {
-  width: 1px;
-  height: 56px;
-  background: oklch(0.20 0.015 90);
-}
-.faceoff-verb-word {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
 @media (max-width: 960px) {
-  .hero {
+  /* Stack the type + sparkline so the headline gets the full width
+     and the sparkline drops below at compressed height. */
+  .hero-grid-no-image {
     grid-template-columns: 1fr;
-    gap: 28px;
-    padding: 32px 24px;
+    gap: 36px;
   }
-  .hero-faceoff { justify-content: center; }
-}
-@media (max-width: 540px) {
-  .hero-faceoff { grid-template-columns: 1fr; gap: 20px; }
-  .hero-faceoff-solo { grid-template-columns: 1fr; }
-  .faceoff-verb { flex-direction: row; }
-  .faceoff-verb-line { width: 40px; height: 1px; }
-  .faceoff-avatar { width: 80px; height: 80px; font-size: 1.5rem; }
+  .hero-spark { min-height: 180px; }
+  /* Image-led: shrink the bleeding image so it doesn't crowd the
+     headline column on narrower screens. */
+  .hero-stage { width: 480px; right: -100px; }
 }
 
-.issue-cadence {
-  display: inline-block;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  padding: 2px 7px;
-  border-radius: 999px;
-  margin-left: 6px;
+@media (max-width: 720px) {
+  /* Phones: image gets smallest, vignette stretches further to
+     keep the headline readable against the compressed image. */
+  .hero-stage { width: 320px; right: -80px; top: 0; bottom: 0; }
+  .hero:not(.hero-no-image) .hero-head { max-width: 100%; }
 }
-.issue-cadence-teal { background: oklch(0.72 0.18 195 / 0.14); color: oklch(0.72 0.18 195); }
-.issue-cadence-gold { background: oklch(0.78 0.18 92 / 0.14); color: oklch(0.78 0.18 92); }
-.issue-cadence-up   { background: oklch(0.74 0.18 145 / 0.14); color: oklch(0.74 0.18 145); }
 
-.issue-byline {
-  margin: 14px 0 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: oklch(0.45 0.010 90);
-}
-.issue-byline-tag {
-  padding: 2px 6px;
-  background: oklch(0.20 0.015 90);
-  border-radius: 4px;
-  color: oklch(0.78 0.008 90);
+@media (max-width: 720px) {
+  .hero { padding: 36px 0; }
+  .hero-head { margin-bottom: 28px; }
+  .hero-headline {
+    font-size: clamp(2.2rem, 9vw, 3.4rem);
+    margin-bottom: 18px;
+  }
+  .hero-body { font-size: 1.05rem; }
+  .hero-spark { min-height: 160px; }
+  .hero-foot { gap: 16px; padding-top: 20px; flex-direction: column; align-items: flex-start; }
 }
 </style>

@@ -21,6 +21,7 @@ import type {
   SelectedStory,
   StoryType,
 } from './detection/types'
+import { heroBoostFor } from './cadence'
 
 /* ─────────────────────────────────────────────────────────────────
    SECTION TYPES
@@ -77,11 +78,18 @@ export function composeIssue(
 ): IssueSection[] {
   const sections: IssueSection[] = []
 
-  /* 1. Hero — top-ranked story drives the cover. */
-  if (stories[0]) {
+  /* 1. Hero — top-ranked story drives the cover, with a cadence-
+   *    aware re-rank applied just to the hero slot. A fresh daily-
+   *    cadence story (monster night, blockbuster trade, streak
+   *    event) gets a 1.25x boost so it can leapfrog a higher-raw-
+   *    weight weekly story. The selection layer's order is
+   *    respected everywhere else — this swap only affects which
+   *    story carries the cover. */
+  const hero = pickHero(stories)
+  if (hero) {
     sections.push({
-      type: heroSectionForStoryType(stories[0].type),
-      story: stories[0],
+      type: heroSectionForStoryType(hero.type),
+      story: hero,
       priority: 100,
     })
   } else {
@@ -93,8 +101,14 @@ export function composeIssue(
 
   /* 2. Story sections — next 3–4 stories below the hero. Each picks
    *    its own section type; score → priority so the more important
-   *    stories show up higher. */
-  for (const story of stories.slice(1, 5)) {
+   *    stories show up higher. The hero is excluded so it doesn't
+   *    render twice when the cadence swap promoted it from later in
+   *    the list. */
+  const heroSig = hero?.signature
+  const remaining = stories
+    .filter((s) => s.signature !== heroSig)
+    .slice(0, 4)
+  for (const story of remaining) {
     const sectionType = sectionForStoryType(story.type)
     if (!sectionType) continue
     sections.push({
@@ -127,6 +141,130 @@ export function composeIssue(
     .map((s, i) => ({ s, i }))
     .sort((a, b) => b.s.priority - a.s.priority || a.i - b.i)
     .map(({ s }) => s)
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   HERO SELECTION
+───────────────────────────────────────────────────────────────── */
+
+/**
+ * Editorial tier for the hero slot. Stories in lower tiers ALWAYS
+ * beat stories in higher tiers, regardless of raw score. Within a
+ * tier, score × cadence-boost breaks the tie.
+ *
+ * The tiers encode "what kind of story deserves the cover":
+ *
+ *   Tier 1: Stop the presses. Once-a-season moments. Mathematical
+ *           elimination, locked top seed, championship, blockbuster
+ *           trade. These dominate the cover when they fire.
+ *
+ *   Tier 2: Major news. The shock at the top of the standings or a
+ *           freak player night. New throne, dynasty falling, monster
+ *           player game.
+ *
+ *   Tier 3: Weekly headline. The "what happened this week" story.
+ *           Default hero in a typical week.
+ *
+ *   Tier 4: Watch-this. Mid-arc stories worth a hero spot when no
+ *           bigger story is firing.
+ *
+ *   Tier 5: Notable but secondary. Below-hero by default; only
+ *           bubble up when tiers 1-4 are all empty.
+ *
+ *   Tier 6: Never hero. Filler. Renders as ticker / brief / skipped.
+ */
+function heroTier(type: StoryType): number {
+  switch (type) {
+    /* ── Tier 1: Cover story ──────────────────────────────────── */
+    case 'mathematical-elimination':
+    case 'locked-top-seed':
+    case 'first-time-playoffs':
+    case 'blockbuster-trade':
+      return 1
+
+    /* ── Tier 2: Major news ───────────────────────────────────── */
+    case 'new-throne':
+    case 'dynasty-falling':
+    case 'dethroned-rivalry':
+    case 'monster-night':
+    case 'three-hr-game':
+    case 'twelve-k-game':
+      return 2
+
+    /* ── Tier 3: Weekly headline ──────────────────────────────── */
+    case 'matchup-of-week':
+    case 'photo-finish':
+    case 'comeback-win':
+    case 'blowout':
+    case 'cat-sweep':
+    case 'cat-shutout':
+    case 'streak-broken':
+    case 'throne-streak':
+      return 3
+
+    /* ── Tier 4: Watch-this ───────────────────────────────────── */
+    case 'comeback-team':
+    case 'three-week-comeback':
+    case 'three-week-collapse':
+    case 'division-lead-change':
+    case 'hot-climber':
+    case 'playoff-rematch':
+    case 'spoiler-mode':
+    case 'spoiler-watch':
+      return 4
+
+    /* ── Tier 5: Notable but secondary ────────────────────────── */
+    case 'streak-built':
+    case 'newcomer-breakout':
+    case 'division-clash':
+    case 'rematch':
+    case 'bubble-surprise':
+    case 'punt-success':
+    case 'punt-failure':
+    case 'razor-close':
+    case 'basement-streak':
+    case 'first-above-500':
+    case 'first-below-500':
+    case 'stakes-week':
+      return 5
+
+    /* ── Tier 6: Never hero ───────────────────────────────────── */
+    default:
+      return 6
+  }
+}
+
+/**
+ * Pick the hero story from the selected list. Orders by tier first
+ * (Tier 1 always beats Tier 2 regardless of score), then by
+ * `score * cadenceBoost` within a tier. This is the editorial
+ * discipline that ensures a fresh photo-finish doesn't outweigh a
+ * locked top seed just because the score math happened to land.
+ *
+ * Considers the top 6 selected stories (broadened from 4 since
+ * tier-sort means a high-tier story far down the list can still
+ * claim the cover).
+ *
+ * Returns undefined when the input is empty so callers can fall
+ * back to the quiet-day placeholder.
+ */
+function pickHero(stories: SelectedStory[]): SelectedStory | undefined {
+  if (stories.length === 0) return undefined
+
+  const ranked = stories
+    .slice(0, 6)
+    .map((s) => ({
+      story: s,
+      tier: heroTier(s.type),
+      tieScore: s.score * heroBoostFor(s.type),
+    }))
+    .sort((a, b) => {
+      // Lower tier wins. Within a tier, higher tieScore wins.
+      if (a.tier !== b.tier) return a.tier - b.tier
+      return b.tieScore - a.tieScore
+    })
+
+  return ranked[0].story
 }
 
 /* ─────────────────────────────────────────────────────────────────
