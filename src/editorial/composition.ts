@@ -293,18 +293,21 @@ function heroSectionForStoryType(type: StoryType): SectionType {
     case 'quiet-day':
       return 'hero-quiet'
 
-    /* Trade-driven (future) */
+    /* Trade-driven — two teams; faceoff treatment works as fallback
+     *  until a dedicated HeroTrade component lands. */
     case 'blockbuster-trade':
     case 'lopsided-trade':
-      return 'hero-trade'
+      return 'hero-faceoff'
 
-    /* Player-driven (future) */
+    /* Player-driven — single subject; solo treatment works as
+     *  fallback until a dedicated HeroMilestone (player-centric)
+     *  component lands. */
     case 'monster-night':
     case 'three-hr-game':
     case 'twelve-k-game':
     case 'no-hitter':
     case 'hat-trick':
-      return 'hero-milestone'
+      return 'hero-solo'
 
     /* Everything else gets the solo hero treatment */
     default:
