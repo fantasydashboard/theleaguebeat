@@ -41,11 +41,25 @@
     </div>
 
     <!-- ─────────────────────────────────────────────────────────────
-         HERO SLOT — magazine cover. Sits right after the masthead;
-         no lede sentence intervenes (the hero is the lede). Just the hero (faceoff/solo/
-         quiet) sits here so it carries the page on its own; the
-         non-hero stories render further down so the scroll has
-         rhythm instead of a single mega-block of dynamic sections.
+         WEEKLY COVER — magazine-style issue cover. Distinct from
+         the hero (today's lede). The cover frames the WHOLE WEEK
+         and stays committed for 7 days. Renders only when there's
+         a story worthy of cover-tier framing; quiet weeks skip it
+         and the hero takes the top of the page.
+    ────────────────────────────────────────────────────────────── -->
+    <WeeklyCover
+      :stories="selectedStories"
+      :data="issueData"
+      :issue-number="currentWeek"
+      :vol="issueVolume"
+      :week-of="weekOfLabel"
+      @share="onShareStory"
+    />
+
+    <!-- ─────────────────────────────────────────────────────────────
+         HERO SLOT — today's lede. Sits under the weekly cover.
+         The cover is the magazine; the hero is the issue's lead
+         story. Updates whenever the data shifts.
     ────────────────────────────────────────────────────────────── -->
     <template v-for="section in dynamicHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
       <HeroFaceoff
@@ -783,6 +797,7 @@ import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
 import EditorialBreak from '@/components/issue/EditorialBreak.vue'
 import SeasonalBlock from '@/components/issue/SeasonalBlock.vue'
+import WeeklyCover from '@/components/issue/WeeklyCover.vue'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -882,6 +897,27 @@ const bubbleWeeksLeft = computed(() => {
   const left = end - wk
   if (left <= 0) return 0
   return left
+})
+
+/** Magazine volume for the cover. Same source as the masthead —
+ *  derived from how many seasons this league has existed. */
+const issueVolume = computed<number>(() => {
+  // Match IssueMasthead's volume computation (years since league founding).
+  const founded = liveData.value?.leagueFoundedSeason
+  const currentSeasonNum = liveData.value?.currentSeason ?? new Date().getFullYear()
+  if (!founded) return 1
+  return Math.max(1, currentSeasonNum - founded + 1)
+})
+
+/** "Week of May 25" — current Monday in user's local time. */
+const weekOfLabel = computed<string>(() => {
+  const now = new Date()
+  // Find this week's Monday.
+  const day = now.getDay() // 0 Sun .. 6 Sat
+  const offsetToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + offsetToMonday)
+  return monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 })
 const bubbleDeckText = computed(() => {
   const n = bubbleWeeksLeft.value
