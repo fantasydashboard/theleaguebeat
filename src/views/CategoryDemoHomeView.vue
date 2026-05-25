@@ -69,12 +69,18 @@
     </template>
 
     <!-- ─────────────────────────────────────────────────────────────
-         DAILY BREAK + THE WIRE — promoted to position 2 right after
-         the hero. The reason to check back daily: new filings appear
-         here every day. Date stamp anchors the cadence.
+         THE WIRE — promoted to position 2 right after the hero.
+         The Wire's own header carries the cadence label ("DAILY")
+         and the section headline ("What's filed today.") so a
+         separate EditorialBreak above it was triple-labeling the
+         same thing in 200px of vertical space. Let whitespace +
+         the Wire's own header do the work instead.
     ────────────────────────────────────────────────────────────── -->
-    <EditorialBreak kicker="Today's filings" :date="nowDate" tone="up" />
-    <TheWire :stories="selectedStories" :data="issueData" />
+    <TheWire
+      :stories="selectedStories"
+      :data="issueData"
+      :hero-signature="heroStorySignature"
+    />
 
     <!-- ─────────────────────────────────────────────────────────────
          WEEKLY BREAK + ANYTHING ELSE WORTH SAYING this week —
@@ -1247,6 +1253,13 @@ const dynamicIssueSections = computed(() =>
 const dynamicHeroSections = computed(() =>
   dynamicIssueSections.value.filter((s) => HERO_SECTION_TYPES.has(s.type)),
 )
+
+/** Signature of the story currently anchoring the hero, if any.
+ *  Passed to TheWire so it can suppress the duplicate card. */
+const heroStorySignature = computed<string | undefined>(() => {
+  const heroSection = dynamicHeroSections.value.find((s) => s.story)
+  return heroSection?.story?.signature
+})
 const dynamicNonHeroSections = computed(() =>
   dynamicIssueSections.value.filter((s) => !HERO_SECTION_TYPES.has(s.type)),
 )

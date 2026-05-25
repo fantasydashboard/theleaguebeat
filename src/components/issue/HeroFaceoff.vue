@@ -144,6 +144,7 @@ import type {
   CategoryLeagueDataTeam,
 } from '@/editorial/types'
 import { canShare } from '@/editorial/shareability'
+import { composeHeroDeck } from '@/editorial/composition/heroDeck'
 import RankSparkline from '@/components/issue/RankSparkline.vue'
 
 const protagonistImgErrored = ref(false)
@@ -240,6 +241,12 @@ const headline = computed<string>(() => {
 })
 
 const body = computed<string>(() => {
+  // Prefer the rich multi-sentence deck from the composer. Falls
+  // through to the existing per-type switch when the composer has
+  // no variants registered for this story type yet.
+  const deck = composeHeroDeck(props.story, props.data)
+  if (deck) return deck
+
   const ctx = props.story.context as Record<string, unknown>
   const explicit = typeof ctx.body === 'string' ? ctx.body : null
   if (explicit) return explicit

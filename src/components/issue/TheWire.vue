@@ -59,7 +59,13 @@
         v-for="(card, idx) in cards"
         :key="`${card.kind}:${card.signature}`"
         class="wire-card"
-        :class="[`wire-card-${card.tone}`, { 'wire-card-placeholder': card.placeholder }]"
+        :class="[
+          `wire-card-${card.tone}`,
+          {
+            'wire-card-placeholder': card.placeholder,
+            'wire-card-lead': idx === 0,
+          },
+        ]"
       >
         <p class="wire-card-eyebrow">
           <span class="wire-card-eyebrow-dot" aria-hidden="true"></span>
@@ -84,11 +90,49 @@
               <span v-if="card.player.mlbTeam">{{ card.player.mlbTeam }}</span>
               <span v-if="card.player.position">{{ card.player.position }}</span>
             </p>
-            <p v-if="card.player.ownedByTeamNames.length > 0" class="wire-card-player-owner">
-              <span v-if="card.player.isMyGuy" class="wire-card-player-yours">YOUR ROSTER</span>
-              <span v-else>Owned by {{ formatOwnersList(card.player.ownedByTeamNames) }}</span>
-            </p>
-            <p v-else class="wire-card-player-owner wire-card-player-owner-fa">Free agent</p>
+
+            <!-- Ownership chip — avatar + team name (or "YOURS" for the
+                 viewer's roster, neutral "WAIVERS" for free agents).
+                 Replaces the old "Owned by X" text line with a visual
+                 chip that scans faster and carries brand identity. -->
+            <div class="wire-card-chip-row">
+              <template v-if="card.player.ownedByTeamIds.length > 0">
+                <span
+                  v-for="(teamId, i) in card.player.ownedByTeamIds.slice(0, 2)"
+                  :key="teamId"
+                  class="wire-card-chip"
+                  :class="{ 'wire-card-chip-mine': card.player.isMyGuy && teamLookup(teamId)?.isMyTeam }"
+                >
+                  <span
+                    class="wire-card-chip-avatar"
+                    :style="teamLookup(teamId)?.avatarUrl ? undefined : { background: `linear-gradient(135deg, ${teamLookup(teamId)?.avatarColor ?? 'oklch(0.4 0.05 90), oklch(0.25 0.05 90)'})` }"
+                  >
+                    <img
+                      v-if="teamLookup(teamId)?.avatarUrl"
+                      :src="teamLookup(teamId)!.avatarUrl"
+                      alt=""
+                      class="avatar-image"
+                    />
+                    <span v-else>{{ teamLookup(teamId)?.ownerInitials ?? '··' }}</span>
+                  </span>
+                  <span class="wire-card-chip-label">
+                    {{ card.player.isMyGuy && teamLookup(teamId)?.isMyTeam
+                       ? 'YOURS'
+                       : (teamLookup(teamId)?.name ?? card.player.ownedByTeamNames[i] ?? 'Team') }}
+                  </span>
+                </span>
+                <span
+                  v-if="card.player.ownedByTeamIds.length > 2"
+                  class="wire-card-chip wire-card-chip-overflow"
+                >
+                  +{{ card.player.ownedByTeamIds.length - 2 }}
+                </span>
+              </template>
+              <span v-else class="wire-card-chip wire-card-chip-fa">
+                <span class="wire-card-chip-avatar wire-card-chip-avatar-fa" aria-hidden="true"></span>
+                <span class="wire-card-chip-label">WAIVERS</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -145,6 +189,10 @@ const props = defineProps<{
   data?: CategoryLeagueData
   /** Optional issue date — drives bylines. Defaults to now. */
   issueDate?: Date
+  /** Signature of the story currently anchoring the hero, if any.
+   *  When provided, the Wire skips that story to avoid showing the
+   *  same beat twice (once as cover, once as a card). */
+  heroSignature?: string
 }>()
 
 /* ─────────────────────────────────────────────────────────────────
@@ -176,6 +224,7 @@ interface WireCard {
     mlbTeam?: string
     headshotUrl: string
     summaryLine: string         // e.g. "3-for-5, 2 HR, 5 RBI"
+    ownedByTeamIds: string[]    // for chip avatar lookup
     ownedByTeamNames: string[]  // owner attribution
     isMyGuy: boolean
   }
@@ -250,8 +299,9 @@ const hasCards = computed(() => cards.value.length > 0)
 
 const wireStories = computed(() => {
   const wireTypes = new Set<StoryType>(WIRE_STORY_TYPES)
+  const heroSig = props.heroSignature
   return props.stories
-    .filter((s) => wireTypes.has(s.type))
+    .filter((s) => wireTypes.has(s.type) && s.signature !== heroSig)
     .sort((a, b) => {
       // My-team-first ordering: stories about MY roster outrank
       // league-wide gossip of similar weight. Editorial signal:
@@ -350,6 +400,9 @@ function storyToCard(story: SelectedStory): WireCard {
     const ownedByTeamNames = Array.isArray(ctx.ownedByTeamNames)
       ? (ctx.ownedByTeamNames as string[])
       : []
+    const ownedByTeamIds = Array.isArray(ctx.ownedByTeamIds)
+      ? (ctx.ownedByTeamIds as string[])
+      : []
 
     player = {
       mlbId: ctx.mlbId as number,
@@ -358,11 +411,12 @@ function storyToCard(story: SelectedStory): WireCard {
       mlbTeam: ctx.mlbTeam as string | undefined,
       headshotUrl:
         playerHeadshotUrl({
-          platform: 'espn', // ESPN headshot CDN is the most reliable cross-sport
+          platform: 'espn',
           sport: 'mlb',
           playerId: ctx.mlbId,
         }) || playerHeadshotFallback('mlb'),
       summaryLine: (ctx.summaryLine as string) ?? '',
+      ownedByTeamIds,
       ownedByTeamNames,
       isMyGuy: ctx.isMyGuy === true,
     }
@@ -940,28 +994,105 @@ onMounted(() => onTrackScroll())
   text-transform: uppercase;
   color: oklch(0.55 0.010 90);
 }
-.wire-card-player-owner {
-  margin: 2px 0 0;
-  font-family: 'Barlow', sans-serif;
-  font-weight: 500;
-  font-size: 0.78rem;
-  color: oklch(0.65 0.010 90);
+/* Ownership chip row — visual replacement for "Owned by X" text.
+   Avatar + team name; "YOURS" treatment when the chip is the viewer's
+   team; neutral "WAIVERS" when free agent. */
+.wire-card-chip-row {
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
-.wire-card-player-owner-fa {
-  color: oklch(0.45 0.010 90);
-  font-style: italic;
+.wire-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 3px;
+  border-radius: 999px;
+  background: oklch(0.20 0.008 90);
+  border: 1px solid oklch(0.30 0.010 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.012 90);
+  max-width: 100%;
+  overflow: hidden;
 }
-.wire-card-player-yours {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+.wire-card-chip-avatar {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 800;
-  font-size: 0.70rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  background: oklch(0.78 0.18 92 / 0.18);
-  color: oklch(0.85 0.20 92);
+  font-size: 0.62rem;
+  color: oklch(0.95 0.010 90);
+  overflow: hidden;
+}
+.wire-card-chip-avatar .avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.wire-card-chip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14ch;
+}
+/* My-team variant — gold background, brighter type. */
+.wire-card-chip-mine {
+  background: oklch(0.32 0.14 92 / 0.30);
+  border-color: oklch(0.62 0.18 92 / 0.55);
+  color: oklch(0.92 0.18 92);
+}
+/* Overflow chip ("+N") — no avatar, compact. */
+.wire-card-chip-overflow {
+  padding: 3px 10px;
+  color: oklch(0.62 0.010 90);
+}
+/* Free-agent chip — desaturated, italic gives the "anyone can grab" vibe. */
+.wire-card-chip-fa {
+  background: oklch(0.18 0.005 90);
+  border-color: oklch(0.26 0.005 90);
+  color: oklch(0.55 0.010 90);
+}
+.wire-card-chip-avatar-fa {
+  background: oklch(0.30 0.005 90);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   LEAD CARD — first card in the carousel gets a larger treatment.
+   Magazine convention: a section's first story is the lead. Uniform
+   cards make the eye wander; a lead anchors the section.
+───────────────────────────────────────────────────────────────── */
+.wire-card-lead {
+  /* Wider min-width so the lead card occupies roughly 1.5x a regular
+     card. Carousel scroll-snap still works because we're widening the
+     same .wire-card flex item. */
+  min-width: clamp(340px, 42vw, 460px);
+  max-width: clamp(340px, 42vw, 460px);
+}
+.wire-card-lead .wire-card-headline {
+  font-size: clamp(1.45rem, 2.6vw, 1.85rem);
+  line-height: 1.10;
+}
+.wire-card-lead .wire-card-body {
+  font-size: 0.96rem;
+  line-height: 1.45;
+}
+.wire-card-lead .wire-card-player-headshot {
+  width: 72px;
+  height: 72px;
+}
+.wire-card-lead .wire-card-player-name {
+  font-size: 1.05rem;
 }
 
 .wire-card-soon {

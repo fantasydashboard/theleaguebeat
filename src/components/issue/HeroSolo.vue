@@ -109,6 +109,7 @@ import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
 import { canShare } from '@/editorial/shareability'
+import { composeHeroDeck } from '@/editorial/composition/heroDeck'
 import RankSparkline from '@/components/issue/RankSparkline.vue'
 
 /** Image-error fallback. ESPN custom-uploaded logos 401 from their
@@ -307,7 +308,14 @@ function headlineFor(type: string, name: string, ctx: Record<string, unknown>): 
   }
 }
 
-const body = computed(() => bodyFor(props.story.type, team.value.name, props.story.context))
+/** Prefer the rich multi-sentence deck from the composer. Falls
+ *  back to the single-line bodyFor map when the deck composer has
+ *  no variants for this story type yet. */
+const body = computed(() => {
+  const deck = composeHeroDeck(props.story, props.data)
+  if (deck) return deck
+  return bodyFor(props.story.type, team.value.name, props.story.context)
+})
 
 function bodyFor(type: string, name: string, ctx: Record<string, unknown>): string {
   const safeName = name || 'This team'
