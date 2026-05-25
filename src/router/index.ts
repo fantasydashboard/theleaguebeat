@@ -122,6 +122,11 @@ const router = createRouter({
           name: 'my-league-history',
           component: () => import('@/views/CategoryDemoHistoryView.vue'),
         },
+        {
+          path: 'archive',
+          name: 'my-league-archive',
+          component: () => import('@/views/CategoryDemoArchiveView.vue'),
+        },
       ],
     },
 
@@ -162,6 +167,11 @@ const router = createRouter({
           path: 'history',
           name: 'demo-cat-history',
           component: () => import('@/views/CategoryDemoHistoryView.vue'),
+        },
+        {
+          path: 'archive',
+          name: 'demo-cat-archive',
+          component: () => import('@/views/CategoryDemoArchiveView.vue'),
         },
       ],
     },

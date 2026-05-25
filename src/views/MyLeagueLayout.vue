@@ -111,6 +111,11 @@
           :to="`/leagues/${routeLeagueId}/history`"
           active-class="league-nav-tab-active"
         >History</router-link>
+        <router-link
+          class="league-nav-tab"
+          :to="`/leagues/${routeLeagueId}/archive`"
+          active-class="league-nav-tab-active"
+        >Archive</router-link>
       </div>
     </nav>
 

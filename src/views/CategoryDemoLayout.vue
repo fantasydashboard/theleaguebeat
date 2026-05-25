@@ -58,6 +58,11 @@
           :to="{ path: '/demo-categories/history', query: $route.query }"
           active-class="demo-nav-tab-active"
         >History</router-link>
+        <router-link
+          class="demo-nav-tab"
+          :to="{ path: '/demo-categories/archive', query: $route.query }"
+          active-class="demo-nav-tab-active"
+        >Archive</router-link>
       </div>
     </nav>
 

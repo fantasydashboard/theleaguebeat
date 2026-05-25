@@ -798,6 +798,8 @@ import TheWire from '@/components/issue/TheWire.vue'
 import EditorialBreak from '@/components/issue/EditorialBreak.vue'
 import SeasonalBlock from '@/components/issue/SeasonalBlock.vue'
 import WeeklyCover from '@/components/issue/WeeklyCover.vue'
+import { composeWeeklyCover } from '@/editorial/composition/weeklyCover'
+import { snapshotCover, claimIssue } from '@/services/coverArchive'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -919,6 +921,51 @@ const weekOfLabel = computed<string>(() => {
   monday.setDate(now.getDate() + offsetToMonday)
   return monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 })
+
+/* ─────────────────────────────────────────────────────────────────
+   COVER ARCHIVE — snapshot + claim on every visit during the
+   issue's live week. Snapshots are idempotent on (league, season,
+   week); claims are idempotent the same way. Both are localStorage
+   for v1; Supabase sync can come later.
+───────────────────────────────────────────────────────────────── */
+
+/** Tone resolver — mirrors WeeklyCover.vue's `tone` computed so
+ *  the snapshot stores the same color the live cover renders. */
+function resolveCoverTone(storyType: string): 'magenta' | 'gold' | 'teal' | 'up' | 'down' {
+  if (storyType === 'blockbuster-trade' || storyType === 'lopsided-trade') return 'gold'
+  if (storyType === 'new-throne' || storyType === 'dynasty-falling' || storyType === 'dethroned-rivalry') return 'magenta'
+  if (storyType === 'monster-night' || storyType === 'three-hr-game' || storyType === 'twelve-k-game' || storyType === 'no-hitter') return 'gold'
+  if (storyType === 'comeback-team' || storyType === 'hot-climber' || storyType === 'streak-built' || storyType === 'three-week-comeback') return 'up'
+  if (storyType === 'streak-broken' || storyType === 'three-week-collapse') return 'down'
+  if (storyType === 'photo-finish' || storyType === 'comeback-win') return 'teal'
+  return 'magenta'
+}
+
+/** Snapshot the current cover + record the user's claim. Runs
+ *  whenever issueData becomes available (initial mount + every
+ *  data refresh). Idempotent — repeat calls in the same week
+ *  no-op via the storage layer. */
+watch(
+  () => issueData.value?.leagueId,
+  (leagueId) => {
+    if (!leagueId) return
+    const data = issueData.value
+    if (!data) return
+    const week = data.currentWeek
+    const season = data.currentSeason
+    if (!week || !season) return
+
+    const cover = composeWeeklyCover(selectedStories.value, { currentWeek: week })
+    if (cover) {
+      const tone = resolveCoverTone(cover.story.type)
+      snapshotCover(leagueId, cover, week, season, tone)
+    }
+    // Claim regardless of whether a real cover composed — visiting
+    // during the issue's week counts even on a quiet-cover week.
+    claimIssue(leagueId, week, season)
+  },
+  { immediate: true },
+)
 const bubbleDeckText = computed(() => {
   const n = bubbleWeeksLeft.value
   if (n === 0) return 'Final week of the regular season.'
