@@ -738,6 +738,16 @@
          in the original list was the tell that the section was
          filler, not editorial. The Wire (top of page) covers daily
          pulses; the Power Rankings page covers cumulative stats. -->
+
+    <!-- ─────────────────────────────────────────────────────────────
+         SEASONAL BLOCK — single slot that swaps content based on
+         where we are in the year. Renders nothing during
+         settling/midseason; carries Draft Autopsy (opening),
+         Playoff Picture (stretch/final), Bracket (playoffs), or
+         Season Recap (offseason) when those stages fire. Gives
+         the home year-round flex without a new section every time.
+    ────────────────────────────────────────────────────────────── -->
+    <SeasonalBlock :data="issueData" />
   </div>
 </template>
 
@@ -772,6 +782,7 @@ import StreakWatch from '@/components/issue/StreakWatch.vue'
 import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
 import EditorialBreak from '@/components/issue/EditorialBreak.vue'
+import SeasonalBlock from '@/components/issue/SeasonalBlock.vue'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
