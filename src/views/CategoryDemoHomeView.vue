@@ -502,7 +502,7 @@
       <header class="section-head section-head-flex">
         <div>
           <p class="section-eyebrow section-eyebrow-magenta">Standings</p>
-          <h2 class="standings-headline" id="standings-headline">Top {{ bubbleCutoff }} make the playoffs.</h2>
+          <h2 class="standings-headline" id="standings-headline">{{ standingsHeadline }}</h2>
         </div>
         <router-link to="/demo-categories/power-rankings" class="section-link">
           View full rankings
@@ -521,61 +521,73 @@
       </div>
 
       <ol class="stand-list" role="list">
-        <li
-          v-for="row in standings"
-          :key="row.teamId"
-          class="stand-row"
-          :class="{ 'stand-row-mine': lookupTeam(row.teamId).isMyTeam, 'stand-row-cutoff': row.rank === bubbleCutoff }"
-          tabindex="0"
-          role="button"
-          :aria-label="`Open team detail for ${lookupTeam(row.teamId).name}`"
-          @click="goToPowerRankings"
-          @keydown.enter.prevent="goToPowerRankings"
-          @keydown.space.prevent="goToPowerRankings"
-        >
-          <span class="stand-rank" :class="{ 'stand-rank-playoff': row.rank <= bubbleCutoff }">
-            <span v-if="row.rank === 1" class="stand-rank-crown" aria-label="League leader">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>
-              </svg>
-            </span>
-            <span class="stand-rank-num">{{ row.rank }}</span>
-            <span v-if="row.rank <= bubbleCutoff && row.rank !== 1" class="stand-rank-dot" aria-hidden="true"></span>
-          </span>
-
-          <div class="stand-team">
-            <div class="stand-avatar" :style="{ background: `linear-gradient(135deg, ${lookupTeam(row.teamId).avatarColor})` }">
-              <img v-if="lookupTeam(row.teamId).avatarUrl" :src="lookupTeam(row.teamId).avatarUrl" class="avatar-image" alt="" />
-              <span v-else>{{ lookupTeam(row.teamId).ownerInitials }}</span>
-              <span v-if="lookupTeam(row.teamId).isMyTeam" class="stand-star" aria-label="Your team" title="Your team">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9"/>
+        <template v-for="(entry, idx) in compactStandings" :key="idx">
+          <li
+            v-if="entry.type === 'separator'"
+            class="stand-separator"
+            aria-hidden="true"
+          >
+            <span class="stand-separator-dots">· · ·</span>
+          </li>
+          <li
+            v-else-if="entry.row"
+            class="stand-row"
+            :class="{
+              'stand-row-mine': lookupTeam(entry.row.teamId).isMyTeam,
+              'stand-row-cutoff': entry.row.rank === bubbleCutoff,
+              'stand-row-out': entry.row.rank === bubbleCutoff + 1,
+            }"
+            tabindex="0"
+            role="button"
+            :aria-label="`Open team detail for ${lookupTeam(entry.row.teamId).name}`"
+            @click="goToPowerRankings"
+            @keydown.enter.prevent="goToPowerRankings"
+            @keydown.space.prevent="goToPowerRankings"
+          >
+            <span class="stand-rank" :class="{ 'stand-rank-playoff': entry.row.rank <= bubbleCutoff }">
+              <span v-if="entry.row.rank === 1" class="stand-rank-crown" aria-label="League leader">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>
                 </svg>
               </span>
-            </div>
-            <div class="stand-name-block">
-              <p class="stand-name">{{ lookupTeam(row.teamId).name }}</p>
-              <p class="stand-owner">{{ lookupTeam(row.teamId).ownerName }}</p>
-            </div>
-          </div>
+              <span class="stand-rank-num">{{ entry.row.rank }}</span>
+              <span v-if="entry.row.rank <= bubbleCutoff && entry.row.rank !== 1" class="stand-rank-dot" aria-hidden="true"></span>
+            </span>
 
-          <span class="stand-record">{{ row.catWins }}-{{ row.catLosses }}-{{ row.catTies }}</span>
+            <div class="stand-team">
+              <div class="stand-avatar" :style="{ background: `linear-gradient(135deg, ${lookupTeam(entry.row.teamId).avatarColor})` }">
+                <img v-if="lookupTeam(entry.row.teamId).avatarUrl" :src="lookupTeam(entry.row.teamId).avatarUrl" class="avatar-image" alt="" />
+                <span v-else>{{ lookupTeam(entry.row.teamId).ownerInitials }}</span>
+                <span v-if="lookupTeam(entry.row.teamId).isMyTeam" class="stand-star" aria-label="Your team" title="Your team">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <polygon points="12 2 15 9 22 9.5 16.5 14.5 18 22 12 18 6 22 7.5 14.5 2 9.5 9 9"/>
+                  </svg>
+                </span>
+              </div>
+              <div class="stand-name-block">
+                <p class="stand-name">{{ lookupTeam(entry.row.teamId).name }}</p>
+                <p class="stand-owner">{{ lookupTeam(entry.row.teamId).ownerName }}</p>
+              </div>
+            </div>
 
-          <span class="stand-last6" :aria-label="`Last 6 matchups: ${row.lastSix.join(', ')}`">
+            <span class="stand-record">{{ entry.row.catWins }}-{{ entry.row.catLosses }}-{{ entry.row.catTies }}</span>
+
+            <span class="stand-last6" :aria-label="`Last 6 matchups: ${entry.row.lastSix.join(', ')}`">
+              <span
+                v-for="(r, i) in entry.row.lastSix"
+                :key="i"
+                class="stand-last6-dot"
+                :class="r === 'W' ? 'stand-last6-dot-w' : r === 'L' ? 'stand-last6-dot-l' : 'stand-last6-dot-t'"
+                aria-hidden="true"
+              ></span>
+            </span>
+
             <span
-              v-for="(r, i) in row.lastSix"
-              :key="i"
-              class="stand-last6-dot"
-              :class="r === 'W' ? 'stand-last6-dot-w' : r === 'L' ? 'stand-last6-dot-l' : 'stand-last6-dot-t'"
-              aria-hidden="true"
-            ></span>
-          </span>
-
-          <span
-            class="stand-streak"
-            :class="row.streak.type === 'W' ? 'stand-streak-win' : row.streak.type === 'L' ? 'stand-streak-loss' : 'stand-streak-tie'"
-          >{{ row.streak.type }}{{ row.streak.length }}</span>
-        </li>
+              class="stand-streak"
+              :class="entry.row.streak.type === 'W' ? 'stand-streak-win' : entry.row.streak.type === 'L' ? 'stand-streak-loss' : 'stand-streak-tie'"
+            >{{ entry.row.streak.type }}{{ entry.row.streak.length }}</span>
+          </li>
+        </template>
       </ol>
     </section>
 
@@ -616,18 +628,11 @@
             >{{ gy.value }}</text>
           </g>
 
-          <!-- Background lines: the 7 non-featured teams at 12% opacity. -->
-          <path
-            v-for="bgTeamId in backgroundTeamIds"
-            :key="`bg-${bgTeamId}`"
-            class="ppw-line-bg"
-            :d="teamPath(bgTeamId)"
-            fill="none"
-            :stroke="bgStrokeFor(bgTeamId)"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+          <!-- Background lines for the other teams were removed. They
+               rendered at 12% opacity but visually still cluttered the
+               chart without telling a story — you couldn't actually
+               read any of them. The chart now shows three lines: your
+               team, the hottest team, and the league average. -->
 
           <!-- League average dashed line — flat at 5.5 -->
           <path
@@ -699,26 +704,10 @@
             >Wk {{ i + 1 }}</text>
           </g>
 
-          <!-- Annotation: Wk 6 Bullpen Theology takes #1 -->
-          <g v-if="annotation" class="ppw-annotation">
-            <line
-              :x1="annotation.dotX"
-              :y1="annotation.dotY"
-              :x2="annotation.labelX"
-              :y2="annotation.labelY - 6"
-              stroke="var(--accent-secondary)"
-              stroke-width="1"
-              stroke-dasharray="2 3"
-            />
-            <circle :cx="annotation.dotX" :cy="annotation.dotY" r="4" fill="var(--accent-secondary)" />
-            <text
-              class="ppw-annotation-label"
-              :x="annotation.labelX"
-              :y="annotation.labelY"
-              text-anchor="middle"
-              fill="var(--accent-secondary)"
-            >Wk 6: Bullpen Theology takes #1</text>
-          </g>
+          <!-- Hand-authored annotation removed. It referenced a fixture-
+               only team ("Bullpen Theology") and didn't render against
+               live data. A live-data narrative annotation can come back
+               later, computed from actual rank-history deltas. -->
         </svg>
       </div>
 
@@ -729,7 +718,7 @@
         </li>
         <li class="ppw-legend-pill">
           <span class="ppw-legend-dot" :style="{ background: topScorerColor }" aria-hidden="true"></span>
-          Top scorer this season ({{ topScorerTeam.name }})
+          Hottest team ({{ topScorerTeam.name }})
         </li>
         <li class="ppw-legend-pill">
           <span class="ppw-legend-dash" aria-hidden="true"></span>
@@ -737,59 +726,18 @@
         </li>
       </ul>
 
-      <p class="ppw-caption">Tap a team in the standings above to see their full weekly trajectory.</p>
+      <p class="ppw-caption">The hottest team is whoever's gained the most ground over the last four weeks.</p>
     </section>
 
     <!-- Silent hairline. The season-arc section's own header carries
          the label. -->
-    <EditorialBreak size="small" tone="gold" />
-
-    <!-- ─────────────────────────────────────────────────────────────
-         7. SEASON ARCS — five accumulating storylines.
-         Differs from The Wire (top of page) by cadence: The Wire is
-         daily / "what happened yesterday"; this section is durable
-         season-long pulses (hot streaks, bubble watch, rough patches,
-         cat kings). Same surface shape — different timescale.
-    ────────────────────────────────────────────────────────────── -->
-    <section class="ticker" aria-labelledby="ticker-headline">
-      <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-mute">The season so far</p>
-        <h2 class="ticker-headline" id="ticker-headline">Five arcs worth watching.</h2>
-      </header>
-
-      <ul class="ticker-list" role="list">
-        <li
-          v-for="(item, i) in liveEditorial.ticker"
-          :key="i"
-          class="ticker-row"
-          :class="[`ticker-row-${tickerToneFor(item.eyebrow)}`, i < 2 ? 'ticker-row-edged' : 'ticker-row-flat']"
-        >
-          <span class="ticker-edge" :class="`ticker-edge-${tickerToneFor(item.eyebrow)}`" v-if="i < 2" aria-hidden="true"></span>
-          <span class="ticker-dot" :class="`ticker-dot-${tickerToneFor(item.eyebrow)}`" aria-hidden="true"></span>
-          <span v-if="item.eyebrow" class="ticker-tag" :class="`ticker-tag-${tickerToneFor(item.eyebrow)}`">{{ item.eyebrow }}</span>
-          <p class="ticker-copy">{{ item.headline }}</p>
-        </li>
-      </ul>
-    </section>
-
-    <!-- ─────────────────────────────────────────────────────────────
-         8. QUICK READS — footer pills
-    ────────────────────────────────────────────────────────────── -->
-    <section class="quick" aria-labelledby="quick-heading">
-      <h2 class="section-eyebrow section-eyebrow-mute" id="quick-heading">Quick reads</h2>
-      <ul class="pills" role="list">
-        <li
-          v-for="pill in liveEditorial.quickReads"
-          :key="pill.label"
-          class="pill"
-          role="listitem"
-        >
-          <span class="pill-dot" :class="`pill-dot-${quickReadDotFor(pill.label)}`" aria-hidden="true"></span>
-          <span class="pill-label">{{ formatPillLabel(pill.label) }}</span>
-          <span class="pill-value">{{ pill.value }}</span>
-        </li>
-      </ul>
-    </section>
+    <!-- Sections "Season arcs" + "Quick reads" were removed. They
+         were eight small dashboard chips that mostly restated what
+         The Wire already surfaces (HOT STREAK, ROUGH PATCH, TOP CAT
+         KING) without telling stories. Repeated "TOP CAT KING" twice
+         in the original list was the tell that the section was
+         filler, not editorial. The Wire (top of page) covers daily
+         pulses; the Power Rankings page covers cumulative stats. -->
   </div>
 </template>
 
@@ -945,6 +893,88 @@ function spellSmallNumber(n: number): string {
 const standings = computed(() =>
   liveData.value?.standings ?? standings2026Week8,
 )
+
+/**
+ * Compact standings — top 3 + cut-line pair + your team + bottom team.
+ * Magazine convention: show the storylines, not the full table. The
+ * Power Rankings page carries the full list.
+ *
+ * Inserts a `separator` entry between non-contiguous rows so the eye
+ * sees "there's a gap here" instead of jumping from #3 to #6 without
+ * a visual cue.
+ */
+interface CompactRow {
+  type: 'row' | 'separator'
+  row?: typeof standings2026Week8[number]
+}
+
+/**
+ * Story-driven standings headline. Falls back to "Top N make the
+ * playoffs." when nothing more interesting is firing. The intent is
+ * that a hot leader or a tightening cut line gets editorial framing
+ * instead of a generic structural label.
+ *
+ * Seasonal flex lives here too — late-season weeks emphasize the
+ * cut-line urgency; early-season just notes who's at the top.
+ */
+const standingsHeadline = computed<string>(() => {
+  const all = standings.value
+  const cutoff = bubbleCutoff.value
+  if (!all || all.length === 0) return `Top ${cutoff} make the playoffs.`
+
+  const top = all[0]
+  const topTeam = lookupTeam(top.teamId)
+  const bubbleIn = all[cutoff - 1]
+  const bubbleOut = all[cutoff]
+  const cutGap = bubbleIn && bubbleOut
+    ? (bubbleIn.catWins + bubbleIn.catTies) - (bubbleOut.catWins + bubbleOut.catTies)
+    : null
+
+  // Hot leader with a real win streak.
+  if (top.streak.type === 'W' && top.streak.length >= 4) {
+    return `${topTeam.name} runs the field.`
+  }
+  // Tight cut line — late-season urgency.
+  if (cutGap !== null && cutGap > 0 && cutGap <= 3) {
+    return `Cut line down to ${cutGap} ${cutGap === 1 ? 'cat' : 'cats'}.`
+  }
+  // Top team has a commanding gap over second.
+  const secondCats = all[1] ? all[1].catWins + all[1].catTies : 0
+  const topCats = top.catWins + top.catTies
+  if (topCats - secondCats >= 8) {
+    return `${topTeam.name} is pulling away.`
+  }
+  // Default — structural but honest.
+  return `Top ${cutoff} make the playoffs.`
+})
+
+const compactStandings = computed<CompactRow[]>(() => {
+  const all = standings.value
+  if (!all || all.length === 0) return []
+  const cutoff = bubbleCutoff.value
+  const myIdx = all.findIndex((r) => lookupTeam(r.teamId).isMyTeam)
+
+  const indices = new Set<number>()
+  // Top 3
+  for (let i = 0; i < Math.min(3, all.length); i++) indices.add(i)
+  // Last team in (bubble) + first team out (cut line pair)
+  if (cutoff >= 1 && cutoff <= all.length) indices.add(cutoff - 1)
+  if (cutoff < all.length) indices.add(cutoff)
+  // Your team
+  if (myIdx >= 0) indices.add(myIdx)
+  // Bottom team
+  indices.add(all.length - 1)
+
+  const sorted = Array.from(indices).sort((a, b) => a - b)
+  const out: CompactRow[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+      out.push({ type: 'separator' })
+    }
+    out.push({ type: 'row', row: all[sorted[i]] })
+  }
+  return out
+})
 
 // Look up a team by id — prefers liveData.teams, falls back to the
 // fixture's `getTeam()` so existing call sites keep working when no
@@ -1565,18 +1595,39 @@ const chartTeams = computed(() =>
   liveData.value?.teams ?? teams,
 )
 
-// Top scorer: team with the highest cumulative cats-won.
-// At W8 in the fixture that's bt (sum 69). Wrap in computed so the
-// chart updates if the data source changes (e.g., switching to live).
+/**
+ * Hottest team — best 4-week delta in cats won (recent 4 weeks vs
+ * prior 4 weeks). Matches the chart title "Who's been heating up"
+ * (previously this computed the highest CUMULATIVE total, which is
+ * "who scored the most all season" — a different question that the
+ * title didn't actually ask).
+ *
+ * Excludes the viewer's team (already shown as its own line). Falls
+ * back to "best recent 4-week total" when there isn't enough history
+ * to compute a real delta (early-season).
+ *
+ * The variable is still named topScorerTeam to avoid a rename across
+ * 10+ template/legend references — the meaning shifts, the wiring
+ * stays put.
+ */
 const topScorerTeam = computed(() => {
-  const list = chartTeams.value
+  const list = chartTeams.value.filter((t) => t.id !== myTeam.id)
+  const weekData = weeklyCatsWonSource.value
+
   let bestId = list[0]?.id ?? 'bt'
-  let best = -Infinity
+  let bestDelta = -Infinity
   for (const t of list) {
-    const arr = weeklyCatsWonSource.value[t.id]
-    if (!arr) continue
-    const total = arr.reduce((a, b) => a + b, 0)
-    if (total > best) { best = total; bestId = t.id }
+    const arr = weekData[t.id]
+    if (!arr || arr.length < 4) continue
+    const recent = arr.slice(-4).reduce((a, b) => a + b, 0)
+    const prior = arr.length >= 8
+      ? arr.slice(-8, -4).reduce((a, b) => a + b, 0)
+      : 0  // early-season — use recent-4 as the score
+    const delta = recent - prior
+    if (delta > bestDelta) {
+      bestDelta = delta
+      bestId = t.id
+    }
   }
   return lookupTeam(bestId)
 })
@@ -1604,32 +1655,15 @@ const avgPpwPoints = computed(() =>
 const ppwAvgPath = computed(() => ppwSmooth(avgPpwPoints.value))
 const avgEnd = computed(() => avgPpwPoints.value.at(-1) ?? null)
 
-// Background team set — every team except the featured top scorer and my-team.
-const backgroundTeamIds = computed(() =>
-  chartTeams.value
-    .map((t) => t.id)
-    .filter((id) => id !== topScorerTeam.value.id && id !== myTeam.id),
-)
-function teamPath(teamId: string): string {
-  return ppwSmooth(ppwPoints(weeklyCatsWonSource.value[teamId] ?? []))
-}
-function bgStrokeFor(teamId: string): string {
-  // 12% opacity so background lines read as context, not noise.
-  return accentFor(lookupTeam(teamId)).replace(/\)$/, ' / 0.12)')
-}
+/* Background-team chart helpers (backgroundTeamIds, teamPath,
+   bgStrokeFor) were removed with the noisy background lines — they
+   rendered every team's line at 12% opacity, which made the chart
+   look "data-dense" without actually being readable. The chart now
+   focuses on three legible lines.
 
-// Annotation: at week 6 bt first holds #1 (seasonRankHistory: bt becomes 1 at W6).
-// Live-data path doesn't have an authored narrative annotation, so skip it.
-interface Annotation { dotX: number; dotY: number; labelX: number; labelY: number }
-const annotation = computed<Annotation | null>(() => {
-  if (liveData.value) return null   // fixture-only narrative annotation
-  const idx = 5 // week 6 → index 5
-  const btScore = weeklyCatsWon['bt']?.[idx]
-  if (btScore == null) return null
-  const dotX = ppwX(6)
-  const dotY = ppwY(btScore)
-  return { dotX, dotY, labelX: dotX, labelY: dotY - 16 }
-})
+   The "Wk 6: Bullpen Theology takes #1" hand-authored annotation
+   was also dropped — it was fixture-only and never fired against
+   live data. */
 
 // Endpoint label de-confliction. Same approach as football home.
 const ENDPOINT_MIN_GAP = 14
@@ -2557,11 +2591,31 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   outline-offset: 2px;
 }
 .stand-row-cutoff {
-  border-bottom: 1px solid oklch(0.72 0.18 195 / 0.30);
+  border-bottom: 1px solid oklch(0.72 0.18 195 / 0.40);
+}
+/* First team out of the playoffs — subtle red-tinged top edge so the
+   bubble pair reads as "the line is here." */
+.stand-row-out {
+  border-top: 1px dashed oklch(0.65 0.20 25 / 0.40);
 }
 .stand-row-mine {
   background: oklch(0.78 0.18 92 / 0.06);
   border-color: oklch(0.78 0.18 92 / 0.28);
+}
+/* Separator pseudo-row — three dots that signal "rows skipped." */
+.stand-separator {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 10px;
+  list-style: none;
+}
+.stand-separator-dots {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.35em;
+  color: oklch(0.40 0.010 90);
+  user-select: none;
 }
 .stand-rank {
   display: inline-flex;

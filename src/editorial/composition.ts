@@ -103,14 +103,24 @@ export function composeIssue(
    *    its own section type; score → priority so the more important
    *    stories show up higher. The hero is excluded so it doesn't
    *    render twice when the cadence swap promoted it from later in
-   *    the list. */
+   *    the list.
+   *
+   *    Dedup by SectionType: the home page renders one
+   *    matchup-of-week, one streak-watch, one division-race. Without
+   *    this filter, two stories of the same section type (e.g.
+   *    "rematch" + "matchup-of-week" both routed to matchup-of-week)
+   *    would render as two visually identical faceoff cards
+   *    back-to-back — templated, not editorial. */
   const heroSig = hero?.signature
   const remaining = stories
     .filter((s) => s.signature !== heroSig)
     .slice(0, 4)
+  const usedSectionTypes = new Set<SectionType>()
   for (const story of remaining) {
     const sectionType = sectionForStoryType(story.type)
     if (!sectionType) continue
+    if (usedSectionTypes.has(sectionType)) continue  // one per section type
+    usedSectionTypes.add(sectionType)
     sections.push({
       type: sectionType,
       story,
