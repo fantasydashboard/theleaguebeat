@@ -89,7 +89,7 @@
          function as a "feature spread" page rather than a sidebar.
     ────────────────────────────────────────────────────────────── -->
     <template v-if="dynamicNonHeroSections.length > 0">
-      <EditorialBreak kicker="This week" tone="teal" />
+      <EditorialBreak size="small" tone="teal" />
       <template v-for="section in dynamicNonHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
         <MatchupOfWeek
           v-if="section.type === 'matchup-of-week' && section.story"
@@ -485,92 +485,15 @@
       </div>
     </section>
 
-    <!-- Live-this-week break — separates the editorial story sections
-         above from the live scoreboard data below. -->
-    <EditorialBreak kicker="Live this week" tone="teal" />
+    <!-- Live scoreboard removed from the home page. It duplicated the
+         dedicated Matchups page exactly (same 6-row table, same data,
+         same routing target). Daily live results belong on /matchups;
+         the home cover should be editorial features, not a dashboard
+         widget. The matchup-of-week / rematch faceoff cards above
+         carry the "what to watch this week" framing instead. -->
 
-    <!-- ─────────────────────────────────────────────────────────────
-         4. WEEK 8 — LIVE TODAY (cat status row per matchup)
-    ────────────────────────────────────────────────────────────── -->
-    <section class="live" aria-labelledby="live-headline">
-      <header class="section-head section-head-flex">
-        <div>
-          <p class="section-eyebrow section-eyebrow-teal live-eyebrow">
-            <span class="live-eyebrow-dot" aria-hidden="true"></span>
-            Week {{ currentWeek }}. Live today
-          </p>
-          <h2 class="live-headline" id="live-headline">What's happening now.</h2>
-        </div>
-        <router-link to="/demo-categories/matchups" class="section-link">
-          View full matchups
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
-          </svg>
-        </router-link>
-      </header>
-
-      <ul class="live-list" role="list">
-        <li
-          v-for="m in liveMatchupRows"
-          :key="m.id"
-          class="live-row"
-          :class="{ 'live-row-spotlight': m.isSpotlight }"
-          tabindex="0"
-          role="link"
-          :aria-label="`Open ${lookupTeam(m.homeTeamId).name} versus ${lookupTeam(m.awayTeamId).name}`"
-          @click="goToMatchups"
-          @keydown.enter.prevent="goToMatchups"
-          @keydown.space.prevent="goToMatchups"
-        >
-          <span class="live-spotlight-edge" v-if="m.isSpotlight" aria-hidden="true"></span>
-
-          <!-- Status pip -->
-          <span class="live-status" :class="`live-status-${m.status}`">
-            <span v-if="m.status === 'live'" class="live-status-dot" aria-hidden="true"></span>
-            <svg v-else-if="m.status === 'final'" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            <span v-if="m.status === 'live'">LIVE</span>
-            <span v-else-if="m.status === 'coasting'">COAST</span>
-            <span v-else-if="m.status === 'final'">FINAL</span>
-            <span v-else>SOON</span>
-          </span>
-
-          <!-- Home team -->
-          <div class="live-team" :class="{ 'live-team-winning': m.aWins > m.bWins, 'live-team-losing': m.aWins < m.bWins }">
-            <div class="live-avatar" :style="{ background: `linear-gradient(135deg, ${lookupTeam(m.homeTeamId).avatarColor})` }">
-              <img v-if="lookupTeam(m.homeTeamId).avatarUrl" :src="lookupTeam(m.homeTeamId).avatarUrl" class="avatar-image" alt="" />
-              <span v-else>{{ lookupTeam(m.homeTeamId).ownerInitials }}</span>
-            </div>
-            <p class="live-team-name">{{ lookupTeam(m.homeTeamId).name }}</p>
-            <p class="live-team-score">{{ m.aWins }}</p>
-          </div>
-
-          <span class="live-vs" aria-hidden="true">vs</span>
-
-          <!-- Away team -->
-          <div class="live-team" :class="{ 'live-team-winning': m.bWins > m.aWins, 'live-team-losing': m.bWins < m.aWins }">
-            <div class="live-avatar" :style="{ background: `linear-gradient(135deg, ${lookupTeam(m.awayTeamId).avatarColor})` }">
-              <img v-if="lookupTeam(m.awayTeamId).avatarUrl" :src="lookupTeam(m.awayTeamId).avatarUrl" class="avatar-image" alt="" />
-              <span v-else>{{ lookupTeam(m.awayTeamId).ownerInitials }}</span>
-            </div>
-            <p class="live-team-name">{{ lookupTeam(m.awayTeamId).name }}</p>
-            <p class="live-team-score">{{ m.bWins }}</p>
-          </div>
-
-          <!-- Win prob chip -->
-          <span
-            class="live-prob"
-            :style="{ color: probColorForRow(m), borderColor: probBorderForRow(m), background: probBgForRow(m) }"
-          >
-            {{ probSideLabelForRow(m) }} {{ probDisplayValueForRow(m) }}%
-          </span>
-        </li>
-      </ul>
-    </section>
-
-    <!-- Standings break — agate-section divider. -->
-    <EditorialBreak kicker="The board" tone="magenta" />
+    <!-- Silent hairline before standings. -->
+    <EditorialBreak size="small" tone="magenta" />
 
     <!-- ─────────────────────────────────────────────────────────────
          5. STANDINGS — Compact (top 6 playoff line)
@@ -817,10 +740,9 @@
       <p class="ppw-caption">Tap a team in the standings above to see their full weekly trajectory.</p>
     </section>
 
-    <!-- Season-arc break — shifts the cadence from weekly back to
-         cumulative. Feature-size break since this is a major mode
-         shift in the page. -->
-    <EditorialBreak kicker="The season so far" size="feature" tone="gold" />
+    <!-- Silent hairline. The season-arc section's own header carries
+         the label. -->
+    <EditorialBreak size="small" tone="gold" />
 
     <!-- ─────────────────────────────────────────────────────────────
          7. SEASON ARCS — five accumulating storylines.
@@ -1575,104 +1497,16 @@ function onMascotError(ev: Event) {
    markup only sees one kind of row.
 ───────────────────────────────────────────────────────────────── */
 
-interface LiveMatchupRow {
-  id: string
-  homeTeamId: string
-  awayTeamId: string
-  status: 'live' | 'coasting' | 'final' | 'upcoming'
-  aWins: number
-  bWins: number
-  homeWinProb: number
-  awayWinProb: number
-  isSpotlight: boolean
-}
-
-/**
- * Rough win-probability estimate from the current cat-record gap.
- * Each cat lead is worth ~8 percentage points, anchored to 50/50, then
- * clamped to [10, 90] so a 6-0 lead with 5 cats still in play doesn't
- * read "100% — game over". Good enough for the home page chip; the
- * Matchups page can swap in a calibrated number later.
- */
-function estimateWinProb(homeWins: number, awayWins: number): number {
-  const gap = homeWins - awayWins
-  const raw = 50 + gap * 8
-  return Math.max(10, Math.min(90, Math.round(raw)))
-}
-
-const liveMatchupRows = computed<LiveMatchupRow[]>(() => {
-  const live = liveData.value?.matchupsCurrentWeek
-  if (live && live.length > 0) {
-    // First matchup in the feed gets the "matchup of the week" spotlight
-    // — there's no equivalent of `matchupOfTheWeekId` in live data yet,
-    // so we pick the first row as a sensible default. The fixture path
-    // keeps its hand-authored spotlight.
-    return live.map((m, idx) => {
-      const homeProb = estimateWinProb(m.homeCatWins, m.awayCatWins)
-      return {
-        id: m.id,
-        homeTeamId: m.homeTeamId,
-        awayTeamId: m.awayTeamId,
-        status: m.status,
-        aWins: m.homeCatWins,
-        bWins: m.awayCatWins,
-        homeWinProb: homeProb,
-        awayWinProb: 100 - homeProb,
-        isSpotlight: idx === 0,
-      }
-    })
-  }
-  // Fixture fallback — preserve existing spotlight behavior.
-  return matchupsWeek8.map((m) => ({
-    id: m.id,
-    homeTeamId: m.homeTeamId,
-    awayTeamId: m.awayTeamId,
-    status: m.status,
-    aWins: m.aWins,
-    bWins: m.bWins,
-    homeWinProb: m.homeWinProb,
-    awayWinProb: m.awayWinProb,
-    isSpotlight: m.id === matchupOfTheWeekId,
-  }))
-})
-
-/* ─────────────────────────────────────────────────────────────────
-   WIN-PROB CHIP HELPERS (mirror football home, normalized-row aware).
-───────────────────────────────────────────────────────────────── */
-
-function probFavorsHomeRow(m: LiveMatchupRow) {
-  return m.homeWinProb >= 50
-}
-function probDisplayValueForRow(m: LiveMatchupRow) {
-  return probFavorsHomeRow(m) ? m.homeWinProb : m.awayWinProb
-}
-function probSideLabelForRow(m: LiveMatchupRow) {
-  // Show the favored team's initials (e.g. "BT", "TQ"), not the raw
-  // team id. Yahoo team_keys look like "458.L.21788.T.4" which would
-  // render as a wall of text on the chip; the fixture used 2-letter
-  // slugs like "bt" which happened to read fine. Use the lookup so
-  // both modes produce a short, readable identifier.
-  const favoredId = probFavorsHomeRow(m) ? m.homeTeamId : m.awayTeamId
-  return (lookupTeam(favoredId).ownerInitials || '').toUpperCase()
-}
-function probColorForRow(m: LiveMatchupRow) {
-  const favored = probFavorsHomeRow(m) ? lookupTeam(m.homeTeamId) : lookupTeam(m.awayTeamId)
-  return accentFor(favored)
-}
-function probBorderForRow(m: LiveMatchupRow) {
-  return probColorForRow(m).replace(/\)$/, ' / 0.36)')
-}
-function probBgForRow(m: LiveMatchupRow) {
-  return probColorForRow(m).replace(/\)$/, ' / 0.10)')
-}
+/* Live scoreboard helpers were removed with the "What's happening now"
+   section — that table duplicated /matchups exactly. If a future
+   "today's pulse" treatment is wanted (1-sentence editorial summary
+   instead of a 6-row table), reach into liveData.matchupsCurrentWeek
+   directly. */
 
 /* ─────────────────────────────────────────────────────────────────
    NAV
 ───────────────────────────────────────────────────────────────── */
 
-function goToMatchups() {
-  router.push('/demo-categories/matchups')
-}
 function goToPowerRankings() {
   router.push('/demo-categories/power-rankings')
 }
@@ -2658,213 +2492,6 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   .story-mascot-corner-bleed { width: 180px; height: 180px; right: -50px; bottom: -40px; opacity: 0.55; }
   .story-page-ace .story-content,
   .story-page-breakout .story-content { margin-top: 80px; }
-}
-
-/* ─── 4. LIVE ─────────────────────────────────────────────────── */
-.live-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 6px;
-}
-.live-eyebrow-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent-up);
-  display: inline-block;
-}
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes home-pulse {
-    0%, 60%, 100% { opacity: 1; transform: scale(1); }
-    30% { opacity: 0.4; transform: scale(1.5); }
-  }
-  .live-eyebrow-dot { animation: home-pulse 2.4s infinite cubic-bezier(0.22, 1, 0.36, 1); }
-  .live-status-dot { animation: home-pulse 2.4s infinite cubic-bezier(0.22, 1, 0.36, 1); }
-}
-.live-headline {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: clamp(1.35rem, 2.4vw, 1.6rem);
-  line-height: 1.05;
-  letter-spacing: -0.005em;
-  color: var(--ink-1);
-  margin: 0;
-}
-.live-list {
-  /* Scoreboard table — no row gap; the bottom-rule on each row
-     does the separation. */
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-top: 1px solid oklch(0.16 0.015 90);
-}
-.live-row {
-  /* Scoreboard row — no card. Reads as agate-type tabular data.
-     A thin bottom rule replaces the rounded container so the
-     section feels like a sports-section back page, not a list of
-     cards. */
-  position: relative;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 4px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid oklch(0.16 0.015 90);
-  border-radius: 0;
-  cursor: pointer;
-  transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
-  overflow: hidden;
-}
-.live-row:hover { background: oklch(0.10 0.015 90); }
-.live-row:active {
-  transform: scale(0.995);
-  transition-duration: 100ms;
-}
-.live-row:focus-visible {
-  outline: 2px solid var(--accent-tertiary);
-  outline-offset: 2px;
-}
-.live-row:last-child { border-bottom: none; }
-.live-row-spotlight {
-  background: linear-gradient(
-    90deg,
-    oklch(0.70 0.27 350 / 0.10),
-    transparent 40%
-  );
-}
-.live-spotlight-edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  background: var(--accent-secondary);
-}
-.live-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 4px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-  justify-self: start;
-}
-.live-status-live {
-  color: var(--accent-down);
-  background: oklch(0.65 0.20 25 / 0.10);
-  border: 1px solid oklch(0.65 0.20 25 / 0.30);
-}
-.live-status-coasting {
-  color: var(--accent-primary);
-  background: oklch(0.78 0.18 92 / 0.08);
-  border: 1px solid oklch(0.78 0.18 92 / 0.30);
-}
-.live-status-final {
-  color: var(--accent-up);
-  background: oklch(0.74 0.18 145 / 0.10);
-  border: 1px solid oklch(0.74 0.18 145 / 0.30);
-}
-.live-status-upcoming {
-  color: var(--ink-3);
-  background: oklch(0.16 0.015 90);
-  border: 1px solid oklch(0.22 0.015 90);
-}
-.live-status-dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--accent-down);
-  display: inline-block;
-}
-.live-team {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.live-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 0.7rem;
-  color: oklch(0.12 0.012 90);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.live-team-name {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 0.92rem;
-  color: var(--ink-2);
-  margin: 0;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.live-team-score {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 1rem;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  margin: 0;
-  flex-shrink: 0;
-}
-.live-team-winning .live-team-name,
-.live-team-winning .live-team-score { color: var(--ink-1); font-weight: 900; }
-.live-team-losing .live-team-name,
-.live-team-losing .live-team-score { color: var(--ink-3); }
-.live-vs {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.live-prob {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
-  padding: 4px 9px;
-  border-radius: 999px;
-  border: 1px solid oklch(0.22 0.015 90);
-  background: oklch(0.16 0.015 90);
-  color: var(--ink-2);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  justify-self: end;
-}
-
-@media (max-width: 720px) {
-  .live-row {
-    grid-template-columns: 62px minmax(0, 1fr);
-    grid-template-areas:
-      "status home"
-      "status away"
-      "prob   prob";
-    row-gap: 6px;
-    padding: 10px 12px;
-  }
-  .live-row > .live-status { grid-area: status; align-self: center; }
-  .live-row > .live-team:first-of-type { grid-area: home; }
-  .live-row > .live-team:last-of-type { grid-area: away; }
-  .live-row > .live-vs { display: none; }
-  .live-row > .live-prob { grid-area: prob; justify-self: start; }
 }
 
 /* ─── 5. STANDINGS ────────────────────────────────────────────── */
