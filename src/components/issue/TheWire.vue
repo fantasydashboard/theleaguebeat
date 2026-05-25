@@ -1073,26 +1073,25 @@ onMounted(() => onTrackScroll())
    cards make the eye wander; a lead anchors the section.
 ───────────────────────────────────────────────────────────────── */
 .wire-card-lead {
-  /* Wider min-width so the lead card occupies roughly 1.5x a regular
-     card. Carousel scroll-snap still works because we're widening the
-     same .wire-card flex item. */
-  min-width: clamp(340px, 42vw, 460px);
-  max-width: clamp(340px, 42vw, 460px);
+  /* Lead card is meaningfully larger than the 320px regular card,
+     but capped at 380px so a typical viewport still shows the next
+     card alongside it. Magazine "lead" without dominating. */
+  flex: 0 0 clamp(340px, 30vw, 380px);
 }
 .wire-card-lead .wire-card-headline {
-  font-size: clamp(1.45rem, 2.6vw, 1.85rem);
-  line-height: 1.10;
+  font-size: clamp(1.30rem, 2.2vw, 1.55rem);
+  line-height: 1.12;
 }
 .wire-card-lead .wire-card-body {
-  font-size: 0.96rem;
+  font-size: 0.93rem;
   line-height: 1.45;
 }
 .wire-card-lead .wire-card-player-headshot {
-  width: 72px;
-  height: 72px;
+  width: 60px;
+  height: 60px;
 }
 .wire-card-lead .wire-card-player-name {
-  font-size: 1.05rem;
+  font-size: 1.0rem;
 }
 
 .wire-card-soon {

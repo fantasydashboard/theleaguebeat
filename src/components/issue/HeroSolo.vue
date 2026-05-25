@@ -64,6 +64,12 @@
             </span>
           </span>
         </div>
+
+        <!-- Byline sits IN the copy column, right under the meta.
+             Magazine convention: byline anchors the story, not a
+             separate footer. Compact, no "THE BEAT" tag (the
+             masthead already says "The League Beat"). -->
+        <p class="hero-byline-inline">{{ byline }}</p>
       </div>
 
       <aside
@@ -81,26 +87,23 @@
       </aside>
     </div>
 
-    <footer class="hero-foot">
-      <p class="hero-byline">
-        <span class="hero-byline-tag">THE BEAT</span>
-        <span>{{ byline }}</span>
-      </p>
-      <button
-        v-if="shareable"
-        type="button"
-        class="hero-share"
-        :aria-label="`Share ${headline} to your league chat`"
-        @click="emit('share', story)"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-          <polyline points="16 6 12 2 8 6"/>
-          <line x1="12" y1="2" x2="12" y2="15"/>
-        </svg>
-        Share
-      </button>
-    </footer>
+    <!-- Share button absolutely positioned at the top-right, small
+         and unobtrusive. Per-story share is meaningful but doesn't
+         need a full footer row. -->
+    <button
+      v-if="shareable"
+      type="button"
+      class="hero-share-floating"
+      :aria-label="`Share ${headline} to your league chat`"
+      @click="emit('share', story)"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <polyline points="16 6 12 2 8 6"/>
+        <line x1="12" y1="2" x2="12" y2="15"/>
+      </svg>
+      Share
+    </button>
   </section>
 </template>
 
@@ -235,7 +238,17 @@ function eyebrowFor(type: string): string {
   }
 }
 
-const headline = computed(() => headlineFor(props.story.type, team.value.name, props.story.context))
+/** Prefer the detector-set headline when present. Detectors for
+ *  player nights, trades, IL events, and snapshot deltas ship a
+ *  rich subject-specific headline ("Jordan Walker hit three.")
+ *  that beats the team-centric fallback ("X is the story this
+ *  week.") for those story types. */
+const headline = computed(() => {
+  const ctx = props.story.context as Record<string, unknown>
+  const explicit = typeof ctx.headline === 'string' ? ctx.headline.trim() : ''
+  if (explicit) return explicit
+  return headlineFor(props.story.type, team.value.name, ctx)
+})
 
 function headlineFor(type: string, name: string, ctx: Record<string, unknown>): string {
   const safeName = name || 'This team'
@@ -678,53 +691,40 @@ const focusColors = computed<string[]>(() => {
 .hero-meta-delta-up   { color: oklch(0.74 0.18 145); }
 .hero-meta-delta-down { color: oklch(0.65 0.20 25); }
 
-/* ── Footer: byline + share ───────────────────────────────── */
-/* Full-width footer below the grid — byline left, share right. */
-.hero-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding-top: 28px;
-  margin-top: 32px;
-  border-top: 1px solid oklch(0.18 0.015 90);
-  position: relative;
-  z-index: 1;
-}
-
-.hero-byline {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
+/* ── Byline (inline, under the meta) ──────────────────────── */
+/* Sits in the copy column right under .hero-meta. No prefix tag
+   (the masthead already establishes the publication slot). Just
+   "Filed N min ago" treated as the byline. */
+.hero-byline-inline {
+  margin: 14px 0 0;
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
-  font-size: 0.74rem;
-  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: oklch(0.55 0.010 90);
-}
-.hero-byline-tag {
-  background: oklch(0.14 0.018 90);
-  color: oklch(0.78 0.008 90);
-  padding: 3px 8px;
-  border-radius: 4px;
+  color: oklch(0.50 0.010 90);
 }
 
-.hero-share {
+/* ── Floating share (top-right, unobtrusive) ──────────────── */
+.hero-share-floating {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 4;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
+  gap: 6px;
+  padding: 7px 13px;
   border-radius: 999px;
-  background: transparent;
-  border: 1px solid oklch(0.32 0.012 90);
-  color: oklch(0.97 0.005 90);
+  background: oklch(0.10 0.010 90 / 0.75);
+  border: 1px solid oklch(0.30 0.010 90 / 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: oklch(0.95 0.005 90);
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 800;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
   transition:
@@ -732,12 +732,15 @@ const focusColors = computed<string[]>(() => {
     background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
-  .hero-share:hover {
-    border-color: oklch(0.55 0.010 90);
-    background: oklch(0.14 0.018 90);
+  .hero-share-floating:hover {
+    border-color: oklch(0.60 0.010 90);
+    background: oklch(0.14 0.018 90 / 0.85);
   }
 }
-.hero-share:active { transform: scale(0.97); }
+.hero-share-floating:active { transform: scale(0.97); }
+@media (max-width: 720px) {
+  .hero-share-floating { top: 16px; right: 16px; padding: 6px 11px; font-size: 0.70rem; }
+}
 
 @media (max-width: 960px) {
   /* On narrower screens the bleeding image gets cramped against the

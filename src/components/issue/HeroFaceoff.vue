@@ -35,52 +35,46 @@
       <div class="hero-vignette"></div>
     </div>
 
-    <!-- Combined meta pill — image-led mode only. Consolidates the
-         antagonist photo caption + byline + share button into one
-         bottom-right pill anchored to the image area. Cleaner than
-         having the antagonist caption AND a separate full-width
-         footer fighting the image for space. -->
-    <div v-if="hasImage" class="hero-image-meta" aria-label="Story meta">
-      <!-- Antagonist segment (only when one exists) -->
-      <template v-if="antagonist">
-        <span class="hero-image-meta-vs">VS</span>
-        <div
-          class="hero-image-meta-avatar"
-          :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }"
-        >
-          <img
-            v-if="antagonist.avatarUrl && !antagonistImgErrored"
-            :src="antagonist.avatarUrl"
-            class="hero-image-meta-avatar-img"
-            alt=""
-            @error="antagonistImgErrored = true"
-          />
-          <span v-else>{{ antagonist.ownerInitials }}</span>
-        </div>
-        <span class="hero-image-meta-name">{{ antagonist.name }}</span>
-        <span class="hero-image-meta-rank">#{{ antagonistRank }}</span>
-        <span class="hero-image-meta-sep" aria-hidden="true">·</span>
-      </template>
-
-      <!-- Byline -->
-      <span class="hero-image-meta-byline">{{ bylineCompact }}</span>
-
-      <!-- Share -->
-      <button
-        v-if="shareable"
-        type="button"
-        class="hero-image-meta-share"
-        :aria-label="`Share ${headline} to your league chat`"
-        @click="emit('share', story)"
+    <!-- Antagonist pill — image-led mode only. Carries only the
+         antagonist photo + name + rank (the "vs" relationship to
+         the protagonist). Byline + share moved to the copy column /
+         floating top-right so the image area stays uncluttered. -->
+    <div v-if="hasImage && antagonist" class="hero-image-meta" aria-label="Antagonist">
+      <span class="hero-image-meta-vs">VS</span>
+      <div
+        class="hero-image-meta-avatar"
+        :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-          <polyline points="16 6 12 2 8 6"/>
-          <line x1="12" y1="2" x2="12" y2="15"/>
-        </svg>
-        Share
-      </button>
+        <img
+          v-if="antagonist.avatarUrl && !antagonistImgErrored"
+          :src="antagonist.avatarUrl"
+          class="hero-image-meta-avatar-img"
+          alt=""
+          @error="antagonistImgErrored = true"
+        />
+        <span v-else>{{ antagonist.ownerInitials }}</span>
+      </div>
+      <span class="hero-image-meta-name">{{ antagonist.name }}</span>
+      <span class="hero-image-meta-rank">#{{ antagonistRank }}</span>
     </div>
+
+    <!-- Floating share — consistent with HeroSolo. Small, glassy,
+         top-right of the section. Per-story share without a footer
+         row. -->
+    <button
+      v-if="shareable"
+      type="button"
+      class="hero-share-floating"
+      :aria-label="`Share ${headline} to your league chat`"
+      @click="emit('share', story)"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <polyline points="16 6 12 2 8 6"/>
+        <line x1="12" y1="2" x2="12" y2="15"/>
+      </svg>
+      Share
+    </button>
 
     <div class="hero-grid" :class="{ 'hero-grid-no-image': !hasImage }">
       <header class="hero-head">
@@ -94,6 +88,9 @@
         </h1>
 
         <p v-if="body" class="hero-body">{{ body }}</p>
+
+        <!-- Byline inline under copy. Matches HeroSolo. -->
+        <p class="hero-byline-inline">{{ byline }}</p>
       </header>
 
       <!-- Rank-trajectory sparkline. Only renders in no-image mode —
@@ -110,10 +107,10 @@
       </aside>
     </div>
 
-    <!-- Footer: byline + share. Only renders in no-image / type-led
-         mode. In image-led mode the byline + share are consolidated
-         into the .hero-image-meta pill that sits over the image. -->
-    <footer v-if="!hasImage" class="hero-foot">
+    <!-- Footer kept as a placeholder so existing CSS layout doesn't
+         break. Byline moved inline (in the copy column) and share
+         to a floating button. -->
+    <footer v-if="false" class="hero-foot">
       <p class="hero-byline">
         <span class="hero-byline-tag">THE BEAT</span>
         <span>{{ byline }}</span>
@@ -784,6 +781,52 @@ const focusColors = computed<string[]>(() => {
   }
 }
 .hero-share:active { transform: scale(0.97); }
+
+/* ── Inline byline (in copy column) + floating share ──────── */
+.hero-byline-inline {
+  margin: 14px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.50 0.010 90);
+}
+.hero-share-floating {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: oklch(0.10 0.010 90 / 0.75);
+  border: 1px solid oklch(0.30 0.010 90 / 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: oklch(0.95 0.005 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .hero-share-floating:hover {
+    border-color: oklch(0.60 0.010 90);
+    background: oklch(0.14 0.018 90 / 0.85);
+  }
+}
+.hero-share-floating:active { transform: scale(0.97); }
+@media (max-width: 720px) {
+  .hero-share-floating { top: 16px; right: 16px; padding: 6px 11px; font-size: 0.70rem; }
+}
 
 @media (max-width: 960px) {
   /* Stack the type + sparkline so the headline gets the full width
