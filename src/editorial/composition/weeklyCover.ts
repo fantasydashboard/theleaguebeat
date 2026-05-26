@@ -49,10 +49,10 @@ export interface WeeklyCover {
  * pipeline needed.
  */
 export function composeWeeklyCover(
-  stories: SelectedStory[],
+  stories: SelectedStory[] | undefined | null,
   opts?: { currentWeek?: number },
 ): WeeklyCover | null {
-  if (stories.length === 0) return null
+  if (!stories || !Array.isArray(stories) || stories.length === 0) return null
 
   const ranked = stories
     .slice(0, 12)  // wider net than the hero (which considers 6)

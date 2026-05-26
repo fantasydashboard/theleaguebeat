@@ -944,25 +944,34 @@ function resolveCoverTone(storyType: string): 'magenta' | 'gold' | 'teal' | 'up'
 /** Snapshot the current cover + record the user's claim. Runs
  *  whenever issueData becomes available (initial mount + every
  *  data refresh). Idempotent — repeat calls in the same week
- *  no-op via the storage layer. */
+ *  no-op via the storage layer. Wrapped in try/catch since this
+ *  is retention plumbing, not page-rendering — a storage failure
+ *  must NEVER blank the page. */
 watch(
   () => issueData.value?.leagueId,
   (leagueId) => {
-    if (!leagueId) return
-    const data = issueData.value
-    if (!data) return
-    const week = data.currentWeek
-    const season = data.currentSeason
-    if (!week || !season) return
+    try {
+      if (!leagueId) return
+      const data = issueData.value
+      if (!data) return
+      const week = data.currentWeek
+      const season = data.currentSeason
+      if (!week || !season) return
 
-    const cover = composeWeeklyCover(selectedStories.value, { currentWeek: week })
-    if (cover) {
-      const tone = resolveCoverTone(cover.story.type)
-      snapshotCover(leagueId, cover, week, season, tone)
+      const stories = selectedStories.value
+      if (!stories || !Array.isArray(stories)) return
+
+      const cover = composeWeeklyCover(stories, { currentWeek: week })
+      if (cover) {
+        const tone = resolveCoverTone(cover.story.type)
+        snapshotCover(leagueId, cover, week, season, tone)
+      }
+      // Claim regardless of whether a real cover composed — visiting
+      // during the issue's week counts even on a quiet-cover week.
+      claimIssue(leagueId, week, season)
+    } catch (err) {
+      console.warn('[cover-archive] snapshot/claim failed:', err)
     }
-    // Claim regardless of whether a real cover composed — visiting
-    // during the issue's week counts even on a quiet-cover week.
-    claimIssue(leagueId, week, season)
   },
   { immediate: true },
 )
