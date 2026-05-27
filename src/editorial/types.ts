@@ -122,6 +122,13 @@ export interface CategoryLeagueDataSeasonHistory {
   championRecord: string
   runnerUpTeamId: string
   basementTeamId: string
+  /** Denormalized display fields. Past-season team keys (Yahoo mints a
+   *  new key per season) won't resolve against the current league's
+   *  team list, so we carry the name + logo on the record itself. */
+  championName?: string
+  championLogo?: string
+  runnerUpName?: string
+  basementName?: string
 }
 
 /** Per-team aggregated career stats — for the History page. */

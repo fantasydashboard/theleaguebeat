@@ -160,6 +160,11 @@ export interface AdapterOptions {
   /** Supabase `leagues.id` UUID — enables daily-snapshot delta
    *  detection. Skipped when omitted. */
   leagueRowId?: string
+  /** Platform league keys for the SAME league's prior seasons, supplied
+   *  by the view from the user's connected leagues (matched by name +
+   *  platform + sport). Used to build real multi-season history when
+   *  Yahoo's `renew` chain is empty (a fresh league each year). */
+  priorSeasonKeys?: string[]
 }
 
 export async function yahooLeagueToCategoryData(
@@ -172,9 +177,14 @@ export async function yahooLeagueToCategoryData(
   // Cache key includes the signed-in guid so two users on the same
   // device (rare, but possible) don't see each other's "my team" tint.
   // No guid → cache key matches the league key (single-user norm).
-  const cacheToken = opts?.userIdentity?.yahooGuid
+  // Include the connected prior-season keys in the cache token so that
+  // changing the history set busts a warm entry (otherwise the cache
+  // serves stale data that ignores the new keys).
+  const priorHash = (opts?.priorSeasonKeys ?? []).slice().sort().join(',')
+  const baseToken = opts?.userIdentity?.yahooGuid
     ? `${leagueKey}::${opts.userIdentity.yahooGuid}`
     : leagueKey
+  const cacheToken = priorHash ? `${baseToken}::ph:${priorHash}` : baseToken
   const existing = adapterCache.get(cacheToken)
   if (existing) return existing
   const promise = buildYahooLeagueData(leagueKey, opts).catch((err) => {
@@ -330,8 +340,9 @@ async function buildYahooLeagueData(
     isRoto,
   )
 
-  // Multi-season history walk via `renew` chain.
-  const seasonHistory = await buildSeasonHistory(metadata, leagueKey)
+  // Multi-season history — prefer the user's connected prior seasons,
+  // fall back to the `renew` chain.
+  const seasonHistory = await buildSeasonHistory(metadata, leagueKey, opts?.priorSeasonKeys)
 
   // Career stats — current season + walked history.
   const teamCareerStats = buildTeamCareerStats(
@@ -1073,56 +1084,94 @@ const MAX_HISTORY_DEPTH = 5
 async function buildSeasonHistory(
   currentMetadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>,
   currentLeagueKey: string,
+  priorSeasonKeys?: string[],
 ): Promise<CategoryLeagueDataSeasonHistory[]> {
   const out: CategoryLeagueDataSeasonHistory[] = []
-  let renew = currentMetadata.renew
-  let depth = 0
   const seen = new Set<string>([currentLeagueKey])
 
-  while (renew && renew.includes('_') && depth < MAX_HISTORY_DEPTH) {
-    const [gameKey, leagueId] = renew.split('_')
-    const prevKey = `${gameKey}.l.${leagueId}`
-    if (seen.has(prevKey)) break
-    seen.add(prevKey)
-
-    let prevStandings: any[]
-    let prevMetadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
+  /** Fetch one past season's standings → a history record (champion /
+   *  runner-up / basement) with names + logos denormalized. */
+  const recordFor = async (
+    key: string,
+  ): Promise<CategoryLeagueDataSeasonHistory | null> => {
+    let meta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
+    let standings: any[]
     try {
-      prevMetadata = await yahooService.getLeagueMetadata(prevKey)
-      prevStandings = await yahooService.getStandings(prevKey)
+      meta = await yahooService.getLeagueMetadata(key)
+      standings = await yahooService.getStandings(key)
     } catch (err) {
-      console.warn(`[yahooAdapter] history walk stopped at ${prevKey}:`, err)
-      break
+      console.warn(`[yahooAdapter] season-history fetch failed for ${key}:`, err)
+      return null
     }
-    if (!prevStandings || prevStandings.length === 0) break
+    if (!standings || standings.length === 0) return null
 
     // Sort by rank ascending (1 = first place).
-    const sorted = [...prevStandings].sort((a, b) => {
+    const sorted = [...standings].sort((a, b) => {
       const ar = a.rank ?? 999
       const br = b.rank ?? 999
       if (ar !== br) return ar - br
       return (b.wins ?? 0) - (a.wins ?? 0)
     })
-
     const champion = sorted[0]
     const runnerUp = sorted[1] ?? sorted[0]
     const basement = sorted[sorted.length - 1]
-    if (!champion || !basement) break
+    if (!champion || !basement) return null
 
-    const year = parseInt(prevMetadata.season || '', 10) || (parseInt(currentMetadata.season || '', 10) || new Date().getFullYear()) - depth - 1
+    const year =
+      parseInt(meta.season || '', 10) ||
+      parseInt(currentMetadata.season || '', 10) ||
+      new Date().getFullYear()
 
-    out.push({
+    return {
       year,
       championTeamId: champion.team_key,
       championRecord: recordString(champion),
       runnerUpTeamId: runnerUp.team_key,
       basementTeamId: basement.team_key,
-    })
-
-    renew = prevMetadata.renew
-    depth++
+      championName: champion.name,
+      championLogo: champion.logo_url || undefined,
+      runnerUpName: runnerUp.name,
+      basementName: basement.name,
+    }
   }
 
+  // Preferred: the user's connected prior-season leagues (matched by
+  // name in the view). Works even when Yahoo's renew chain is empty —
+  // the common case, since Yahoo mints a fresh league each year.
+  if (priorSeasonKeys && priorSeasonKeys.length > 0) {
+    for (const key of priorSeasonKeys) {
+      if (seen.has(key)) continue
+      seen.add(key)
+      const rec = await recordFor(key)
+      if (rec) out.push(rec)
+    }
+  } else {
+    // Fallback: walk the `renew` chain (only when each season was
+    // renewed from the prior one in Yahoo).
+    let renew = currentMetadata.renew
+    let depth = 0
+    while (renew && renew.includes('_') && depth < MAX_HISTORY_DEPTH) {
+      const [gameKey, leagueId] = renew.split('_')
+      const prevKey = `${gameKey}.l.${leagueId}`
+      if (seen.has(prevKey)) break
+      seen.add(prevKey)
+      let prevMeta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
+      try {
+        prevMeta = await yahooService.getLeagueMetadata(prevKey)
+      } catch (err) {
+        console.warn(`[yahooAdapter] history walk stopped at ${prevKey}:`, err)
+        break
+      }
+      const rec = await recordFor(prevKey)
+      if (!rec) break
+      out.push(rec)
+      renew = prevMeta.renew
+      depth++
+    }
+  }
+
+  // Newest → oldest for display.
+  out.sort((a, b) => b.year - a.year)
   return out
 }
 

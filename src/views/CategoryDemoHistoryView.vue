@@ -14,11 +14,11 @@
     </div>
     <LiveLoadError v-else-if="liveError" :message="liveError" />
     <div
-      v-else-if="liveData && (liveData.seasonHistory?.length ?? 0) < 2"
+      v-else-if="liveData && displaySeasonCount <= 1"
       class="live-banner live-banner-info"
       role="status"
     >
-      This league is in its first season. History will fill in over the years.
+      Season one, in progress. The record book opens when the first champion is crowned.
     </div>
 
     <!-- ─────────────────────────────────────────────────────────────
@@ -31,13 +31,12 @@
           League history
         </p>
         <h1 id="page-headline" class="page-headline">{{ pageHeadline }}</h1>
-        <p class="page-sub">Champions, rivalries, awards, and the all-time ranking.</p>
+        <p class="page-sub">Champions, rivalries, and the record book.</p>
       </div>
       <ul class="page-context" role="list">
         <li class="page-context-pill"><span class="page-context-num">{{ pageContext.seasons }}</span><span class="page-context-lbl">Seasons</span></li>
         <li class="page-context-pill"><span class="page-context-num">{{ pageContext.champions }}</span><span class="page-context-lbl">Champions</span></li>
         <li class="page-context-pill"><span class="page-context-num">{{ pageContext.teamsCount }}</span><span class="page-context-lbl">Teams</span></li>
-        <li class="page-context-pill"><span class="page-context-num">{{ totalCatsWonLabel }}</span><span class="page-context-lbl">Cats won</span></li>
       </ul>
     </header>
 
@@ -47,39 +46,72 @@
     <section class="champs" aria-labelledby="champs-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-gold" id="champs-heading">Hall of champions</p>
-        <h2 class="section-headline">Five trophies.</h2>
+        <h2 class="section-headline">{{ trophiesHeadline }}</h2>
       </header>
 
       <div class="champs-rail" role="list">
+        <!-- Current, undecided season — the live "chase" card. -->
+        <article
+          v-if="currentSeasonCard"
+          class="champ-card champ-card-live"
+          role="listitem"
+          :aria-label="`${currentSeasonCard.year} season in progress, ${getTeam(currentSeasonCard.leaderId).name} leads`"
+        >
+          <p class="champ-year">{{ currentSeasonCard.year }}</p>
+          <p class="champ-era champ-era-live">In progress</p>
+
+          <div
+            class="champ-avatar"
+            :style="{ background: `linear-gradient(135deg, ${getTeam(currentSeasonCard.leaderId).avatarColor})` }"
+          >
+            <img v-if="getTeam(currentSeasonCard.leaderId).avatarUrl" :src="getTeam(currentSeasonCard.leaderId).avatarUrl" class="champ-avatar-img" alt="" />
+            <span v-else>{{ getTeam(currentSeasonCard.leaderId).ownerInitials }}</span>
+          </div>
+
+          <p class="champ-team">{{ getTeam(currentSeasonCard.leaderId).name }}</p>
+          <p class="champ-score">Leads the chase through Week {{ currentSeasonCard.week }}.</p>
+
+          <footer class="champ-foot">
+            <p class="champ-foot-row">
+              <span class="champ-foot-lbl">Chasing</span>
+              <span class="champ-foot-val">{{ getTeam(currentSeasonCard.secondId).name }}</span>
+            </p>
+            <p class="champ-foot-row">
+              <span class="champ-foot-lbl">Crown</span>
+              <span class="champ-foot-val">Undecided</span>
+            </p>
+          </footer>
+        </article>
+
         <article
           v-for="rec in seasonsNewestFirst"
           :key="rec.year"
           class="champ-card"
           role="listitem"
-          :aria-label="`${rec.year} champion ${getTeam(rec.championTeamId).name}`"
+          :aria-label="`${rec.year} champion ${champInfo(rec).name}`"
         >
           <p class="champ-year">{{ rec.year }}</p>
-          <p class="champ-era">{{ eraLabelFor(rec.year) ?? rec.era }}</p>
+          <p class="champ-era">{{ champEra(rec) }}</p>
 
           <div
             class="champ-avatar"
-            :style="{ background: `linear-gradient(135deg, ${getTeam(rec.championTeamId).avatarColor})` }"
+            :style="{ background: `linear-gradient(135deg, ${champInfo(rec).color})` }"
           >
-            <img v-if="getTeam(rec.championTeamId).avatarUrl" :src="getTeam(rec.championTeamId).avatarUrl" class="champ-avatar-img" alt="" />
-            <span v-else>{{ getTeam(rec.championTeamId).ownerInitials }}</span>
+            <img v-if="champInfo(rec).logo" :src="champInfo(rec).logo" class="champ-avatar-img" alt="" />
+            <span v-else>{{ champInfo(rec).initials }}</span>
           </div>
 
-          <p class="champ-team">{{ getTeam(rec.championTeamId).name }}</p>
-          <p class="champ-score">{{ yearHeadlineFor(rec.year) ?? `Won championship ${rec.championRecord} in cats.` }}</p>
+          <p class="champ-team">{{ champInfo(rec).name }}</p>
+          <p class="champ-score">{{ champLine(rec) }}</p>
 
           <footer class="champ-foot">
             <p class="champ-foot-row">
               <span class="champ-foot-lbl">Runner-up</span>
-              <span class="champ-foot-val">{{ getTeam(rec.runnerUpTeamId).name }}</span>
+              <span class="champ-foot-val">{{ runnerUpInfo(rec).name }}</span>
             </p>
             <p class="champ-foot-row">
               <span class="champ-foot-lbl">Basement</span>
-              <span class="champ-foot-val">{{ getTeam(rec.basementTeamId).name }}</span>
+              <span class="champ-foot-val">{{ basementInfo(rec).name }}</span>
             </p>
           </footer>
         </article>
@@ -792,6 +824,73 @@ const strictLeagueRecord = computed(() => {
 })
 const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
 
+/* ─── Multi-season aggregation from the user's connected leagues ────
+   Yahoo (and ESPN/Sleeper) register each season as a separate league.
+   We match the current league's siblings by name + platform + sport,
+   so a 3-year-old league shows 3 seasons even when the platform's
+   renew chain is empty. */
+const siblingLeagues = computed(() => {
+  const cur = strictLeagueRecord.value
+  if (!cur) return []
+  return leaguesStore.leagues.filter(
+    (l) =>
+      l.platform === cur.platform &&
+      l.sport === cur.sport &&
+      l.league_name === cur.league_name,
+  )
+})
+
+/** Connected prior-season league keys (one per season, excluding the
+ *  current season). Passed to the adapter to build real history. */
+const priorSeasonKeys = computed<string[]>(() => {
+  const cur = strictLeagueRecord.value
+  if (!cur) return []
+  const bySeason = new Map<string, string>()
+  for (const l of siblingLeagues.value) {
+    if (l.id === cur.id || String(l.season) === String(cur.season)) continue
+    if (!bySeason.has(String(l.season))) {
+      bySeason.set(String(l.season), l.platform_league_id)
+    }
+  }
+  return [...bySeason.values()]
+})
+
+/** Distinct seasons this league has existed (connected), including the
+ *  current one. Drives the page-head count + adaptive sparse states. */
+const liveSeasonCount = computed<number>(() => {
+  const cur = strictLeagueRecord.value
+  if (!cur) return 0
+  const seasons = new Set(siblingLeagues.value.map((l) => String(l.season)))
+  seasons.add(String(cur.season))
+  return seasons.size
+})
+
+/** Season count for display — real connected-season count on a live
+ *  league, fixture/completed count in the demo. */
+const displaySeasonCount = computed<number>(() => {
+  if (isStrictLiveMode.value && strictLeagueRecord.value) return liveSeasonCount.value
+  return liveData.value?.seasonHistory?.length ?? seasonHistory.length
+})
+
+/* Champion / runner-up / basement display — prefer the denormalized
+   name + logo on the season record (past-season team keys don't
+   resolve against the current league's teams), fall back to getTeam. */
+function champInfo(rec: any) {
+  const t = getTeam(rec.championTeamId)
+  return {
+    name: rec.championName ?? t.name,
+    logo: rec.championLogo ?? t.avatarUrl,
+    initials: t.ownerInitials,
+    color: t.avatarColor,
+  }
+}
+function runnerUpInfo(rec: any) {
+  return { name: rec.runnerUpName ?? getTeam(rec.runnerUpTeamId).name }
+}
+function basementInfo(rec: any) {
+  return { name: rec.basementName ?? getTeam(rec.basementTeamId).name }
+}
+
 const liveLeagueId = computed<string | null>(() => {
   if (isStrictLiveMode.value) {
     return strictLeagueRecord.value?.platform_league_id ?? null
@@ -843,7 +942,11 @@ onMounted(async () => {
     // with the home view's adapter options.
     const leagueRowId =
       typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined
-    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
+    const opts = {
+      userIdentity: collectUserIdentity(),
+      leagueRowId,
+      priorSeasonKeys: priorSeasonKeys.value,
+    }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)
@@ -877,9 +980,9 @@ function collectUserIdentity() {
 
 /* ─── Page head — reactive to live data when present ───────── */
 const pageHeadline = computed(() => {
-  const n = liveData.value?.seasonHistory?.length ?? seasonHistory.length
-  if (n === 0) return 'A fresh ledger.'
-  if (n === 1) return 'One season on the books.'
+  const n = displaySeasonCount.value
+  if (n <= 0) return 'A fresh ledger.'
+  if (n === 1) return 'Season one, in progress.'
   return `${numberToWord(n)} years of receipts.`
 })
 function numberToWord(n: number): string {
@@ -888,22 +991,11 @@ function numberToWord(n: number): string {
 }
 const pageContext = computed(() => {
   const seasonsArr = liveData.value?.seasonHistory ?? seasonHistory
-  const seasonsCount = seasonsArr.length
   const championsCount = new Set(seasonsArr.map((s) => s.championTeamId)).size
   const teamsCount = (liveData.value?.teams ?? teams).length
-  return { seasons: seasonsCount, champions: championsCount, teamsCount }
+  return { seasons: displaySeasonCount.value, champions: championsCount, teamsCount }
 })
 
-/* ─── Page context ──────────────────────────────────────────── */
-const totalCatsWon = computed(() => {
-  const src = liveData.value?.teamCareerStats ?? teamCareerStats
-  return Object.values(src).reduce((s, t) => s + t.totalCatWins, 0)
-})
-const totalCatsWonLabel = computed(() => {
-  const v = totalCatsWon.value
-  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`
-  return `${v}`
-})
 
 /* ─── Seasons / champions ──────────────────────────────────── */
 const seasonsNewestFirst = computed(() => {
@@ -911,15 +1003,72 @@ const seasonsNewestFirst = computed(() => {
   return [...src].sort((a, b) => b.year - a.year)
 })
 
-/* ─── Editorial wiring for year cards (era + headline) ─────── */
-function eraLabelFor(year: number): string | null {
-  const card = liveEditorial.value.yearCards.find((c) => c.year === year)
-  return card?.eraLabel ?? null
+/** Champions-section headline, scaled to how many crowns exist. */
+const trophiesHeadline = computed(() => {
+  const n = seasonsNewestFirst.value.length
+  if (n === 0) return 'The record opens soon.'
+  const word = numberToWord(n)
+  const cap = word.charAt(0).toUpperCase() + word.slice(1)
+  return `${cap} ${n === 1 ? 'trophy' : 'trophies'}.`
+})
+
+/* ─── Champion-card copy + era, derived from the real season data ─── */
+
+/** Specific, varied line per champion — number-anchored, and rotated
+ *  by year so consecutive cards don't share a shape (or repeat "crown"
+ *  next to the era tag). */
+function champLine(rec: any): string {
+  const runner = rec.runnerUpName ?? getTeam(rec.runnerUpTeamId).name
+  const hasRunner = !!runner && !String(runner).startsWith('Team ')
+  const r = rec.championRecord
+  const opts: string[] = []
+  if (r && hasRunner) opts.push(`Finished ${r}. ${runner} a step back.`)
+  if (r) opts.push(`Closed the season at ${r}.`)
+  if (hasRunner) opts.push(`Beat out ${runner} for the title.`)
+  opts.push('Champions, and the book remembers.')
+  return opts[rec.year % opts.length] ?? opts[0]
 }
-function yearHeadlineFor(year: number): string | null {
-  const card = liveEditorial.value.yearCards.find((c) => c.year === year)
-  return card?.headline ?? null
+
+/** Earliest season this league has existed (across connected seasons). */
+const foundingYear = computed<number>(() => {
+  const years = seasonsNewestFirst.value.map((s) => s.year)
+  if (isStrictLiveMode.value && strictLeagueRecord.value) {
+    for (const l of siblingLeagues.value) {
+      const y = Number(l.season)
+      if (Number.isFinite(y)) years.push(y)
+    }
+    const cy = Number(strictLeagueRecord.value.season)
+    if (Number.isFinite(cy)) years.push(cy)
+  }
+  return years.length ? Math.min(...years) : 0
+})
+
+/** Era tag — every champion gets a real, varied one (keeps the card
+ *  row aligned and adds editorial texture instead of a blank slot). */
+function champEra(rec: any): string {
+  const key = (r: any) => r.championName ?? r.championTeamId
+  if (rec.year === foundingYear.value) return 'The founding'
+  const prior = seasonsNewestFirst.value.find((s) => s.year === rec.year - 1)
+  if (prior && key(prior) === key(rec)) return 'Back-to-back'
+  const wonEarlier = seasonsNewestFirst.value.some((s) => s.year < rec.year && key(s) === key(rec))
+  return wonEarlier ? 'Back on top' : 'First crown'
 }
+
+/** The current, undecided season — rendered as a "the chase" card so
+ *  the champions rail isn't half-empty and the past ties to the now. */
+const currentSeasonCard = computed(() => {
+  const d = liveData.value
+  if (!d || !isStrictLiveMode.value) return null
+  const sorted = [...d.standings].sort((a, b) => a.rank - b.rank)
+  const leader = sorted[0]
+  if (!leader) return null
+  return {
+    year: d.currentSeason,
+    week: d.currentWeek,
+    leaderId: leader.teamId,
+    secondId: sorted[1]?.teamId ?? '',
+  }
+})
 
 /* ─── Editorial wiring for the legacy hero podium ──────────── */
 const legacyHeroCopy = computed(() => liveEditorial.value.allTimeLegacyHero ?? {
@@ -1506,6 +1655,17 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   margin: 4px 0 18px;
   align-self: flex-start;
 }
+
+/* Live "chase" card — the undecided current season. Green identity so
+   it reads as in-progress, not a trophy. */
+.champ-card-live {
+  border-color: oklch(0.50 0.16 145 / 0.55);
+  background:
+    radial-gradient(ellipse at top, oklch(0.74 0.18 145 / 0.12), transparent 60%),
+    linear-gradient(180deg, oklch(0.13 0.015 90), oklch(0.08 0.014 90));
+}
+.champ-card-live .champ-year { color: oklch(0.78 0.16 145); }
+.champ-era-live { color: oklch(0.74 0.18 145); }
 .champ-avatar {
   width: 88px; height: 88px;
   border-radius: 18px;
