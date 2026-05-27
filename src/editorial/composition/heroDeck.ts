@@ -305,10 +305,20 @@ interface TradeSide {
   players: { playerName: string; position?: string }[]
 }
 
+/** Strip trailing position parentheticals platforms tack onto player
+ *  names ("Shohei Ohtani (Pitcher)" → "Shohei Ohtani"). Yahoo lists
+ *  two-way players this way; it reads as un-edited in magazine copy. */
+function cleanPlayerName(name: string): string {
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim()
+}
+
 function readTradeSides(ctx: DeckContext): TradeSide[] {
   const acquired = ctx.c.acquiredByTeam as TradeSide[] | undefined
   if (!Array.isArray(acquired)) return []
-  return acquired
+  return acquired.map((side) => ({
+    ...side,
+    players: side.players.map((p) => ({ ...p, playerName: cleanPlayerName(p.playerName) })),
+  }))
 }
 
 const BLOCKBUSTER_TRADE: DeckBuilder[] = [

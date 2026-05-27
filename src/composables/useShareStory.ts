@@ -26,16 +26,15 @@
 
 import { createApp, h, ref, type App } from 'vue'
 import { toPng } from 'html-to-image'
-import ByNumbersCard from '@/components/share/ByNumbersCard.vue'
-import WireBriefCard from '@/components/share/WireBriefCard.vue'
 import CoverCard from '@/components/share/CoverCard.vue'
-import { pickFormat } from '@/editorial/shareability'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData } from '@/editorial/types'
 
-/** PNG dimensions for the card. Matches ShareCard's intrinsic size. */
+/** PNG dimensions — 4:5 portrait, sized to preview large in a chat
+ *  bubble (the product's core "drop it in the league chat" use).
+ *  Matches CoverCard's intrinsic size. */
 const CARD_WIDTH = 1080
-const CARD_HEIGHT = 1920
+const CARD_HEIGHT = 1350
 
 /** How long to give fonts + images to settle before capturing. */
 const SETTLE_DELAY_MS = 250
@@ -119,19 +118,11 @@ async function renderCardToPng(opts: {
   host.style.zIndex = '-1'
   document.body.appendChild(host)
 
-  // 2. Pick the right card component for this story type. The
-  //    editorial layer (shareability.ts) decides which format —
-  //    we just render the chosen template.
-  const format = pickFormat(opts.story.type)
-  const Component =
-    format === 'cover'   ? CoverCard
-  : format === 'numbers' ? ByNumbersCard
-  :                        WireBriefCard
-  console.log('[useShareStory] format=', format, '→', Component.__name ?? 'card')
-
+  // 2. One universal card — a vertical version of the site cover —
+  //    renders every story type, so the share always matches the site.
   const app = createApp({
     render() {
-      return h(Component, { story: opts.story, data: opts.data })
+      return h(CoverCard, { story: opts.story, data: opts.data })
     },
   })
   app.mount(host)
@@ -150,11 +141,9 @@ async function renderCardToPng(opts: {
   await new Promise<void>((r) => requestAnimationFrame(() => r()))
   await new Promise<void>((r) => setTimeout(r, SETTLE_DELAY_MS))
 
-  // 4. Find the actual card element to capture. Each format has its
-  //    own root class (.bnc, .wbc, .cvr); fall back to the legacy
-  //    .share-card and then the host itself.
-  const cardEl =
-    host.querySelector<HTMLElement>('.bnc, .wbc, .cvr, .share-card') ?? host
+  // 4. Find the card element to capture (.cvr root), falling back to
+  //    the host itself.
+  const cardEl = host.querySelector<HTMLElement>('.cvr') ?? host
 
   // 5. html-to-image to a PNG data URL, then decode to a Blob so we
   //    can hand it to navigator.share or a download link.

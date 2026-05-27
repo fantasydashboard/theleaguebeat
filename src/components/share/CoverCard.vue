@@ -1,42 +1,45 @@
 <template>
-  <!--
-    COVER — magazine-cover treatment. Reserved for Tier S moments
-    (new throne, championship, mathematical elimination, blockbuster
-    trade). One massive cropped team avatar bleeding off the right
-    edge anchors the composition. Stacked dramatic type on the left.
+  <!-- Universal share card — a vertical (4:5) version of the home
+       WeeklyCover. Every shared story renders through this one
+       template so the downloaded image matches the site: same tone
+       backdrop + grain, same forwardable cover line, same smart
+       imagery (duel logos for trades/matchups, a single bleeding
+       logo otherwise, type-led when there's no art), masthead + foot.
+       Captured to PNG by useShareStory (root class `.cvr`). -->
+  <div class="cvr" :class="`cvr-${tone}`" role="img" :aria-label="`Share card: ${headline}`">
+    <div class="cvr-backdrop" aria-hidden="true"></div>
+    <div class="cvr-grain" aria-hidden="true"></div>
 
-    What it is NOT: a literal mockup of a magazine page. No binding,
-    no page-curl, no fake newsprint. Editorial sensibility comes from
-    composition + type hierarchy, not from costume.
-  -->
-  <div
-    class="cvr"
-    :class="`cvr-${tone}`"
-    role="img"
-    :aria-label="`Share card: ${headline}`"
-  >
-    <!-- Background: tonal radial wash that anchors the type column,
-         no decorative texture or noise. -->
-    <div class="cvr-wash" aria-hidden="true"></div>
+    <!-- Type-led ghost numeral when there's no usable logo. -->
+    <span v-if="art.mode === 'type'" class="cvr-ghost" aria-hidden="true">{{ issueNum }}</span>
 
-    <!-- Bleeding-avatar visual. Positioned right-of-center, cropped
-         off the right edge. Carries the visual weight. -->
-    <div
-      v-if="primaryTeam"
-      class="cvr-anchor"
-      :style="{ background: `linear-gradient(135deg, ${primaryTeam.avatarColor})` }"
-    >
+    <!-- Single bleeding logo. -->
+    <div v-else-if="art.mode === 'single'" class="cvr-stage cvr-stage-single" aria-hidden="true">
       <img
-        v-if="primaryTeam.avatarUrl && !imgErrored"
-        :src="primaryTeam.avatarUrl"
-        class="cvr-anchor-img"
+        v-if="!errA"
+        :src="art.team.avatarUrl"
+        class="cvr-art"
         alt=""
-        @error="imgErrored = true"
+        @error="errA = true"
       />
-      <span v-else class="cvr-anchor-initials">{{ primaryTeam.ownerInitials }}</span>
+      <div v-else class="cvr-art-fallback" :style="fallbackStyle(art.team)">{{ art.team.ownerInitials }}</div>
+      <div class="cvr-vignette"></div>
     </div>
 
-    <!-- Masthead, slim at the top -->
+    <!-- Two-logo duel (trades / matchups). -->
+    <div v-else class="cvr-stage cvr-stage-duel" aria-hidden="true">
+      <span class="cvr-duel cvr-duel-b">
+        <img v-if="!errB" :src="art.teamB.avatarUrl" alt="" @error="errB = true" />
+        <span v-else class="cvr-duel-fallback" :style="fallbackStyle(art.teamB)">{{ art.teamB.ownerInitials }}</span>
+      </span>
+      <span class="cvr-duel cvr-duel-a">
+        <img v-if="!errA" :src="art.teamA.avatarUrl" alt="" @error="errA = true" />
+        <span v-else class="cvr-duel-fallback" :style="fallbackStyle(art.teamA)">{{ art.teamA.ownerInitials }}</span>
+      </span>
+      <div class="cvr-vignette"></div>
+    </div>
+
+    <!-- Masthead -->
     <header class="cvr-mast">
       <img src="/tlb-favicon.png" alt="" class="cvr-mast-mark" />
       <span class="cvr-mast-brand">THE LEAGUE BEAT</span>
@@ -44,37 +47,25 @@
       <span v-if="meta" class="cvr-mast-meta">{{ meta }}</span>
     </header>
 
-    <!-- Title block, anchored bottom-left. Stacked type at multiple
-         scales is what makes this read as a cover. -->
-    <div class="cvr-title-block">
+    <!-- Title block -->
+    <div class="cvr-body">
       <p class="cvr-eyebrow">
-        <span class="cvr-eyebrow-bar" aria-hidden="true"></span>
+        <span class="cvr-eyebrow-dot" aria-hidden="true"></span>
         {{ eyebrow }}
       </p>
-
-      <h1 class="cvr-title">{{ title }}</h1>
-
-      <p class="cvr-subhead">{{ subhead }}</p>
-
-      <!-- Stat callout — one big proof line. Optional but loaded by
-           default since covers almost always benefit from a number. -->
-      <div v-if="callout" class="cvr-callout">
-        <span class="cvr-callout-rule"></span>
-        <span class="cvr-callout-text">{{ callout }}</span>
-      </div>
-
-      <!-- Team byline -->
-      <p v-if="primaryTeam" class="cvr-byline">
-        <span class="cvr-byline-name">{{ primaryTeam.name }}</span>
-        <span v-if="primaryTeam.ownerName" class="cvr-byline-sep">·</span>
-        <span v-if="primaryTeam.ownerName" class="cvr-byline-owner">{{ primaryTeam.ownerName }}</span>
+      <h1 class="cvr-headline">{{ headline }}</h1>
+      <p v-if="deck" class="cvr-deck">{{ deck }}</p>
+      <p v-if="art.mode === 'duel'" class="cvr-vs">
+        <span>{{ art.teamA.name }}</span>
+        <span class="cvr-vs-x" aria-hidden="true">vs</span>
+        <span>{{ art.teamB.name }}</span>
       </p>
     </div>
 
     <!-- Footer -->
     <footer class="cvr-foot">
-      <p class="cvr-foot-brand">THE LEAGUE BEAT</p>
-      <p class="cvr-foot-url">theleaguebeat.com</p>
+      <span class="cvr-foot-brand">THE LEAGUE BEAT</span>
+      <span class="cvr-foot-url">theleaguebeat.com</span>
     </footer>
   </div>
 </template>
@@ -83,6 +74,12 @@
 import { computed, ref } from 'vue'
 import type { SelectedStory } from '@/editorial/detection/types'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+import {
+  composeCoverHeadline,
+  resolveCoverArt,
+  type CoverArt,
+} from '@/editorial/composition/weeklyCover'
+import { composeHeroDeck } from '@/editorial/composition/heroDeck'
 
 const props = defineProps<{
   story: SelectedStory
@@ -90,316 +87,231 @@ const props = defineProps<{
   metaOverride?: string
 }>()
 
-const imgErrored = ref(false)
+const errA = ref(false)
+const errB = ref(false)
 
-type Tone = 'magenta' | 'gold' | 'up' | 'down'
+const headline = computed(() => composeCoverHeadline(props.story))
+const deck = computed(() => composeHeroDeck(props.story, props.data))
 
-const tone = computed<Tone>(() => {
-  switch (props.story.type) {
-    case 'new-throne':
-    case 'locked-top-seed':
-    case 'first-time-playoffs':
-      return 'up'
+const art = computed<CoverArt>(() => resolveCoverArt(props.story, props.data?.teams))
 
-    case 'dynasty-falling':
-    case 'mathematical-elimination':
-      return 'down'
-
-    case 'blockbuster-trade':
-      return 'gold'
-
-    case 'dethroned-rivalry':
-    default:
-      return 'magenta'
-  }
-})
+const issueNum = computed(() => props.data?.currentWeek ?? '')
 
 const meta = computed<string | null>(() => {
   if (props.metaOverride) return props.metaOverride.toUpperCase()
-  const data = props.data
-  if (!data) return null
-  if (data.currentWeek && data.currentSeason) {
-    return `WEEK ${data.currentWeek} · ${data.currentSeason}`
-  }
+  const d = props.data
+  if (d?.currentWeek && d?.currentSeason) return `WEEK ${d.currentWeek} · ${d.currentSeason}`
+  if (d?.currentSeason) return `${d.currentSeason}`
   return null
 })
 
-const primaryTeam = computed<CategoryLeagueDataTeam | null>(() => {
-  const id = props.story.teamIds?.[0]
-  if (!id || !props.data) return null
-  return props.data.teams.find((t) => t.id === id) ?? null
+/** Tone — identical mapping to the home WeeklyCover so the share
+ *  matches the on-site card's color. */
+const tone = computed<'magenta' | 'gold' | 'teal' | 'up' | 'down'>(() => {
+  const t = props.story.type
+  if (t === 'blockbuster-trade' || t === 'lopsided-trade') return 'gold'
+  if (t === 'new-throne' || t === 'dynasty-falling' || t === 'dethroned-rivalry') return 'magenta'
+  if (t === 'monster-night' || t === 'three-hr-game' || t === 'twelve-k-game' || t === 'no-hitter') return 'gold'
+  if (t === 'comeback-team' || t === 'hot-climber' || t === 'streak-built' || t === 'three-week-comeback') return 'up'
+  if (t === 'streak-broken' || t === 'three-week-collapse') return 'down'
+  if (t === 'photo-finish' || t === 'comeback-win') return 'teal'
+  return 'magenta'
 })
 
-function teamFor(id: string | undefined | null): CategoryLeagueDataTeam | null {
-  if (!id || !props.data) return null
-  return props.data.teams.find((t) => t.id === id) ?? null
+const EYEBROW: Record<string, string> = {
+  'blockbuster-trade': 'Blockbuster trade',
+  'lopsided-trade': 'Trade',
+  'new-throne': 'New throne',
+  'dynasty-falling': 'Dynasty falling',
+  'throne-streak': 'Throne held',
+  'hot-climber': 'Hot climber',
+  'comeback-team': 'Comeback',
+  'streak-built': 'Hot streak',
+  'streak-broken': 'Streak broken',
+  'monster-night': 'Monster night',
+  'three-hr-game': 'Three-HR game',
+  'twelve-k-game': '12-K game',
+  'photo-finish': 'Photo finish',
+  'comeback-win': 'Comeback win',
+  'blowout': 'Blowout',
+  'matchup-of-week': 'Matchup of the week',
+  'cat-sweep': 'Cat sweep',
+  'three-week-comeback': 'Three-week run',
+  'three-week-collapse': 'Three-week fall',
 }
+const eyebrow = computed(() => {
+  const ctx = props.story.context as Record<string, unknown>
+  const explicit = typeof ctx.eyebrow === 'string' ? ctx.eyebrow : null
+  return (explicit ?? EYEBROW[props.story.type] ?? props.story.type.replace(/-/g, ' ')).toUpperCase()
+})
 
-/* ─────────────────────────────────────────────────────────────────
-   Content per story type. Covers want:
-     eyebrow:  short, dramatic tag
-     title:    1-3 stacked words for the headline
-     subhead:  one descriptive sentence under the title
-     callout:  one rule + short proof line (e.g. "FROM #6 → #1")
-───────────────────────────────────────────────────────────────── */
-
-interface Content {
-  eyebrow: string
-  title: string
-  subhead: string
-  callout: string | null
-}
-
-const content = computed<Content>(() => buildContent(props.story))
-
-const eyebrow = computed(() => content.value.eyebrow)
-const title = computed(() => content.value.title)
-const subhead = computed(() => content.value.subhead)
-const callout = computed(() => content.value.callout)
-
-function buildContent(story: SelectedStory): Content {
-  const ctx = story.context as Record<string, unknown>
-  const teamName = primaryTeam.value?.name ?? 'A new leader'
-
-  switch (story.type) {
-    case 'new-throne': {
-      const oppId = strFrom(ctx, 'dethronedTeamId') ?? props.story.teamIds?.[1]
-      const dethroned = teamFor(oppId)?.name
-      const from = numFrom(ctx, 'previousRank')
-      const callout =
-        from != null
-          ? `FROM #${from} → #1 ${weeksSinceLine(ctx)}`
-          : dethroned
-          ? `OVERTAKES ${dethroned.toUpperCase()}`
-          : null
-      return {
-        eyebrow: 'NEW THRONE',
-        title: 'TAKEOVER.',
-        subhead: `${teamName} takes the top spot.`,
-        callout,
-      }
-    }
-
-    case 'dynasty-falling': {
-      const from = numFrom(ctx, 'previousRank') ?? 1
-      const to = numFrom(ctx, 'currentRank')
-      const callout = to != null ? `FROM #${from} → #${to}` : null
-      return {
-        eyebrow: 'TOP SPOT SLIPPING',
-        title: 'CRACKS.',
-        subhead: `${teamName} is losing altitude.`,
-        callout,
-      }
-    }
-
-    case 'dethroned-rivalry': {
-      const oppId = strFrom(ctx, 'rivalTeamId') ?? props.story.teamIds?.[1]
-      const rival = teamFor(oppId)?.name
-      return {
-        eyebrow: 'THRONE IN MOTION',
-        title: 'SWAP.',
-        subhead: rival
-          ? `${teamName} and ${rival} trade places.`
-          : `${teamName} flips the top spot.`,
-        callout: null,
-      }
-    }
-
-    case 'mathematical-elimination': {
-      const week = numFrom(ctx, 'weekEliminated') ?? numFrom(ctx, 'week')
-      return {
-        eyebrow: 'ELIMINATED',
-        title: 'OUT.',
-        subhead: `${teamName} is mathematically done.`,
-        callout: week != null ? `WEEK ${week}` : null,
-      }
-    }
-
-    case 'locked-top-seed': {
-      return {
-        eyebrow: 'TOP SEED LOCKED',
-        title: 'CLINCHED.',
-        subhead: `${teamName} secures the top seed.`,
-        callout: 'BYE WEEK INCOMING',
-      }
-    }
-
-    case 'first-time-playoffs': {
-      return {
-        eyebrow: 'FIRST TIME',
-        title: 'IN.',
-        subhead: `${teamName} clinches their first playoff trip.`,
-        callout: 'FRANCHISE FIRST',
-      }
-    }
-
-    case 'blockbuster-trade': {
-      const piecesA = strFrom(ctx, 'sideAPieces') ?? '—'
-      const piecesB = strFrom(ctx, 'sideBPieces') ?? '—'
-      return {
-        eyebrow: 'BLOCKBUSTER',
-        title: 'DEAL.',
-        subhead: `${teamName} pulls the trigger.`,
-        callout: `${piecesA} ↔ ${piecesB}`,
-      }
-    }
-
-    default: {
-      return {
-        eyebrow: story.type.replace(/-/g, ' ').toUpperCase(),
-        title: 'STORY.',
-        subhead: `${teamName} story this week.`,
-        callout: null,
-      }
-    }
-  }
-}
-
-function weeksSinceLine(ctx: Record<string, unknown>): string {
-  const weeks = numFrom(ctx, 'weeksToReach')
-  if (weeks == null) return ''
-  return `IN ${weeks} ${weeks === 1 ? 'WEEK' : 'WEEKS'}`
-}
-
-function numFrom(ctx: Record<string, unknown>, key: string): number | null {
-  const v = ctx[key]
-  if (typeof v === 'number' && Number.isFinite(v)) return v
-  return null
-}
-function strFrom(ctx: Record<string, unknown>, key: string): string | null {
-  const v = ctx[key]
-  if (typeof v === 'string' && v.length > 0) return v
-  return null
+function fallbackStyle(team: CategoryLeagueDataTeam) {
+  return { background: `linear-gradient(135deg, ${team.avatarColor})` }
 }
 </script>
 
 <style scoped>
 .cvr {
-  width: 1080px;
-  height: 1920px;
   position: relative;
+  width: 1080px;
+  height: 1350px;
+  overflow: hidden;
+  isolation: isolate;
   font-family: 'Barlow', system-ui, sans-serif;
   color: oklch(0.97 0.005 90);
-  background: oklch(0.06 0.014 90);
-  overflow: hidden;
+  background: oklch(0.055 0.012 90);
 }
 
-.cvr-up      { --cvr-hue: 145; --cvr-accent: oklch(0.74 0.18 145); }
-.cvr-down    { --cvr-hue: 25;  --cvr-accent: oklch(0.65 0.20 25); }
-.cvr-gold    { --cvr-hue: 92;  --cvr-accent: oklch(0.78 0.18 92); }
-.cvr-magenta { --cvr-hue: 350; --cvr-accent: oklch(0.70 0.27 350); }
+.cvr-magenta { --cv-hue: 350; --cv-accent: oklch(0.70 0.27 350); }
+.cvr-gold    { --cv-hue: 92;  --cv-accent: oklch(0.80 0.17 92);  }
+.cvr-teal    { --cv-hue: 195; --cv-accent: oklch(0.72 0.18 195); }
+.cvr-up      { --cv-hue: 145; --cv-accent: oklch(0.74 0.18 145); }
+.cvr-down    { --cv-hue: 25;  --cv-accent: oklch(0.65 0.20 25);  }
 
-/* Tonal wash anchored low-left, where the title block lives. The
-   gradient does the work of "this card has a mood" without any
-   imagery decoration. */
-.cvr-wash {
+.cvr-backdrop {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background:
-    radial-gradient(
-      90% 70% at 10% 80%,
-      oklch(0.16 0.10 var(--cvr-hue) / 0.55) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      80% 60% at 90% 30%,
-      oklch(0.14 0.08 var(--cvr-hue) / 0.30) 0%,
-      transparent 60%
-    ),
-    linear-gradient(180deg, oklch(0.08 0.018 90) 0%, oklch(0.05 0.012 90) 100%);
+    radial-gradient(ellipse 90% 60% at 85% 12%, oklch(0.26 0.13 var(--cv-hue) / 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 10% 95%, oklch(0.18 0.10 var(--cv-hue) / 0.32) 0%, transparent 60%),
+    linear-gradient(180deg, oklch(0.09 0.014 90) 0%, oklch(0.05 0.012 90) 100%);
+}
+.cvr-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.12;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
-/* ── Bleeding-avatar anchor ───────────────────────────────── */
-.cvr-anchor {
+.cvr-ghost {
   position: absolute;
-  /* Crops the avatar so ~30% bleeds off the right edge. The visual
-     weight reads as a magazine cover photo crop. */
-  top: 240px;
-  right: -180px;
+  right: -40px;
+  top: 40px;
+  z-index: 1;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 720px;
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  color: oklch(0.30 0.06 var(--cv-hue) / 0.18);
+}
+
+/* ── Single bleeding logo ──────────────────────────────────── */
+.cvr-stage {
+  position: absolute;
+  z-index: 1;
+}
+.cvr-stage-single {
+  top: -40px;
+  right: -140px;
   width: 760px;
   height: 760px;
-  border-radius: 50%;
+  overflow: hidden;
+}
+.cvr-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(1.05) contrast(1.04);
+}
+.cvr-art-fallback {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  box-shadow:
-    0 40px 100px oklch(0 0 0 / 0.45),
-    inset 0 0 0 2px oklch(0.97 0.005 90 / 0.08);
-}
-.cvr-anchor-img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-.cvr-anchor-initials {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
-  font-size: 280px;
-  letter-spacing: -0.02em;
+  font-size: 240px;
   color: oklch(0.97 0.005 90);
 }
 
-/* A soft vignette over the bottom half so the title type retains
-   contrast over any avatar color combination. */
-.cvr::after {
-  content: '';
+/* ── Duel medallions ───────────────────────────────────────── */
+.cvr-stage-duel {
+  top: 100px;
+  right: 0;
+  width: 640px;
+  height: 640px;
+}
+.cvr-duel {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    transparent 40%,
-    oklch(0.05 0.012 90 / 0.55) 75%,
-    oklch(0.04 0.010 90 / 0.92) 100%
-  );
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid oklch(0.34 0.03 var(--cv-hue) / 0.5);
+  box-shadow: 0 30px 80px oklch(0.02 0 0 / 0.6);
+}
+.cvr-duel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cvr-duel-fallback {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 120px; color: oklch(0.97 0.005 90);
+}
+.cvr-duel-b {
+  width: 300px; height: 300px;
+  top: 0; right: 250px;
+  transform: rotate(-4deg);
+  filter: saturate(0.82) brightness(0.66);
+}
+.cvr-duel-a {
+  width: 380px; height: 380px;
+  bottom: 30px; right: 40px;
+  transform: rotate(3deg);
+  z-index: 1;
+}
+
+/* ── Vignette so the title reads over any art ──────────────── */
+.cvr-vignette {
+  position: absolute;
+  inset: -200px -40px -40px -40px;
+  background:
+    linear-gradient(180deg, transparent 30%, oklch(0.05 0.012 90 / 0.55) 70%, oklch(0.05 0.012 90 / 0.96) 100%),
+    linear-gradient(75deg, oklch(0.05 0.012 90) 8%, oklch(0.05 0.012 90 / 0.2) 42%, transparent 70%);
 }
 
 /* ── Masthead ──────────────────────────────────────────────── */
 .cvr-mast {
-  position: relative;
-  z-index: 2;
-  padding: 56px 64px 0;
+  position: absolute;
+  z-index: 3;
+  top: 56px;
+  left: 64px;
+  right: 64px;
   display: flex;
   align-items: center;
   gap: 14px;
 }
-.cvr-mast-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  display: block;
-}
+.cvr-mast-mark { width: 44px; height: 44px; border-radius: 8px; display: block; }
 .cvr-mast-brand {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 22px;
+  font-size: 26px;
   letter-spacing: 0.04em;
-  color: oklch(0.97 0.005 90);
   white-space: nowrap;
 }
-.cvr-mast-sep { color: oklch(0.45 0.010 90); font-size: 22px; }
+.cvr-mast-sep { color: oklch(0.45 0.010 90); }
 .cvr-mast-meta {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.20em;
+  font-size: 18px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: oklch(0.55 0.010 90);
 }
 
 /* ── Title block ───────────────────────────────────────────── */
-.cvr-title-block {
+.cvr-body {
   position: absolute;
   z-index: 2;
   left: 64px;
   right: 64px;
-  bottom: 200px;
+  bottom: 150px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 26px;
 }
 .cvr-eyebrow {
   display: inline-flex;
@@ -408,74 +320,58 @@ function strFrom(ctx: Record<string, unknown>, key: string): string | null {
   margin: 0;
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 800;
-  font-size: 28px;
+  font-size: 30px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--cvr-accent);
+  color: var(--cv-accent);
 }
-.cvr-eyebrow-bar {
-  width: 40px;
-  height: 2px;
-  background: var(--cvr-accent);
+.cvr-eyebrow-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--cv-accent);
 }
-.cvr-title {
+.cvr-headline {
   margin: 0;
-  font-family: 'Barlow', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
-  font-size: 280px;
-  line-height: 0.86;
-  letter-spacing: -0.04em;
-  color: oklch(0.97 0.005 90);
-  max-width: 12ch;
+  font-size: 108px;
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  color: oklch(0.98 0.005 90);
+  max-width: 14ch;
 }
-.cvr-subhead {
+.cvr-deck {
   margin: 0;
   font-family: 'Barlow', sans-serif;
   font-weight: 500;
-  font-size: 40px;
-  line-height: 1.2;
-  letter-spacing: -0.005em;
+  font-size: 36px;
+  line-height: 1.4;
   color: oklch(0.85 0.008 90);
-  max-width: 20ch;
+  max-width: 32ch;
+  /* Cap so a long deck never collides with the masthead. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.cvr-callout {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-top: 12px;
-}
-.cvr-callout-rule {
-  width: 56px;
-  height: 3px;
-  background: var(--cvr-accent);
-}
-.cvr-callout-text {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 28px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--cvr-accent);
-}
-.cvr-byline {
+.cvr-vs {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin: 8px 0 0;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 24px;
-  letter-spacing: 0.10em;
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: oklch(0.78 0.008 90);
+  color: oklch(0.78 0.010 90);
 }
-.cvr-byline-sep { color: oklch(0.45 0.010 90); }
-.cvr-byline-owner { color: oklch(0.55 0.010 90); }
+.cvr-vs-x { color: var(--cv-accent); font-weight: 900; }
 
 /* ── Footer ────────────────────────────────────────────────── */
 .cvr-foot {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   bottom: 56px;
   left: 64px;
   right: 64px;
@@ -483,22 +379,21 @@ function strFrom(ctx: Record<string, unknown>, key: string): string | null {
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid oklch(0.20 0.015 90);
 }
 .cvr-foot-brand {
-  margin: 0;
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 22px;
+  font-size: 26px;
   letter-spacing: 0.04em;
-  color: oklch(0.97 0.005 90);
 }
 .cvr-foot-url {
-  margin: 0;
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.18em;
+  font-size: 22px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--cvr-accent);
+  color: var(--cv-accent);
 }
 </style>

@@ -50,8 +50,8 @@
     <WeeklyCover
       :stories="selectedStories"
       :data="issueData"
-      :issue-number="currentWeek"
-      :vol="issueVolume"
+      :issue-number="coverMeta.issueNumber"
+      :vol="coverMeta.volume"
       :week-of="weekOfLabel"
       @share="onShareStory"
     />
@@ -606,141 +606,49 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         6. CATS WON PER WEEK — multi-team chart with featured lines
+         6. THE CLIMB — rank trajectory. "Heating up" reads off
+         rank-over-time (low = good), not noisy weekly cat counts.
+         Your team + the biggest climber render bold; the rest of the
+         league sits faint behind for context.
     ────────────────────────────────────────────────────────────── -->
-    <section class="ppw" aria-labelledby="ppw-headline">
+    <section class="momentum" aria-labelledby="momentum-headline">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal">Cats won per week</p>
-        <h2 class="ppw-headline" id="ppw-headline">Who's been heating up.</h2>
+        <p class="section-eyebrow section-eyebrow-teal">The climb</p>
+        <h2 class="momentum-headline" id="momentum-headline">Who's been heating up.</h2>
       </header>
 
-      <div class="ppw-chart-wrap">
-        <svg
-          class="ppw-chart"
-          :viewBox="`0 0 ${PPW_W} ${PPW_H}`"
-          role="img"
-          aria-label="Weekly cats-won trajectory for every team in the league"
-          preserveAspectRatio="none"
-        >
-          <!-- Gridlines -->
-          <g class="ppw-grid" aria-hidden="true">
-            <line
-              v-for="gy in ppwGridY"
-              :key="`pgl-${gy.value}`"
-              :x1="PPW_PAD_L"
-              :x2="PPW_W - PPW_PAD_R"
-              :y1="gy.y"
-              :y2="gy.y"
-            />
-            <text
-              v-for="gy in ppwGridY"
-              :key="`pgt-${gy.value}`"
-              class="ppw-grid-label"
-              :x="PPW_PAD_L - 8"
-              :y="gy.y + 3"
-              text-anchor="end"
-            >{{ gy.value }}</text>
-          </g>
-
-          <!-- Background lines for the other teams were removed. They
-               rendered at 12% opacity but visually still cluttered the
-               chart without telling a story — you couldn't actually
-               read any of them. The chart now shows three lines: your
-               team, the hottest team, and the league average. -->
-
-          <!-- League average dashed line — flat at 5.5 -->
-          <path
-            class="ppw-line-avg"
-            :d="ppwAvgPath"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-dasharray="4 4"
-          />
-
-          <!-- Top scorer (bt) -->
-          <path
-            class="ppw-line-top"
-            :d="topScorerPath"
-            fill="none"
-            :stroke="topScorerColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-
-          <!-- My team (mv) -->
-          <path
-            class="ppw-line-mine"
-            :d="myTeamPath"
-            fill="none"
-            stroke="var(--accent-primary)"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-
-          <!-- Endpoint labels -->
-          <g v-if="topScorerEnd" class="ppw-end-label">
-            <text
-              :x="topScorerEnd.x + 6"
-              :y="endpointY('top', topScorerEnd.y) + 4"
-              :fill="topScorerColor"
-              text-anchor="start"
-            >{{ topScorerTeam.name }}</text>
-          </g>
-          <g v-if="myTeamEnd" class="ppw-end-label">
-            <text
-              :x="myTeamEnd.x + 6"
-              :y="endpointY('mine', myTeamEnd.y) + 4"
-              fill="var(--accent-primary)"
-              text-anchor="start"
-            >{{ myTeam.name }}</text>
-          </g>
-          <g v-if="avgEnd" class="ppw-end-label">
-            <text
-              :x="avgEnd.x + 6"
-              :y="endpointY('avg', avgEnd.y) + 4"
-              fill="var(--ink-4)"
-              text-anchor="start"
-            >League avg</text>
-          </g>
-
-          <!-- X axis week labels -->
-          <g class="ppw-x-labels" aria-hidden="true">
-            <text
-              v-for="(_, i) in ppwWeekXs"
-              :key="`pxl-${i}`"
-              class="ppw-x-label"
-              :x="ppwWeekXs[i]"
-              :y="PPW_H - 6"
-              text-anchor="middle"
-            >Wk {{ i + 1 }}</text>
-          </g>
-
-          <!-- Hand-authored annotation removed. It referenced a fixture-
-               only team ("Bullpen Theology") and didn't render against
-               live data. A live-data narrative annotation can come back
-               later, computed from actual rank-history deltas. -->
-        </svg>
+      <div v-if="hasRankHistory" class="momentum-chart">
+        <RankSparkline
+          :data="issueData"
+          :focus-team-ids="momentumFocusIds"
+          :focus-colors="momentumFocusColors"
+          labels="rank"
+          :endpoint-logos="true"
+          aria-label="Team rank trajectory across the season"
+        />
       </div>
+      <p v-else class="momentum-empty">
+        The trajectory fills in once a few weeks are on the board.
+      </p>
 
-      <ul class="ppw-legend" role="list">
-        <li class="ppw-legend-pill">
-          <span class="ppw-legend-dot ppw-legend-dot-mine" aria-hidden="true"></span>
+      <ul class="momentum-legend" role="list">
+        <li v-if="myTeamId" class="momentum-legend-pill">
+          <span class="momentum-legend-dot momentum-legend-dot-mine" aria-hidden="true"></span>
           Your team
         </li>
-        <li class="ppw-legend-pill">
-          <span class="ppw-legend-dot" :style="{ background: topScorerColor }" aria-hidden="true"></span>
-          Hottest team ({{ topScorerTeam.name }})
+        <li v-if="climberTeam && climberTeam.id !== myTeamId" class="momentum-legend-pill">
+          <span class="momentum-legend-dot momentum-legend-dot-climber" aria-hidden="true"></span>
+          Biggest climber ({{ climberTeam.name }})
         </li>
-        <li class="ppw-legend-pill">
-          <span class="ppw-legend-dash" aria-hidden="true"></span>
-          League average
+        <li class="momentum-legend-pill momentum-legend-pill-mute">
+          <span class="momentum-legend-dot momentum-legend-dot-field" aria-hidden="true"></span>
+          The rest of the league
         </li>
       </ul>
 
-      <p class="ppw-caption">The hottest team is whoever's gained the most ground over the last four weeks.</p>
+      <p class="momentum-caption">
+        Each line is a team's seed, week by week. Lines rising toward the top are the teams climbing the standings.
+      </p>
     </section>
 
     <!-- Silent hairline. The season-arc section's own header carries
@@ -777,12 +685,9 @@ import {
   currentWeek,
   playoffCutoff,
   getTeam,
-  weeklyCatsWon,
-  weeklyCatLeagueAverage,
   yesterdayBigSwings,
 } from '@/fixtures/categoriesLeague'
-import { accentFor, accentStops } from '@/utils/teamColor'
-import { smoothPath, type Point } from '@/utils/svgPath'
+import { accentFor } from '@/utils/teamColor'
 import { renderHomePage, type RenderedHomeCopy } from '@/editorial/render'
 import { detectAll } from '@/editorial/detection'
 import { selectStoriesForIssue } from '@/editorial/selection'
@@ -797,12 +702,14 @@ import DivisionRace from '@/components/issue/DivisionRace.vue'
 import TheWire from '@/components/issue/TheWire.vue'
 import EditorialBreak from '@/components/issue/EditorialBreak.vue'
 import SeasonalBlock from '@/components/issue/SeasonalBlock.vue'
+import RankSparkline from '@/components/issue/RankSparkline.vue'
 import WeeklyCover from '@/components/issue/WeeklyCover.vue'
-import { composeWeeklyCover } from '@/editorial/composition/weeklyCover'
+import { composeWeeklyCover, resolveCoverImageUrl } from '@/editorial/composition/weeklyCover'
 import { snapshotCover, claimIssue } from '@/services/coverArchive'
 import { useShareStory } from '@/composables/useShareStory'
 import { useIssueStore } from '@/stores/issueState'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
+import { leagueFoundedSeason } from '@/utils/leagueAge'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
@@ -822,8 +729,6 @@ const route = useRoute()
 const fixtureProtagonist = getTeam('bt')
 const fixtureAntagonist = getTeam('ct')
 
-// My team — used for bubble star, standings yellow tint, and the chart line.
-const myTeam = teams.find((t) => t.isMyTeam)!
 
 // `liveData` is set alongside `liveEditorial` whenever the URL points
 // the page at a real league (`?leagueId=…&platform=sleeper`). When it
@@ -901,15 +806,9 @@ const bubbleWeeksLeft = computed(() => {
   return left
 })
 
-/** Magazine volume for the cover. Same source as the masthead —
- *  derived from how many seasons this league has existed. */
-const issueVolume = computed<number>(() => {
-  // Match IssueMasthead's volume computation (years since league founding).
-  const founded = liveData.value?.leagueFoundedSeason
-  const currentSeasonNum = liveData.value?.currentSeason ?? new Date().getFullYear()
-  if (!founded) return 1
-  return Math.max(1, currentSeasonNum - founded + 1)
-})
+// Magazine issue number + volume for the cover live in `coverMeta`
+// below — read from the shared issue store so they stay in lockstep
+// with the masthead instead of drifting off the fixture constants.
 
 /** "Week of May 25" — current Monday in user's local time. */
 const weekOfLabel = computed<string>(() => {
@@ -941,40 +840,12 @@ function resolveCoverTone(storyType: string): 'magenta' | 'gold' | 'teal' | 'up'
   return 'magenta'
 }
 
-/** Snapshot the current cover + record the user's claim. Runs
- *  whenever issueData becomes available (initial mount + every
- *  data refresh). Idempotent — repeat calls in the same week
- *  no-op via the storage layer. Wrapped in try/catch since this
- *  is retention plumbing, not page-rendering — a storage failure
- *  must NEVER blank the page. */
-watch(
-  () => issueData.value?.leagueId,
-  (leagueId) => {
-    try {
-      if (!leagueId) return
-      const data = issueData.value
-      if (!data) return
-      const week = data.currentWeek
-      const season = data.currentSeason
-      if (!week || !season) return
-
-      const stories = selectedStories.value
-      if (!stories || !Array.isArray(stories)) return
-
-      const cover = composeWeeklyCover(stories, { currentWeek: week })
-      if (cover) {
-        const tone = resolveCoverTone(cover.story.type)
-        snapshotCover(leagueId, cover, week, season, tone)
-      }
-      // Claim regardless of whether a real cover composed — visiting
-      // during the issue's week counts even on a quiet-cover week.
-      claimIssue(leagueId, week, season)
-    } catch (err) {
-      console.warn('[cover-archive] snapshot/claim failed:', err)
-    }
-  },
-  { immediate: true },
-)
+// NOTE: the cover-archive snapshot/claim watch is declared LOWER in
+// this file, right after `issueData` + `selectedStories`. A watch with
+// `{ immediate: true }` runs its getter synchronously during setup, so
+// it must be ordered after the refs it reads — otherwise it hits a TDZ
+// ReferenceError ("Cannot access 'issueData' before initialization")
+// during setup that blanks the entire page. See `watchCoverArchive`.
 const bubbleDeckText = computed(() => {
   const n = bubbleWeeksLeft.value
   if (n === 0) return 'Final week of the regular season.'
@@ -1328,6 +1199,65 @@ const issueData = computed(
   () => liveData.value ?? categoriesFixtureToLeagueData(),
 )
 
+/** Storage key for the cover archive. MUST match the key the Archive
+ *  view reads with — the route's Supabase UUID for a live league, or
+ *  'demo' off-route. NOTE: issueData.leagueId is the *platform* league
+ *  key (e.g. Yahoo "466.l.123"), so keying snapshots by it landed them
+ *  in a bucket the Archive never reads — that's why the shelf was empty. */
+const archiveLeagueId = computed<string>(() => {
+  const fromUrl = route.params.leagueId
+  return typeof fromUrl === 'string' && fromUrl ? fromUrl : 'demo'
+})
+
+/** Cover-archive snapshot + claim. Runs on mount + every data refresh.
+ *  Idempotent per (league, season, week) via the storage layer. Wrapped
+ *  in try/catch — retention plumbing must never blank the page.
+ *
+ *  MUST stay below `issueData` + `selectedStories`: with
+ *  `{ immediate: true }` the getter runs synchronously during setup,
+ *  so the refs it reads have to be initialized first (TDZ). */
+watch(
+  () =>
+    [
+      archiveLeagueId.value,
+      issueData.value?.currentWeek,
+      issueData.value?.currentSeason,
+      liveData.value,
+    ] as const,
+  () => {
+    try {
+      // In a live league, wait for real data before snapshotting — else
+      // the fixture fallback cover gets written under the real key.
+      const inLiveLeague =
+        typeof route.params.leagueId === 'string' && route.params.leagueId.length > 0
+      if (inLiveLeague && !liveData.value) return
+
+      const data = issueData.value
+      if (!data) return
+      const leagueId = archiveLeagueId.value
+      const week = data.currentWeek
+      const season = data.currentSeason
+      if (!week || !season) return
+
+      const stories = selectedStories.value
+      if (!stories || !Array.isArray(stories)) return
+
+      const cover = composeWeeklyCover(stories, { currentWeek: week })
+      if (cover) {
+        const tone = resolveCoverTone(cover.story.type)
+        const imageUrl = resolveCoverImageUrl(cover.story, data.teams)
+        snapshotCover(leagueId, cover, week, season, tone, imageUrl)
+      }
+      // Claim regardless of whether a real cover composed — visiting
+      // during the issue's week counts even on a quiet-cover week.
+      claimIssue(leagueId, week, season)
+    } catch (err) {
+      console.warn('[cover-archive] snapshot/claim failed:', err)
+    }
+  },
+  { immediate: true },
+)
+
 /** Season-stage gate for the inline playoff-push section. The
  *  framing only makes sense in the last 5 weeks of the regular
  *  season (stretch) and onward — in midseason "four teams two
@@ -1360,6 +1290,30 @@ const strictLeagueRecord = computed(() => {
   return leaguesStore.leagues.find((l) => l.id === uuid) ?? null
 })
 const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
+
+/** Earliest season we have stored for this league — same util the
+ *  layout feeds the masthead. Published into the issue store on load
+ *  (below) so the masthead AND the cover read one source of truth for
+ *  the volume number. */
+const coverFoundedSeason = computed<number | undefined>(() => {
+  const league = strictLeagueRecord.value
+  if (!league) return undefined
+  return leagueFoundedSeason(league, leaguesStore.leagues)
+})
+
+/** Issue number + volume for the cover, read from the same issue store
+ *  the masthead reads. Keeps the cover's "ISSUE 10 · VOL. 3" in lockstep
+ *  with the masthead rather than drifting off the fixture constants. */
+const coverMeta = computed<{ issueNumber: number; volume: number }>(() => {
+  const week = issueStore.currentWeek ?? issueData.value.currentWeek ?? 1
+  const season =
+    issueStore.currentSeason ?? issueData.value.currentSeason ?? new Date().getFullYear()
+  const founded = issueStore.leagueFoundedSeason ?? season
+  return {
+    issueNumber: Math.max(1, week),
+    volume: Math.max(1, season - founded + 1),
+  }
+})
 
 const liveLeagueId = computed<string | null>(() => {
   // Strict route: the platform's own league id lives on the leagues
@@ -1423,6 +1377,7 @@ async function loadLiveData() {
       currentSeason: data.currentSeason,
       regularSeasonEndWeek: data.regularSeasonEndWeek,
       seasonStage: deriveSeasonStage(data.currentWeek, data.regularSeasonEndWeek),
+      leagueFoundedSeason: coverFoundedSeason.value,
       lastUpdated: new Date(),
     })
   } catch (err) {
@@ -1447,6 +1402,7 @@ onMounted(async () => {
       fixtureSource.currentWeek,
       fixtureSource.regularSeasonEndWeek,
     ),
+    leagueFoundedSeason: coverFoundedSeason.value,
     lastUpdated: new Date(),
   })
 
@@ -1645,151 +1601,64 @@ function goToPowerRankings() {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   CATS WON PER WEEK CHART
-   Y axis: 0..11 cats won per matchup week.
-   Featured trio:
-     bt — top scorer (uses bt's second OKLCH stop)
-     mv — my team (yellow --accent-primary)
-     avg — flat dashed line at 5.5 (math constant)
-   Other 7 teams render at 12% opacity as background.
+   THE CLIMB — rank-trajectory momentum.
+   "Heating up" reads honestly off rank-over-time (low = good), not
+   noisy weekly cat counts. We bold two lines against the faint field:
+   the viewer's team and the biggest recent climber.
 ───────────────────────────────────────────────────────────────── */
 
-const PPW_W = 960
-const PPW_H = 280
-const PPW_PAD_L = 40
-const PPW_PAD_R = 130
-const PPW_PAD_T = 18
-const PPW_PAD_B = 24
-const PPW_Y_MIN = 0
-const PPW_Y_MAX = 11
-const PPW_WEEKS = 8
-
-function ppwX(week: number): number {
-  return PPW_PAD_L + ((week - 1) / (PPW_WEEKS - 1)) * (PPW_W - PPW_PAD_L - PPW_PAD_R)
-}
-function ppwY(v: number): number {
-  const clamped = Math.max(PPW_Y_MIN, Math.min(PPW_Y_MAX, v))
-  const t = (clamped - PPW_Y_MIN) / (PPW_Y_MAX - PPW_Y_MIN)
-  return PPW_PAD_T + (1 - t) * (PPW_H - PPW_PAD_T - PPW_PAD_B)
-}
-
-// Gridlines at meaningful cat-win marks: floor, league avg, ceiling.
-const ppwGridY = computed(() =>
-  [2, 5.5, 8].map((v) => ({ value: v, y: ppwY(v) })),
-)
-const ppwWeekXs = computed(() => Array.from({ length: PPW_WEEKS }, (_, i) => ppwX(i + 1)))
-
-interface PPWPoint { x: number; y: number; week: number; value: number }
-function ppwPoints(arr: number[]): PPWPoint[] {
-  return arr.map((v, idx) => ({ x: ppwX(idx + 1), y: ppwY(v), week: idx + 1, value: v }))
-}
-function ppwSmooth(pts: PPWPoint[]): string {
-  return smoothPath(pts as Point[])
-}
-
-// Live chart sources — prefer adapter data, fall back to fixture.
-const weeklyCatsWonSource = computed<Record<string, number[]>>(
-  () => liveData.value?.weeklyCatsWon ?? weeklyCatsWon,
-)
-const weeklyAvgSource = computed<number[]>(
-  () => liveData.value?.weeklyLeagueAverage ?? weeklyCatLeagueAverage,
-)
-const chartTeams = computed(() =>
-  liveData.value?.teams ?? teams,
+/** Viewer's team id, from live data (fixture's my-team in demo).
+ *  Drives the bold "your team" line. */
+const myTeamId = computed<string | undefined>(
+  () => issueData.value.teams.find((t) => t.isMyTeam)?.id,
 )
 
-/**
- * Hottest team — best 4-week delta in cats won (recent 4 weeks vs
- * prior 4 weeks). Matches the chart title "Who's been heating up"
- * (previously this computed the highest CUMULATIVE total, which is
- * "who scored the most all season" — a different question that the
- * title didn't actually ask).
- *
- * Excludes the viewer's team (already shown as its own line). Falls
- * back to "best recent 4-week total" when there isn't enough history
- * to compute a real delta (early-season).
- *
- * The variable is still named topScorerTeam to avoid a rename across
- * 10+ template/legend references — the meaning shifts, the wiring
- * stays put.
- */
-const topScorerTeam = computed(() => {
-  const list = chartTeams.value.filter((t) => t.id !== myTeam.id)
-  const weekData = weeklyCatsWonSource.value
-
-  let bestId = list[0]?.id ?? 'bt'
-  let bestDelta = -Infinity
-  for (const t of list) {
-    const arr = weekData[t.id]
-    if (!arr || arr.length < 4) continue
-    const recent = arr.slice(-4).reduce((a, b) => a + b, 0)
-    const prior = arr.length >= 8
-      ? arr.slice(-8, -4).reduce((a, b) => a + b, 0)
-      : 0  // early-season — use recent-4 as the score
-    const delta = recent - prior
-    if (delta > bestDelta) {
-      bestDelta = delta
+/** Biggest climber — the team that gained the most rank positions over
+ *  roughly the last four weeks (earlier when history is short).
+ *  Excludes the viewer's own team. Null until there's enough history. */
+const climberTeam = computed(() => {
+  const hist = issueData.value.seasonRankHistory
+  if (!hist || hist.length < 2) return null
+  const now = hist[hist.length - 1].ranks
+  const past = hist[Math.max(0, hist.length - 5)].ranks
+  let bestId: string | null = null
+  let bestGain = -Infinity
+  for (const t of issueData.value.teams) {
+    if (t.id === myTeamId.value) continue
+    const r0 = past[t.id]
+    const r1 = now[t.id]
+    if (typeof r0 !== 'number' || typeof r1 !== 'number') continue
+    const gain = r0 - r1 // positive = climbed (rank number dropped)
+    if (gain > bestGain) {
+      bestGain = gain
       bestId = t.id
     }
   }
-  return lookupTeam(bestId)
-})
-// Second OKLCH stop so the top-scorer line visually separates from yellow.
-const topScorerColor = computed(() => {
-  const stops = accentStops(topScorerTeam.value)
-  return stops[1] ?? stops[0]
+  return bestId ? issueData.value.teams.find((t) => t.id === bestId) ?? null : null
 })
 
-const topScorerPoints = computed(() =>
-  ppwPoints(weeklyCatsWonSource.value[topScorerTeam.value.id] ?? []),
-)
-const topScorerPath = computed(() => ppwSmooth(topScorerPoints.value))
-const topScorerEnd = computed(() => topScorerPoints.value.at(-1) ?? null)
-
-const myTeamPoints = computed(() =>
-  ppwPoints(weeklyCatsWonSource.value[myTeam.id] ?? []),
-)
-const myTeamPath = computed(() => ppwSmooth(myTeamPoints.value))
-const myTeamEnd = computed(() => myTeamPoints.value.at(-1) ?? null)
-
-const avgPpwPoints = computed(() =>
-  weeklyAvgSource.value.map((v, idx) => ({ x: ppwX(idx + 1), y: ppwY(v), week: idx + 1, value: v })),
-)
-const ppwAvgPath = computed(() => ppwSmooth(avgPpwPoints.value))
-const avgEnd = computed(() => avgPpwPoints.value.at(-1) ?? null)
-
-/* Background-team chart helpers (backgroundTeamIds, teamPath,
-   bgStrokeFor) were removed with the noisy background lines — they
-   rendered every team's line at 12% opacity, which made the chart
-   look "data-dense" without actually being readable. The chart now
-   focuses on three legible lines.
-
-   The "Wk 6: Bullpen Theology takes #1" hand-authored annotation
-   was also dropped — it was fixture-only and never fired against
-   live data. */
-
-// Endpoint label de-confliction. Same approach as football home.
-const ENDPOINT_MIN_GAP = 14
-interface EndpointLabel { id: string; rawY: number; y: number }
-const endpointLabels = computed<Record<string, EndpointLabel>>(() => {
-  const items: EndpointLabel[] = []
-  if (topScorerEnd.value) items.push({ id: 'top', rawY: topScorerEnd.value.y, y: topScorerEnd.value.y })
-  if (myTeamEnd.value) items.push({ id: 'mine', rawY: myTeamEnd.value.y, y: myTeamEnd.value.y })
-  if (avgEnd.value) items.push({ id: 'avg', rawY: avgEnd.value.y, y: avgEnd.value.y })
-  items.sort((a, b) => a.rawY - b.rawY)
-  for (let i = 1; i < items.length; i++) {
-    const prev = items[i - 1]
-    if (items[i].y - prev.y < ENDPOINT_MIN_GAP) {
-      items[i].y = prev.y + ENDPOINT_MIN_GAP
-    }
+/** Focus lines for RankSparkline — viewer first (gold), climber second
+ *  (green). Colors stay index-aligned with the ids. */
+const momentumFocusIds = computed<string[]>(() => {
+  const ids: string[] = []
+  if (myTeamId.value) ids.push(myTeamId.value)
+  if (climberTeam.value && climberTeam.value.id !== myTeamId.value) {
+    ids.push(climberTeam.value.id)
   }
-  const map: Record<string, EndpointLabel> = {}
-  for (const it of items) map[it.id] = it
-  return map
+  return ids
 })
-function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
-  return endpointLabels.value[id]?.y ?? rawY
-}
+const momentumFocusColors = computed<string[]>(() => {
+  const colors: string[] = []
+  if (myTeamId.value) colors.push('oklch(0.80 0.17 92)') // gold — your team
+  if (climberTeam.value && climberTeam.value.id !== myTeamId.value) {
+    colors.push('oklch(0.74 0.18 145)') // green — biggest climber
+  }
+  return colors
+})
+
+const hasRankHistory = computed(
+  () => (issueData.value.seasonRankHistory?.length ?? 0) >= 2,
+)
 </script>
 
 <style scoped>
@@ -2857,8 +2726,8 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   .stand-owner { display: none; }
 }
 
-/* ─── 6. CATS WON PER WEEK ────────────────────────────────────── */
-.ppw-headline {
+/* ─── 6. THE CLIMB (rank trajectory) ──────────────────────────── */
+.momentum-headline {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
   font-size: 1.4rem;
@@ -2867,49 +2736,29 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   color: var(--ink-1);
   margin: 0;
 }
-.ppw-chart-wrap {
+.momentum-chart {
   width: 100%;
-  margin-top: 6px;
+  /* Match RankSparkline's viewBox ratio so the chart fills the width
+     cleanly instead of floating in dead space. */
+  aspect-ratio: 600 / 222;
+  margin-top: 12px;
 }
-.ppw-chart {
-  width: 100%;
-  height: 280px;
-  display: block;
-  color: var(--ink-4);
+.momentum-empty {
+  margin: 18px 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  font-style: italic;
 }
-.ppw-grid line {
-  stroke: oklch(0.16 0.015 90);
-  stroke-width: 1;
-}
-.ppw-grid-label,
-.ppw-x-label {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 10px;
-  fill: var(--ink-4);
-  letter-spacing: 0.04em;
-}
-.ppw-end-label text {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-.ppw-annotation-label {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.ppw-legend {
+.momentum-legend {
   list-style: none;
   padding: 0;
-  margin: 14px 0 8px;
+  margin: 18px 0 8px;
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
-.ppw-legend-pill {
+.momentum-legend-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2924,24 +2773,25 @@ function endpointY(id: 'top' | 'mine' | 'avg', rawY: number): number {
   padding: 6px 11px;
   border-radius: 999px;
 }
-.ppw-legend-dot {
+.momentum-legend-pill-mute { color: var(--ink-3); }
+.momentum-legend-dot {
   width: 9px;
   height: 9px;
   border-radius: 999px;
 }
-.ppw-legend-dot-mine {
-  background: var(--accent-primary);
-}
-.ppw-legend-dash {
-  width: 14px;
-  height: 2px;
-  background: linear-gradient(to right, var(--ink-4) 0 4px, transparent 4px 8px, var(--ink-4) 8px 12px, transparent 12px 14px);
-}
-.ppw-caption {
+.momentum-legend-dot-mine    { background: oklch(0.80 0.17 92); }
+.momentum-legend-dot-climber { background: oklch(0.74 0.18 145); }
+.momentum-legend-dot-field   { background: oklch(0.40 0.012 90); }
+.momentum-caption {
   margin: 8px 0 0;
   font-size: 0.85rem;
   line-height: 1.45;
   color: var(--ink-3);
+  max-width: 60ch;
+}
+
+@media (max-width: 720px) {
+  .momentum-chart { aspect-ratio: 3 / 2; }
 }
 
 /* ─── 7. TICKER ───────────────────────────────────────────────── */

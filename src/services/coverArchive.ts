@@ -19,7 +19,7 @@
  *   tlb:claims:{leagueId}  → ClaimRecord[]   (anon claims; auth users will mirror to Supabase)
  */
 
-import type { WeeklyCover } from '@/editorial/composition/weeklyCover'
+import { composeCoverHeadline, type WeeklyCover } from '@/editorial/composition/weeklyCover'
 
 const COVERS_KEY = (leagueId: string) => `tlb:covers:${leagueId}`
 const CLAIMS_KEY = (leagueId: string) => `tlb:claims:${leagueId}`
@@ -38,6 +38,9 @@ export interface ArchivedCover {
   storySignature: string
   headline: string
   deck?: string
+  /** Hero image for the cover (the subject team's logo). Presentational
+   *  only — backfilled onto older snapshots, never frozen. */
+  imageUrl?: string
   tone: 'magenta' | 'gold' | 'teal' | 'up' | 'down'
   /** Epoch ms the snapshot was first written. */
   publishedAt: number
@@ -71,15 +74,27 @@ export function snapshotCover(
   issueWeek: number,
   season: number,
   tone: ArchivedCover['tone'],
+  imageUrl?: string,
 ): ArchivedCover | null {
   if (!isStorageAvailable()) return null
   const id = `${season}-${issueWeek}`
   const all = readCovers(leagueId)
   const existing = all.find((c) => c.id === id)
-  if (existing) return existing
+  if (existing) {
+    // Backfill the cover image onto a snapshot written before image
+    // support (or before the logo loaded). The editorial decision
+    // (headline, tone) stays frozen — only the art fills in.
+    if (!existing.imageUrl && imageUrl) {
+      existing.imageUrl = imageUrl
+      writeCovers(leagueId, all)
+    }
+    return existing
+  }
 
   const ctx = cover.story.context as Record<string, unknown>
-  const headline = typeof ctx.headline === 'string' ? ctx.headline : 'Cover story'
+  // Store the SAME forwardable cover line the live cover renders, not
+  // the raw detector headline — keeps the shelf thumbnail in sync.
+  const headline = composeCoverHeadline(cover.story) || 'Cover story'
   const deck = typeof ctx.summaryLine === 'string' ? ctx.summaryLine : undefined
 
   const fresh: ArchivedCover = {
@@ -92,6 +107,7 @@ export function snapshotCover(
     headline,
     deck,
     tone,
+    imageUrl,
     publishedAt: Date.now(),
   }
 

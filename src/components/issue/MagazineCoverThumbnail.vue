@@ -32,6 +32,14 @@
          accent rail. Reads as a designed cover rather than a
          text-only card. -->
     <div class="mc-field" aria-hidden="true">
+      <img
+        v-if="cover.imageUrl && !imgErrored"
+        :src="cover.imageUrl"
+        class="mc-art"
+        alt=""
+        @error="imgErrored = true"
+      />
+      <span v-if="cover.imageUrl && !imgErrored" class="mc-art-vignette"></span>
       <span class="mc-rail"></span>
       <span class="mc-corner-glow"></span>
     </div>
@@ -68,8 +76,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ArchivedCover } from '@/services/coverArchive'
+
+/** Falls back to the type-led tone field if the logo fails to load
+ *  (e.g. an ESPN logo that 401s from its CDN). */
+const imgErrored = ref(false)
 
 /** State drives the overlay treatment.
  *  - claimed: user has the issue. Renders clean.
@@ -178,6 +190,28 @@ const dateLabel = computed<string>(() => {
     );
   pointer-events: none;
 }
+/* Image-led art — the subject team's logo fills the field; a bottom
+   vignette keeps the cover line legible. Absent image falls back to
+   the tone field above. */
+.mc-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(1.02) contrast(1.02);
+}
+.mc-art-vignette {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    oklch(0.05 0.012 90 / 0.12) 0%,
+    oklch(0.05 0.012 90 / 0.42) 48%,
+    oklch(0.06 0.012 90 / 0.92) 100%
+  );
+}
 .mc-rail {
   position: absolute;
   top: 12px;
@@ -186,6 +220,7 @@ const dateLabel = computed<string>(() => {
   width: 2px;
   background: var(--mc-accent);
   border-radius: 999px;
+  z-index: 1;
 }
 .mc-corner-glow {
   position: absolute;
