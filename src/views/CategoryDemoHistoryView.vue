@@ -684,24 +684,6 @@
       </div>
     </section>
 
-    <!-- ─────────────────────────────────────────────────────────────
-         SECTION 9 — FOOTNOTES
-    ────────────────────────────────────────────────────────────── -->
-    <section class="quick" aria-labelledby="quick-heading">
-      <h2 class="section-eyebrow section-eyebrow-mute" id="quick-heading">Footnotes</h2>
-      <ul class="pills" role="list">
-        <li
-          v-for="(p, i) in footnotes"
-          :key="p.label"
-          class="pill"
-        >
-          <span class="pill-dot" :class="dotClassFor(i)" aria-hidden="true"></span>
-          <span class="pill-label">{{ p.label }}</span>
-          <span class="pill-value">{{ p.value }}</span>
-        </li>
-      </ul>
-    </section>
-
     <!-- Modals -->
     <CategoryTeamLegacyModal
       v-if="activeLegacyTeamId"
@@ -725,7 +707,7 @@ import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   teams,
-  getTeam,
+  getTeam as getFixtureTeam,
   seasonHistory,
   teamCareerStats,
   legacyBreakdowns,
@@ -734,7 +716,6 @@ import {
   yearlyCatRecords,
   recordBook,
   categoryDynastyBeats,
-  historyFootnotes,
   type CategoryRecordBookEntry,
 } from '@/fixtures/categoriesLeague'
 import CategoryTeamLegacyModal from '@/components/demo/CategoryTeamLegacyModal.vue'
@@ -746,8 +727,9 @@ import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
-import type { CategoryLeagueData } from '@/editorial/types'
+import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
+import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
@@ -770,11 +752,57 @@ const liveEditorial = shallowRef<RenderedHistoryCopy>(
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
 
-const liveLeagueId = computed(() => {
+/** Live-aware team lookup. Prefers the connected league's teams, falls
+ *  back to the fixture (demo + transitional renders), then a synthesized
+ *  stub so the template never crashes on an unknown id. Shadows the
+ *  fixture import so every getTeam(...) call in this view is live-aware. */
+function getTeam(id: string): CategoryLeagueDataTeam {
+  const live = liveData.value?.teams.find((t) => t.id === id)
+  if (live) return live
+  // The fixture getTeam RETURNS undefined (not throws) for unknown ids,
+  // so guard the result — never hand the template an undefined team.
+  let fixture: CategoryLeagueDataTeam | undefined
+  try {
+    fixture = getFixtureTeam(id)
+  } catch {
+    fixture = undefined
+  }
+  if (fixture) return fixture
+  return {
+    id,
+    name: `Team ${id}`,
+    ownerName: '',
+    ownerInitials: (id || '?').slice(0, 2).toUpperCase(),
+    avatarUrl: undefined,
+    avatarColor: 'oklch(0.40 0.05 90), oklch(0.25 0.05 90)',
+    isMyTeam: false,
+  }
+}
+
+// Two ways to bind to a real league (mirrors CategoryDemoHomeView):
+//   - Strict:  /leagues/:leagueId/history — leagueId is the Supabase
+//     leagues.id UUID; resolve platform + platform_league_id from the
+//     leagues store.
+//   - Soft (legacy): /demo-categories/history?leagueId=…&platform=…
+const leaguesStore = useLeaguesStore()
+const strictLeagueRecord = computed(() => {
+  const uuid = route.params.leagueId
+  if (typeof uuid !== 'string' || uuid.length === 0) return null
+  return leaguesStore.leagues.find((l) => l.id === uuid) ?? null
+})
+const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
+
+const liveLeagueId = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform_league_id ?? null
+  }
   const v = route.query.leagueId
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
-const livePlatform = computed(() => {
+const livePlatform = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform ?? null
+  }
   const v = route.query.platform
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
@@ -791,17 +819,31 @@ const platformLabel = computed(() => {
 })
 
 onMounted(async () => {
+  // Strict route deep-link / refresh: the leagues store may not be
+  // hydrated yet, so fetch it before we can resolve the platform +
+  // platform_league_id for this league row.
+  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
+    try {
+      await leaguesStore.fetchLeagues()
+    } catch (err) {
+      console.warn('[CategoryDemoHistoryView] fetchLeagues failed:', err)
+    }
+  }
+
   const id = liveLeagueId.value
   const platform = livePlatform.value
   if (!id || (platform !== 'sleeper' && platform !== 'espn' && platform !== 'yahoo')) {
-    return   // fixture-only path
+    return   // fixture-only path (demo, or league row not resolved yet)
   }
 
   liveLoading.value = true
   liveError.value = null
   try {
-    // See CategoryDemoHomeView for why we pass identity explicitly.
-    const opts = { userIdentity: collectUserIdentity() }
+    // leagueRowId is the Supabase UUID (route param) — passed for parity
+    // with the home view's adapter options.
+    const leagueRowId =
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined
+    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)
@@ -811,9 +853,9 @@ onMounted(async () => {
     liveData.value = data
     liveEditorial.value = renderHistoryPage(data)
   } catch (err) {
-    const platformLabel =
+    const label =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
-    liveError.value = (err as Error).message || `Failed to load ${platformLabel} league data.`
+    liveError.value = (err as Error).message || `Failed to load ${label} league data.`
   } finally {
     liveLoading.value = false
   }
@@ -1200,33 +1242,6 @@ function onRecordClick(_entry: CategoryRecordBookEntry) {
   // Intentional no-op: top-10 award modal not in scope for category league yet.
   // Cards remain interactive (focus/active states) for discoverability.
 }
-
-/* ─── Footnote dot colors ──────────────────────────────────── */
-function dotClassFor(i: number): string {
-  const map = ['pill-dot-gold', 'pill-dot-secondary', 'pill-dot-tertiary', 'pill-dot-mute', 'pill-dot-secondary']
-  return map[i % map.length]
-}
-
-/* ─── Footnotes (5 pills) — editorial-driven with a fixture fallback so
-   the layout always has something to render even when detection skips
-   a pill (e.g. brand-new league, no streak yet). */
-const footnotes = computed<readonly { label: string; value: string }[]>(() => {
-  const ed = liveEditorial.value.footnotes
-  if (ed.length === 0) return historyFootnotes
-  // Editorial drives the pills 1:1, mapping its kind labels to the
-  // existing display labels the design uses.
-  const labelMap: Record<string, string> = {
-    'footnote-longest-dynasty':          'LONGEST DYNASTY',
-    'footnote-biggest-blowout':          'BIGGEST CATEGORY SWEEP',
-    'footnote-closest-championship':     'CLOSEST CHAMPIONSHIP',
-    'footnote-most-consistent':          'MOST CONSISTENT',
-    'footnote-most-volatile':            'MOST CATEGORY VOLATILITY',
-  }
-  return ed.map((f) => ({
-    label: labelMap[f.kind] ?? f.label,
-    value: f.value,
-  }))
-})
 
 /* ─── Rivalry editorial passthrough — provides the marquee/procedural
    narrative that the rivalry modal will display as its lead paragraph.
