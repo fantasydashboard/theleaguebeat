@@ -41,9 +41,42 @@
     </header>
 
     <!-- ─────────────────────────────────────────────────────────────
+         RECORD WATCH — the weekly reason to check back (live chases)
+    ────────────────────────────────────────────────────────────── -->
+    <section v-if="recordWatch.length" class="watch" aria-label="Record watch">
+      <div class="watch-head-row">
+        <span class="watch-pulse" aria-hidden="true"></span>
+        <p class="watch-title">Record watch</p>
+        <p class="watch-sub">Moves every week</p>
+      </div>
+      <div class="watch-grid">
+        <button
+          v-for="w in recordWatch"
+          :key="w.label"
+          type="button"
+          class="watch-item"
+          @click="onWatchClick(w)"
+          :aria-label="w.route ? `${w.label}: ${w.text} — go to Home` : `${w.label}: ${w.text} — jump to the team`"
+        >
+          <div
+            class="watch-logo"
+            :style="{ background: `linear-gradient(135deg, ${w.avatarColor})` }"
+          >
+            <img v-if="w.logoUrl" :src="w.logoUrl" alt="" />
+            <span v-else>{{ w.ownerInitials }}</span>
+          </div>
+          <div class="watch-body">
+            <p class="watch-label">{{ w.label }}<span class="watch-jump" aria-hidden="true">{{ w.route ? '→' : '↓' }}</span></p>
+            <p class="watch-text">{{ w.text }}</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
          SECTION 2 — HALL OF CHAMPIONS
     ────────────────────────────────────────────────────────────── -->
-    <section class="champs" aria-labelledby="champs-heading">
+    <section id="sec-champs" class="champs" aria-labelledby="champs-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-gold" id="champs-heading">Hall of champions</p>
         <h2 class="section-headline">{{ trophiesHeadline }}</h2>
@@ -121,7 +154,7 @@
     <!-- ─────────────────────────────────────────────────────────────
          SECTION 3 — ALL-TIME LEGACY
     ────────────────────────────────────────────────────────────── -->
-    <section class="legacy" aria-labelledby="legacy-heading">
+    <section id="sec-legacy" class="legacy" aria-labelledby="legacy-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="legacy-heading">All-time legacy</p>
         <h2 class="section-headline">Who's the best to ever do it.</h2>
@@ -134,6 +167,7 @@
         <component
           :is="legacyInteractive ? 'button' : 'div'"
           v-if="podium[1]"
+          :id="`legacy-${podium[1].key}`"
           :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-2"
           :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[1].isMyTeam }"
@@ -164,6 +198,7 @@
         <component
           :is="legacyInteractive ? 'button' : 'div'"
           v-if="podium[0]"
+          :id="`legacy-${podium[0].key}`"
           :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-1"
           :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[0].isMyTeam }"
@@ -195,6 +230,7 @@
         <component
           :is="legacyInteractive ? 'button' : 'div'"
           v-if="podium[2]"
+          :id="`legacy-${podium[2].key}`"
           :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-3"
           :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[2].isMyTeam }"
@@ -228,9 +264,10 @@
       </div>
 
       <ol class="legacy-rows" role="list">
-        <li v-for="entry in legacyTail" :key="entry.teamId || entry.name" role="listitem">
+        <li v-for="entry in legacyTail" :key="entry.key" role="listitem">
           <component
             :is="legacyInteractive ? 'button' : 'div'"
+            :id="`legacy-${entry.key}`"
             :type="legacyInteractive ? 'button' : undefined"
             class="legacy-row"
             @click="onLegacyClick(entry)"
@@ -587,7 +624,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   teams,
   getTeam as getFixtureTeam,
@@ -616,6 +653,7 @@ import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 defineEmits<{ (e: 'open-signup'): void }>()
 
 const route = useRoute()
+const router = useRouter()
 
 /* ─────────────────────────────────────────────────────────────────
    LIVE DATA — same pattern as CategoryDemoHomeView.
@@ -845,6 +883,126 @@ const pageContext = computed(() => {
   return { seasons: displaySeasonCount.value, champions: championsCount, teamsCount }
 })
 
+/* ─── Record watch — the weekly reason to check back ───────────
+   Live chases computed from data we already have (no new fetches):
+   an all-time milestone closing in, the current-season title race, and
+   the viewer's own climb up the all-time ladder. Recomputes every week
+   as cats accrue, so the top of the page is never the same twice.
+   Live-only (a chase needs real, current numbers). */
+interface WatchItem {
+  label: string
+  logoUrl?: string
+  avatarColor: string
+  ownerInitials: string
+  text: string
+  anchor?: string        // element id to scroll to + highlight (same page)
+  route?: string         // route to navigate to (current-season → Home)
+}
+
+/** Home ("today") route for current-season chases, matched to how this
+ *  view was reached. */
+function liveHomeHref(): string {
+  if (isStrictLiveMode.value && typeof route.params.leagueId === 'string') {
+    return `/leagues/${route.params.leagueId}/home`
+  }
+  const q: string[] = []
+  if (typeof route.query.leagueId === 'string') q.push(`leagueId=${encodeURIComponent(route.query.leagueId)}`)
+  if (typeof route.query.platform === 'string') q.push(`platform=${encodeURIComponent(route.query.platform)}`)
+  return q.length ? `/demo-categories/home?${q.join('&')}` : '/demo-categories/home'
+}
+
+const recordWatch = computed<WatchItem[]>(() => {
+  const d = liveData.value
+  const live = d?.managerLegacy
+  if (!d || !live || live.length === 0) return []
+  const items: WatchItem[] = []
+  // Self-contained avatar bits from a manager (works for departed
+  // managers too — they carry their own logo on the legacy record).
+  const mgr = (m: (typeof live)[number]) => ({
+    logoUrl: m.logoUrl, avatarColor: m.avatarColor, ownerInitials: m.ownerInitials,
+  })
+
+  // 1. Milestone watch — the most imminent round-number all-time total.
+  //    Jumps to (and highlights) that manager's row in the Legacy list.
+  let milestone: { m: (typeof live)[number]; target: number; gap: number } | null = null
+  for (const m of live) {
+    if (m.totalCatWins < 100) continue            // skip trivial milestones
+    const next = Math.ceil((m.totalCatWins + 1) / 50) * 50
+    const gap = next - m.totalCatWins
+    if (gap > 0 && (!milestone || gap < milestone.gap)) milestone = { m, target: next, gap }
+  }
+  if (milestone) {
+    items.push({
+      label: 'Milestone watch',
+      ...mgr(milestone.m),
+      text: `${milestone.m.name} is ${milestone.gap} cat${milestone.gap === 1 ? '' : 's'} from ${milestone.target} all-time.`,
+      anchor: `legacy-${milestone.m.managerGuid}`,
+    })
+  }
+
+  // 2. Title race — current-season cat gap between #1 and #2.
+  //    This is a *today* story, so it routes to the Home page.
+  const std = [...d.standings].sort((a, b) => a.rank - b.rank)
+  if (std.length >= 2) {
+    const lead = d.teams.find((t) => t.id === std[0].teamId)
+    const chase = d.teams.find((t) => t.id === std[1].teamId)
+    if (lead && chase) {
+      const gap = (std[0].catWins ?? 0) - (std[1].catWins ?? 0)
+      items.push({
+        label: `${d.currentSeason} title race`,
+        logoUrl: chase.avatarUrl, avatarColor: chase.avatarColor, ownerInitials: chase.ownerInitials,
+        text: gap <= 0
+          ? `${chase.name} is dead even with ${lead.name} atop ${d.currentSeason}.`
+          : `${chase.name} trails ${lead.name} by ${gap} cat${gap === 1 ? '' : 's'} for the ${d.currentSeason} lead.`,
+        route: liveHomeHref(),
+      })
+    }
+  }
+
+  // 3. Your climb — legacy gap to the manager directly above you.
+  //    Jumps to (and highlights) your own row in the Legacy list.
+  const meIdx = live.findIndex((m) => m.isMyTeam)
+  if (meIdx > 0) {
+    const me = live[meIdx]
+    const above = live[meIdx - 1]
+    const gap = above.legacyScore - me.legacyScore
+    items.push({
+      label: 'Your climb',
+      ...mgr(me),
+      text: `${me.name} are ${gap} behind ${above.name} for #${above.rank} all-time.`,
+      anchor: `legacy-${me.managerGuid}`,
+    })
+  } else if (meIdx === 0 && live.length > 1) {
+    const me = live[0]
+    const below = live[1]
+    const gap = me.legacyScore - below.legacyScore
+    items.push({
+      label: 'Holding the throne',
+      ...mgr(me),
+      text: `${me.name} lead ${below.name} by ${gap} for the all-time top spot.`,
+      anchor: `legacy-${me.managerGuid}`,
+    })
+  }
+
+  return items
+})
+
+/** A watch item either routes to Home (current-season chases) or
+ *  smooth-scrolls to + highlights the specific team it names. */
+function onWatchClick(w: WatchItem): void {
+  if (w.route) {
+    router.push(w.route)
+    return
+  }
+  if (!w.anchor) return
+  const el = document.getElementById(w.anchor)
+  if (!el) return
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
+  el.classList.add('watch-flash')
+  window.setTimeout(() => el.classList.remove('watch-flash'), 1600)
+}
+
 
 /* ─── Seasons / champions ──────────────────────────────────── */
 const seasonsNewestFirst = computed(() => {
@@ -1012,6 +1170,7 @@ const categoryCrowns = computed<CrownBeat[]>(() => {
 interface LegacyDisplay {
   rank: number
   score: number
+  key: string               // stable id (manager guid / fixture team id) for anchors
   teamId: string            // '' for managers no longer in the league
   name: string
   logoUrl?: string
@@ -1038,6 +1197,7 @@ const legacyEntries = computed<LegacyDisplay[]>(() => {
     return live.map((m) => ({
       rank: m.rank,
       score: m.legacyScore,
+      key: m.managerGuid,
       teamId: m.teamId ?? '',
       name: m.name,
       logoUrl: m.logoUrl,
@@ -1064,6 +1224,7 @@ const legacyEntries = computed<LegacyDisplay[]>(() => {
           careerWinPct,
           totalCatWins: c?.totalCatWins ?? 0,
         }),
+        key: b.teamId,
         teamId: b.teamId,
         name: t.name,
         logoUrl: t.avatarUrl,
@@ -1716,6 +1877,131 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
   .page-context-pill { padding: 8px 14px; }
 }
 
+/* ─── RECORD WATCH — live "what to watch" strip ──────────────── */
+.watch {
+  margin-top: -30px;          /* pull up toward the page head (container gap is 56px) */
+  border: 1px solid oklch(0.22 0.03 145 / 0.5);
+  border-radius: 16px;
+  padding: 16px 18px;
+  background:
+    linear-gradient(180deg, oklch(0.74 0.18 145 / 0.05), transparent 60%),
+    oklch(0.10 0.015 90);
+}
+.watch-head-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+.watch-pulse {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent-up);
+  box-shadow: 0 0 0 0 oklch(0.74 0.18 145 / 0.6);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .watch-pulse { animation: watch-pulse 2s ease-out infinite; }
+}
+@keyframes watch-pulse {
+  0%   { box-shadow: 0 0 0 0 oklch(0.74 0.18 145 / 0.55); }
+  70%  { box-shadow: 0 0 0 7px oklch(0.74 0.18 145 / 0); }
+  100% { box-shadow: 0 0 0 0 oklch(0.74 0.18 145 / 0); }
+}
+.watch-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--accent-up);
+  margin: 0;
+}
+.watch-sub {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-4);
+  margin: 0 0 0 auto;
+}
+.watch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 820px) {
+  .watch-grid { grid-template-columns: 1fr; }
+}
+.watch-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  text-align: left;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 8px;
+  margin: -8px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.watch-item:focus-visible { outline: 2px solid var(--accent-up); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .watch-item { transition: background 140ms ease, border-color 140ms ease, transform 140ms ease; }
+}
+.watch-item:active { transform: scale(0.98); transition-duration: 100ms; }
+@media (hover: hover) and (pointer: fine) {
+  .watch-item:hover { background: oklch(0.14 0.02 145 / 0.5); border-color: oklch(0.30 0.04 145 / 0.5); }
+  .watch-item:hover .watch-jump { opacity: 1; transform: translateY(1px); }
+}
+.watch-jump {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--accent-up);
+  opacity: 0;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.watch-logo {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  overflow: hidden;
+  flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 0.72rem;
+  color: oklch(0.12 0.012 90);
+}
+.watch-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.watch-body { min-width: 0; }
+.watch-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 3px;
+}
+.watch-text {
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--ink-1);
+  margin: 0;
+}
+
+/* Scroll-anchor targets clear the masthead, and the specific team a
+   Record Watch item names flashes briefly when jumped to. */
+#sec-champs, #sec-legacy, .legacy-row, .podium-card { scroll-margin-top: 96px; }
+.watch-flash {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .watch-flash { animation: watch-flash 1.6s ease-out; }
+}
+@keyframes watch-flash {
+  0%   { box-shadow: 0 0 0 2px oklch(0.74 0.18 145 / 0.7), 0 0 26px oklch(0.74 0.18 145 / 0.35); }
+  100% { box-shadow: 0 0 0 2px oklch(0.74 0.18 145 / 0), 0 0 26px oklch(0.74 0.18 145 / 0); }
+}
+
 /* ─── 2. HALL OF CHAMPIONS ────────────────────────────────────── */
 .champs-rail {
   display: flex;
@@ -1866,6 +2152,8 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
 }
 @media (prefers-reduced-motion: no-preference) {
   .podium-card { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .podium-card:hover { transform: translateY(-2px); }
 }
 .podium-card:active { transform: scale(0.99); transition-duration: 100ms; }
@@ -2054,6 +2342,8 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
 .legacy-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
   .legacy-row { transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .legacy-row:hover { transform: translateY(-1px); border-color: oklch(0.30 0.015 90); }
 }
 .legacy-row:active { transform: scale(0.99); transition-duration: 100ms; }
@@ -2574,6 +2864,8 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
   .shame-a, .shame-b, .shame-c, .shame-d {
     transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
   }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .fame-a:hover, .fame-b:hover, .fame-c:hover, .fame-d:hover { transform: translateY(-1px); border-color: oklch(0.30 0.015 90); border-left-color: var(--accent-up); }
   .shame-a:hover, .shame-b:hover, .shame-c:hover, .shame-d:hover { transform: translateY(-1px); border-color: oklch(0.30 0.015 90); border-left-color: var(--accent-secondary); }
 }
