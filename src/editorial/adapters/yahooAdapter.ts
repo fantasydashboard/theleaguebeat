@@ -44,6 +44,7 @@ import type {
   CategoryLeagueDataTeam,
   CategoryLeagueDataTeamCareerStats,
   CategoryLeagueDataManagerLegacy,
+  ManagerSeasonPoint,
   CategoryLeagueDataWeeklyRanks,
   WLT,
 } from '../types'
@@ -1365,6 +1366,7 @@ function buildManagerLegacy(
     catL: number
     catT: number
     isMe: boolean
+    seasons: ManagerSeasonPoint[]
   }
   const byGuid = new Map<string, Acc>()
   for (const s of seasons) {
@@ -1387,6 +1389,7 @@ function buildManagerLegacy(
           catL: 0,
           catT: 0,
           isMe: !!myGuid && guid === myGuid,
+          seasons: [],
         }
         byGuid.set(guid, acc)
       }
@@ -1396,12 +1399,23 @@ function buildManagerLegacy(
         if (row.name) acc.name = row.name
         if (row.logo_url) acc.logo = row.logo_url
       }
+      const w = Number(row.wins) || 0
+      const l = Number(row.losses) || 0
+      const t = Number(row.ties) || 0
+      const rank = Number(row.rank) || 999
       acc.seasonsPlayed++
-      acc.catW += Number(row.wins) || 0
-      acc.catL += Number(row.losses) || 0
-      acc.catT += Number(row.ties) || 0
+      acc.catW += w
+      acc.catL += l
+      acc.catT += t
+      acc.seasons.push({
+        year: s.year,
+        completed: s.completed,
+        rank,
+        catWins: w,
+        catLosses: l,
+        catTies: t,
+      })
       if (s.completed) {
-        const rank = Number(row.rank) || 999
         if (rank === 1) acc.titles++
         else if (rank === 2) acc.runnerUps++
         if (rank <= playoffCutoff) acc.playoffApps++
@@ -1452,6 +1466,7 @@ function buildManagerLegacy(
         careerWinPct,
         totalCatWins: acc.catW,
       }),
+      seasons: acc.seasons.sort((a, b) => a.year - b.year),
       rank: 0,
     })
   }

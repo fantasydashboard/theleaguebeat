@@ -131,6 +131,19 @@ export interface CategoryLeagueDataSeasonHistory {
   basementName?: string
 }
 
+/** One season in a manager's career — the per-year detail behind the
+ *  legacy aggregate. Drives the "across the years" trend and the
+ *  record book's single-season extremes (no extra fetches: built from
+ *  the same connected-season standings as the legacy totals). */
+export interface ManagerSeasonPoint {
+  year: number
+  completed: boolean
+  rank: number
+  catWins: number
+  catLosses: number
+  catTies: number
+}
+
 /** All-time, per-manager legacy aggregation across every connected
  *  season. The cross-season key is the *manager*, not the team: Yahoo
  *  (and ESPN/Sleeper) mint a fresh team id each year, so identity has to
@@ -159,6 +172,8 @@ export interface CategoryLeagueDataManagerLegacy {
   /** Defined legacy score; see editorial/legacy.ts. The page shows the
    *  formula so the number is legible, not a black box. */
   legacyScore: number
+  /** Per-season detail, oldest first. For trend lines + record book. */
+  seasons: ManagerSeasonPoint[]
   /** 1-based rank by legacyScore. */
   rank: number
 }

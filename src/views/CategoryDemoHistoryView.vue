@@ -270,75 +270,60 @@
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="trends-heading">Across the years</p>
         <h2 class="section-headline">When the empires rose.</h2>
-        <p class="section-sub">Top three plus your team are highlighted. Rest are dimmed for focus.</p>
+        <p class="section-sub">Where every team finished, season by season. Top three and your team in color; the rest dimmed. 2026 is the current standings.</p>
       </header>
 
-      <div class="trends-chart-wrap">
+      <div class="bump-wrap">
         <svg
-          class="trends-chart"
+          class="bump-chart"
           :viewBox="`0 0 ${TX_W} ${TX_H}`"
           preserveAspectRatio="none"
           role="img"
-          aria-label="Cumulative legacy score per team across seasons 2021 through 2026"
+          aria-label="Finish position by season for each manager"
         >
-          <g class="trends-grid">
-            <line v-for="g in gridLines" :key="`g-${g.v}`"
-              :x1="0" :y1="g.y" :x2="TX_W" :y2="g.y" />
+          <!-- faint rank gridlines -->
+          <g class="bump-grid">
+            <line v-for="r in bumpMaxRank" :key="`r-${r}`"
+              :x1="TX_PAD_L" :y1="yForRank(r)" :x2="TX_W - TX_PAD_R" :y2="yForRank(r)" />
           </g>
-          <g class="trends-xticks">
+          <!-- year ticks -->
+          <g class="bump-xticks">
             <text v-for="(y, i) in trendYears" :key="`yr-${y}`"
-              :x="xFor(i)" :y="TX_H - 6"
-              text-anchor="middle">{{ y }}</text>
+              :x="xFor(i)" :y="TX_H - 8" text-anchor="middle">{{ y }}</text>
           </g>
-
-          <!-- Annotation marker: 2024 dynasty begins -->
-          <g class="trends-annotation" v-if="ctTrendValueAt2024 != null">
-            <line
-              :x1="xFor(3)" :y1="yFor(ctTrendValueAt2024)"
-              :x2="xFor(3)" :y2="yFor(ctTrendValueAt2024) - 28"
-              stroke="oklch(0.84 0.16 90 / 0.6)"
-              stroke-width="1"
-              stroke-dasharray="2 3"
-            />
-            <text
-              :x="xFor(3)" :y="yFor(ctTrendValueAt2024) - 34"
-              text-anchor="middle"
-              fill="oklch(0.84 0.16 90)"
-              class="trends-annot-text"
-            >2024 · Dynasty begins</text>
-          </g>
-
-          <!-- Lines -->
-          <g
-            v-for="row in legacyTrend"
-            :key="`line-${row.teamId}`"
-            :class="['trends-line-group', getTeam(row.teamId).isMyTeam ? 'is-me' : '', isFeatured(row.teamId) ? 'is-featured' : 'is-dim']"
-          >
-            <path
-              :d="pathFor(row.cumulative)"
-              :stroke="getTeam(row.teamId).isMyTeam ? 'oklch(0.84 0.16 90)' : accentOf(row.teamId)"
-              :stroke-width="getTeam(row.teamId).isMyTeam ? 2.6 : 1.6"
-              fill="none"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-              :style="getTeam(row.teamId).isMyTeam ? 'filter: drop-shadow(0 0 4px oklch(0.84 0.16 90 / 0.55))' : ''"
-            />
-            <circle
-              :cx="xFor(row.cumulative.length - 1)"
-              :cy="yFor(row.cumulative[row.cumulative.length - 1])"
-              :r="getTeam(row.teamId).isMyTeam ? 5 : 3.5"
-              :fill="getTeam(row.teamId).isMyTeam ? 'oklch(0.84 0.16 90)' : accentOf(row.teamId)"
-            />
-          </g>
-
-          <!-- Right-edge labels (only for featured teams, staggered) -->
-          <g class="trends-endlabels">
-            <text v-for="lbl in endpointLabels" :key="`lbl-${lbl.teamId}`"
-              :x="lbl.x" :y="lbl.y"
-              :fill="getTeam(lbl.teamId).isMyTeam ? 'oklch(0.84 0.16 90)' : accentOf(lbl.teamId)"
-            >{{ getTeam(lbl.teamId).name.split(' ')[0] }}</text>
-          </g>
+          <!-- dimmed connectors -->
+          <path v-for="s in dimBump" :key="`dim-${s.key}`"
+            :d="s.path" class="bump-line-dim" fill="none" />
+          <!-- featured lines -->
+          <path v-for="s in featuredBump" :key="`line-${s.key}`"
+            :d="s.path" :stroke="s.lineColor"
+            class="bump-line" :class="{ 'is-me': s.isMyTeam }"
+            fill="none" stroke-linejoin="round" stroke-linecap="round" />
         </svg>
+
+        <!-- y-axis hints -->
+        <span class="bump-axis bump-axis-top">1st</span>
+        <span class="bump-axis bump-axis-bot">{{ bumpMaxRank }}th</span>
+
+        <!-- HTML overlay: logo nodes for featured, faint dots for the rest -->
+        <div class="bump-overlay">
+          <template v-for="s in dimBump" :key="`ddots-${s.key}`">
+            <span v-for="nd in s.displayNodes" :key="`dd-${s.key}-${nd.i}`"
+              class="bump-dot-dim" :style="{ left: nd.xPct + '%', top: nd.yPct + '%' }" />
+          </template>
+          <template v-for="s in featuredBump" :key="`fnodes-${s.key}`">
+            <div v-for="nd in s.displayNodes" :key="`fn-${s.key}-${nd.i}`"
+              class="bump-node" :class="{ 'is-me': s.isMyTeam }"
+              :style="{ left: nd.xPct + '%', top: nd.yPct + '%', '--node-accent': s.lineColor } as any">
+              <div class="bump-node-avatar" :style="{ background: `linear-gradient(135deg, ${s.avatarColor})` }">
+                <img v-if="s.logoUrl" :src="s.logoUrl" alt="" />
+                <span v-else>{{ s.ownerInitials }}</span>
+              </div>
+            </div>
+          </template>
+          <span v-for="lbl in bumpLabels" :key="`lbl-${lbl.key}`"
+            class="bump-label" :style="{ left: lbl.xPct + '%', top: lbl.yPct + '%', color: lbl.color }">{{ lbl.name }}</span>
+        </div>
       </div>
     </section>
 
@@ -775,7 +760,6 @@ import {
 } from '@/fixtures/categoriesLeague'
 import CategoryTeamLegacyModal from '@/components/demo/CategoryTeamLegacyModal.vue'
 import CategoryRivalryModal from '@/components/demo/CategoryRivalryModal.vue'
-import { accentFor } from '@/utils/teamColor'
 import { linearPath, type Point } from '@/utils/svgPath'
 import { renderHistoryPage, type RenderedHistoryCopy } from '@/editorial/render-history'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -1295,9 +1279,6 @@ const careerRows = computed(() => {
   )
 })
 
-function accentOf(id: string) {
-  return accentFor(getTeam(id))
-}
 
 function formatDiff(n: number): string {
   if (n > 0) return `+${n}`
@@ -1305,66 +1286,163 @@ function formatDiff(n: number): string {
   return '0'
 }
 
-/* ─── Trend chart geometry ─────────────────────────────────── */
+/* ─── Across the years — finish-position bump chart ──────────────
+   The page already ranks managers two ways (champions, legacy). The one
+   thing those can't show is *movement*: who climbed, who fell, who won
+   the founding year and vanished. So this plots each manager's FINISH
+   (1 = top) per season — lines cross as teams pass each other, logos sit
+   at every node. Featured = top-3 by legacy + you; the rest are faint
+   connectors. Real ranks from managerLegacy.seasons; the demo derives a
+   finish order from fixture cumulative volume. */
 const TX_W = 1000
-const TX_H = 320
-const TX_PAD_L = 36
-const TX_PAD_R = 120
-const TX_PAD_T = 18
-const TX_PAD_B = 28
-const Y_MAX = 1700
-const trendYears = [2021, 2022, 2023, 2024, 2025, 2026]
-const gridLines = [400, 800, 1200, 1600].map((v) => ({ v, y: yFor(v) }))
+const TX_H = 380
+const TX_PAD_L = 64           // room for the "1ST" y-axis label
+const TX_PAD_R = 96
+const TX_PAD_T = 26
+const TX_PAD_B = 52           // keeps last-place logo nodes off the year ticks
+const trendGold = 'oklch(0.84 0.16 90)'
 
-function xFor(i: number) {
-  const span = trendYears.length - 1
-  return TX_PAD_L + ((TX_W - TX_PAD_L - TX_PAD_R) * (i / span))
-}
-function yFor(v: number) {
-  const yRange = TX_H - TX_PAD_T - TX_PAD_B
-  return TX_PAD_T + yRange * (1 - v / Y_MAX)
-}
-function pathFor(values: number[]) {
-  const pts: Point[] = values.map((v, i) => ({ x: xFor(i), y: yFor(v) }))
-  return linearPath(pts)
+interface BumpRawNode { i: number; rank: number }
+interface BumpRaw {
+  key: string
+  name: string
+  logoUrl?: string
+  avatarColor: string
+  ownerInitials: string
+  isMyTeam: boolean
+  featured: boolean
+  nodes: BumpRawNode[]
 }
 
-const featuredTeamIds = computed(() => {
-  // Top 3 by legacy + my team
-  const top3 = podium.value.map((p) => p.teamId)
-  const myId = teams.find((t) => t.isMyTeam)?.id
-  const result = new Set(top3)
-  if (myId) result.add(myId)
-  return result
-})
-function isFeatured(id: string): boolean {
-  return featuredTeamIds.value.has(id)
-}
-
-const ctTrendValueAt2024 = computed(() => {
-  const row = legacyTrend.find((r) => r.teamId === 'ct')
-  return row?.cumulative[3] ?? null
+const trendYears = computed<number[]>(() => {
+  const live = liveData.value?.managerLegacy
+  if (live && live.length) {
+    const ys = new Set<number>()
+    for (const m of live) for (const s of m.seasons) ys.add(s.year)
+    return [...ys].sort((a, b) => a - b)
+  }
+  return [2021, 2022, 2023, 2024, 2025, 2026]
 })
 
-/* Endpoint labels with stagger to avoid overlap. */
-const endpointLabels = computed(() => {
-  type Lbl = { teamId: string; x: number; y: number }
-  const lbls: Lbl[] = []
-  // Only featured teams get labels
-  for (const row of legacyTrend) {
-    if (!isFeatured(row.teamId)) continue
-    const last = row.cumulative.length - 1
-    lbls.push({
-      teamId: row.teamId,
-      x: xFor(last) + 10,
-      y: yFor(row.cumulative[last]) + 4,
+const bumpRaw = computed<BumpRaw[]>(() => {
+  const years = trendYears.value
+  const live = liveData.value?.managerLegacy
+  if (live && live.length) {
+    return live.map((m) => {
+      const nodes: BumpRawNode[] = []
+      years.forEach((yr, i) => {
+        const s = m.seasons.find((x) => x.year === yr)
+        if (s && s.rank > 0 && s.rank < 900) nodes.push({ i, rank: s.rank })
+      })
+      return {
+        key: m.managerGuid,
+        name: m.name,
+        logoUrl: m.logoUrl,
+        avatarColor: m.avatarColor,
+        ownerInitials: m.ownerInitials,
+        isMyTeam: m.isMyTeam,
+        featured: m.rank <= 3 || m.isMyTeam,
+        nodes,
+      }
     })
   }
-  // Stagger by y — push pairs that are within 14px apart
-  lbls.sort((a, b) => a.y - b.y)
+  // Demo: derive a per-season finish order from fixture cumulative volume.
+  const n = years.length
+  const ranksByTeam = new Map<string, number[]>()
+  for (let i = 0; i < n; i++) {
+    const order = legacyTrend
+      .map((r) => ({ teamId: r.teamId, v: r.cumulative[i] ?? 0 }))
+      .sort((a, b) => b.v - a.v)
+    order.forEach((o, idx) => {
+      const arr = ranksByTeam.get(o.teamId) ?? new Array(n).fill(0)
+      arr[i] = idx + 1
+      ranksByTeam.set(o.teamId, arr)
+    })
+  }
+  const top3 = new Set(podium.value.slice(0, 3).map((p) => p.teamId))
+  return legacyTrend.map((r) => {
+    const t = getTeam(r.teamId)
+    const ranks = ranksByTeam.get(r.teamId) ?? []
+    return {
+      key: r.teamId,
+      name: t.name,
+      logoUrl: t.avatarUrl,
+      avatarColor: t.avatarColor,
+      ownerInitials: t.ownerInitials,
+      isMyTeam: t.isMyTeam,
+      featured: top3.has(r.teamId) || t.isMyTeam,
+      nodes: ranks.map((rank, i) => ({ i, rank })).filter((x) => x.rank > 0),
+    }
+  })
+})
+
+const bumpMaxRank = computed(() => {
+  let max = 2
+  for (const s of bumpRaw.value) for (const nd of s.nodes) if (nd.rank > max) max = nd.rank
+  return max
+})
+
+function xFor(i: number) {
+  const span = Math.max(1, trendYears.value.length - 1)
+  return TX_PAD_L + (TX_W - TX_PAD_L - TX_PAD_R) * (i / span)
+}
+function yForRank(rank: number) {
+  const yRange = TX_H - TX_PAD_T - TX_PAD_B
+  const span = Math.max(1, bumpMaxRank.value - 1)
+  return TX_PAD_T + yRange * ((rank - 1) / span)   // rank 1 at top
+}
+/** Lead OKLCH stop of any gradient string — the line/node color. */
+function firstStop(avatarColor: string): string {
+  const stops = avatarColor
+    .split(/\)\s*,\s*/)
+    .map((s) => (s.endsWith(')') ? s : `${s})`))
+  return stops[0]
+}
+interface BumpDisplayNode { i: number; rank: number; xPct: number; yPct: number }
+interface BumpLine extends BumpRaw {
+  path: string
+  displayNodes: BumpDisplayNode[]
+  lineColor: string
+}
+const bumpSeries = computed<BumpLine[]>(() =>
+  bumpRaw.value.map((s) => {
+    const pts: Point[] = s.nodes.map((nd) => ({ x: xFor(nd.i), y: yForRank(nd.rank) }))
+    return {
+      ...s,
+      path: linearPath(pts),
+      displayNodes: s.nodes.map((nd) => ({
+        i: nd.i,
+        rank: nd.rank,
+        xPct: (xFor(nd.i) / TX_W) * 100,
+        yPct: (yForRank(nd.rank) / TX_H) * 100,
+      })),
+      lineColor: s.isMyTeam ? trendGold : firstStop(s.avatarColor),
+    }
+  }),
+)
+
+const featuredBump = computed(() => bumpSeries.value.filter((s) => s.featured))
+const dimBump = computed(() => bumpSeries.value.filter((s) => !s.featured))
+
+/* Name labels at each featured line's last node, staggered vertically
+   so neighbors don't collide. Positions are container percentages. */
+const bumpLabels = computed(() => {
+  type Lbl = { key: string; name: string; color: string; xPct: number; yPct: number }
+  const lbls: Lbl[] = []
+  for (const s of featuredBump.value) {
+    const last = s.displayNodes[s.displayNodes.length - 1]
+    if (!last) continue
+    lbls.push({
+      key: s.key,
+      name: s.name.split(' ')[0],
+      color: s.lineColor,
+      xPct: ((xFor(last.i) + 14) / TX_W) * 100,
+      yPct: last.yPct,
+    })
+  }
+  lbls.sort((a, b) => a.yPct - b.yPct)
   for (let i = 1; i < lbls.length; i++) {
-    const gap = lbls[i].y - lbls[i - 1].y
-    if (gap < 14) lbls[i].y = lbls[i - 1].y + 14
+    if (lbls[i].yPct - lbls[i - 1].yPct < 5.5) lbls[i].yPct = lbls[i - 1].yPct + 5.5
   }
   return lbls
 })
@@ -2164,49 +2242,111 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   .legacy-badges { grid-column: 1 / -1; padding-left: 56px; }
 }
 
-/* ─── 4. TRENDS CHART ────────────────────────────────────────── */
-.trends-chart-wrap {
+/* ─── 4. ACROSS THE YEARS — bump chart ───────────────────────── */
+.bump-wrap {
+  position: relative;
   background: oklch(0.10 0.015 90);
   border: 1px solid oklch(0.16 0.015 90);
   border-radius: 14px;
-  padding: 12px 8px 4px;
+  padding: 10px 8px 4px;
 }
-.trends-chart {
+.bump-chart {
   width: 100%;
-  height: 360px;
+  height: 400px;
   display: block;
 }
 @media (max-width: 720px) {
-  .trends-chart { height: 260px; }
+  .bump-chart { height: 300px; }
 }
-.trends-grid line {
-  stroke: oklch(0.18 0.015 90);
+.bump-grid line {
+  stroke: oklch(0.17 0.012 90);
   stroke-width: 1;
-  stroke-dasharray: 3 4;
 }
-.trends-xticks text {
-  fill: var(--ink-4);
+.bump-xticks text {
+  fill: var(--ink-3);
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-.trends-line-group.is-featured path { opacity: 0.92; }
-.trends-line-group.is-dim path { opacity: 0.13; }
-.trends-line-group.is-dim circle { opacity: 0.18; }
-.trends-line-group.is-me path { opacity: 1; }
-.trends-endlabels text {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
-.trends-annot-text {
+.bump-line-dim {
+  stroke: oklch(0.42 0.012 90 / 0.30);
+  stroke-width: 1.3;
+}
+.bump-line {
+  stroke-width: 2.6;
+  opacity: 0.95;
+}
+.bump-line.is-me {
+  stroke-width: 3.4;
+  filter: drop-shadow(0 0 5px oklch(0.84 0.16 90 / 0.5));
+}
+
+/* Y-axis hints — finish 1 at top, last at bottom. */
+.bump-axis {
+  position: absolute;
+  left: 12px;
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--ink-4);
+}
+.bump-axis-top { top: 16px; }
+.bump-axis-bot { bottom: 30px; }
+
+/* Logo-node overlay — positioned in % to track the stretched SVG.
+   Inset matches .bump-wrap padding so the box equals the chart box. */
+.bump-overlay {
+  position: absolute;
+  inset: 10px 8px 4px;
+  pointer-events: none;
+}
+.bump-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+.bump-node-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 11px;
+  color: oklch(0.97 0.01 90);
+  box-shadow: 0 0 0 2px oklch(0.08 0.01 90), 0 0 0 3.5px var(--node-accent);
+}
+.bump-node-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bump-node.is-me .bump-node-avatar {
+  width: 32px;
+  height: 32px;
+  box-shadow:
+    0 0 0 2px oklch(0.08 0.01 90),
+    0 0 0 4px oklch(0.84 0.16 90),
+    0 0 10px oklch(0.84 0.16 90 / 0.5);
+}
+.bump-dot-dim {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(0.55 0.012 90 / 0.65);
+  transform: translate(-50%, -50%);
+}
+.bump-line-dim { opacity: 0.55; }
+.bump-label {
+  position: absolute;
+  transform: translateY(-50%);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* ─── 5. H2H MATRIX ──────────────────────────────────────────── */
