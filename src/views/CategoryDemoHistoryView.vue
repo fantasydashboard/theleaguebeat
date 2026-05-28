@@ -438,61 +438,24 @@
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="awards-heading">The record book</p>
         <h2 class="section-headline">Hall of Fame. Hall of Shame.</h2>
+        <p class="section-sub">All-time, across every season the league has played.</p>
       </header>
-
-      <div class="awards-filters" role="tablist" aria-label="Award scope">
-        <button
-          type="button"
-          class="awards-filter"
-          :class="{ 'awards-filter-active': activeAwardScope === 'all-time' }"
-          role="tab"
-          :aria-selected="activeAwardScope === 'all-time'"
-          @click="activeAwardScope = 'all-time'"
-        >All-time</button>
-        <button
-          type="button"
-          class="awards-filter"
-          :class="{ 'awards-filter-active': activeAwardScope === 'season' }"
-          role="tab"
-          :aria-selected="activeAwardScope === 'season'"
-          @click="activeAwardScope = 'season'"
-        >Season</button>
-      </div>
-
-      <div
-        v-if="activeAwardScope === 'season'"
-        class="awards-years"
-        role="tablist"
-        aria-label="Season year"
-      >
-        <span class="awards-years-label">Year</span>
-        <button
-          v-for="year in availableSeasons"
-          :key="year"
-          type="button"
-          class="awards-year"
-          :class="{ 'awards-year-active': selectedSeason === year }"
-          role="tab"
-          :aria-selected="selectedSeason === year"
-          @click="selectedSeason = year"
-        >{{ year }}</button>
-      </div>
 
       <!-- HALL OF FAME -->
       <h3 class="awards-sub awards-sub-fame">Hall of Fame</h3>
       <div class="fame-grid">
         <button type="button" class="fame-a"
           @click="onRecordClick(fameEntries[0])"
-          :aria-label="`${fameEntries[0].eyebrow}: ${getTeam(fameEntries[0].teamId).name} ${fameEntries[0].value}`">
+          :aria-label="`${fameEntries[0].eyebrow}: ${fameEntries[0].name} ${fameEntries[0].value}`">
           <span class="fame-a-eyebrow">{{ fameEntries[0].eyebrow }}</span>
           <div class="fame-a-body">
             <div class="fame-a-id">
-              <div class="fame-a-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(fameEntries[0].teamId).avatarColor})` }">
-                <img v-if="getTeam(fameEntries[0].teamId).avatarUrl" :src="getTeam(fameEntries[0].teamId).avatarUrl" alt="" />
-                <span v-else>{{ getTeam(fameEntries[0].teamId).ownerInitials }}</span>
+              <div class="fame-a-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[0].avatarColor})` }">
+                <img v-if="fameEntries[0].avatarUrl" :src="fameEntries[0].avatarUrl" alt="" />
+                <span v-else>{{ fameEntries[0].ownerInitials }}</span>
               </div>
               <div class="fame-a-id-text">
-                <p class="fame-a-team">{{ getTeam(fameEntries[0].teamId).name }}</p>
+                <p class="fame-a-team">{{ fameEntries[0].name }}</p>
                 <p class="fame-a-when">{{ fameEntries[0].metric }}</p>
               </div>
             </div>
@@ -503,14 +466,14 @@
 
         <button type="button" class="fame-b"
           @click="onRecordClick(fameEntries[1])"
-          :aria-label="`${fameEntries[1].eyebrow}: ${getTeam(fameEntries[1].teamId).name} ${fameEntries[1].value}`">
+          :aria-label="`${fameEntries[1].eyebrow}: ${fameEntries[1].name} ${fameEntries[1].value}`">
           <span class="fame-tile-eyebrow">{{ fameEntries[1].eyebrow }}</span>
           <div class="fame-b-mid">
-            <div class="fame-b-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(fameEntries[1].teamId).avatarColor})` }">
-              <img v-if="getTeam(fameEntries[1].teamId).avatarUrl" :src="getTeam(fameEntries[1].teamId).avatarUrl" alt="" />
-              <span v-else>{{ getTeam(fameEntries[1].teamId).ownerInitials }}</span>
+            <div class="fame-b-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[1].avatarColor})` }">
+              <img v-if="fameEntries[1].avatarUrl" :src="fameEntries[1].avatarUrl" alt="" />
+              <span v-else>{{ fameEntries[1].ownerInitials }}</span>
             </div>
-            <p class="fame-b-team">{{ getTeam(fameEntries[1].teamId).name }}</p>
+            <p class="fame-b-team">{{ fameEntries[1].name }}</p>
           </div>
           <p class="fame-b-value">{{ fameEntries[1].value }}</p>
           <p class="fame-b-sub">{{ fameEntries[1].metric }}</p>
@@ -518,16 +481,16 @@
 
         <button type="button" class="fame-c"
           @click="onRecordClick(fameEntries[2])"
-          :aria-label="`${fameEntries[2].eyebrow}: ${getTeam(fameEntries[2].teamId).name} ${fameEntries[2].value}`">
+          :aria-label="`${fameEntries[2].eyebrow}: ${fameEntries[2].name} ${fameEntries[2].value}`">
           <span class="fame-tile-eyebrow">{{ fameEntries[2].eyebrow }}</span>
           <div class="fame-c-row">
             <p class="fame-c-value">{{ fameEntries[2].value }}</p>
             <div class="fame-c-id">
-              <div class="fame-c-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(fameEntries[2].teamId).avatarColor})` }">
-                <img v-if="getTeam(fameEntries[2].teamId).avatarUrl" :src="getTeam(fameEntries[2].teamId).avatarUrl" alt="" />
-                <span v-else>{{ getTeam(fameEntries[2].teamId).ownerInitials }}</span>
+              <div class="fame-c-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[2].avatarColor})` }">
+                <img v-if="fameEntries[2].avatarUrl" :src="fameEntries[2].avatarUrl" alt="" />
+                <span v-else>{{ fameEntries[2].ownerInitials }}</span>
               </div>
-              <p class="fame-c-team">{{ getTeam(fameEntries[2].teamId).name }}</p>
+              <p class="fame-c-team">{{ fameEntries[2].name }}</p>
             </div>
           </div>
           <p v-if="fameEntries[2].context" class="fame-c-sub">{{ fameEntries[2].context }}</p>
@@ -535,10 +498,10 @@
 
         <button type="button" class="fame-d"
           @click="onRecordClick(fameEntries[3])"
-          :aria-label="`${fameEntries[3].eyebrow}: ${getTeam(fameEntries[3].teamId).name} ${fameEntries[3].value}`">
+          :aria-label="`${fameEntries[3].eyebrow}: ${fameEntries[3].name} ${fameEntries[3].value}`">
           <span class="fame-d-eyebrow">{{ fameEntries[3].eyebrow }}</span>
           <p class="fame-d-text">
-            <strong>{{ getTeam(fameEntries[3].teamId).name }}</strong>
+            <strong>{{ fameEntries[3].name }}</strong>
             <span class="fame-d-dot" aria-hidden="true">·</span>
             <span class="fame-d-pct">{{ fameEntries[3].value }}</span>
             <span class="fame-d-dot" aria-hidden="true">·</span>
@@ -552,16 +515,16 @@
       <div class="shame-grid">
         <button type="button" class="shame-a"
           @click="onRecordClick(shameEntries[0])"
-          :aria-label="`${shameEntries[0].eyebrow}: ${getTeam(shameEntries[0].teamId).name} ${shameEntries[0].value}`">
+          :aria-label="`${shameEntries[0].eyebrow}: ${shameEntries[0].name} ${shameEntries[0].value}`">
           <span class="shame-tile-eyebrow">{{ shameEntries[0].eyebrow }}</span>
           <p class="shame-a-value">{{ shameEntries[0].value }}</p>
           <div class="shame-a-foot">
-            <div class="shame-a-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(shameEntries[0].teamId).avatarColor})` }">
-              <img v-if="getTeam(shameEntries[0].teamId).avatarUrl" :src="getTeam(shameEntries[0].teamId).avatarUrl" alt="" />
-              <span v-else>{{ getTeam(shameEntries[0].teamId).ownerInitials }}</span>
+            <div class="shame-a-avatar" :style="{ background: `linear-gradient(135deg, ${shameEntries[0].avatarColor})` }">
+              <img v-if="shameEntries[0].avatarUrl" :src="shameEntries[0].avatarUrl" alt="" />
+              <span v-else>{{ shameEntries[0].ownerInitials }}</span>
             </div>
             <div>
-              <p class="shame-a-team">{{ getTeam(shameEntries[0].teamId).name }}</p>
+              <p class="shame-a-team">{{ shameEntries[0].name }}</p>
               <p class="shame-a-when">{{ shameEntries[0].metric }}</p>
             </div>
           </div>
@@ -569,27 +532,27 @@
 
         <button type="button" class="shame-b"
           @click="onRecordClick(shameEntries[1])"
-          :aria-label="`${shameEntries[1].eyebrow}: ${getTeam(shameEntries[1].teamId).name} ${shameEntries[1].value}`">
+          :aria-label="`${shameEntries[1].eyebrow}: ${shameEntries[1].name} ${shameEntries[1].value}`">
           <span class="shame-tile-eyebrow">{{ shameEntries[1].eyebrow }}</span>
           <div class="shame-b-row">
             <div class="shame-b-text">
               <p class="shame-b-value">{{ shameEntries[1].value }}</p>
               <p class="shame-b-sub">{{ shameEntries[1].metric }}</p>
-              <p class="shame-b-team">{{ getTeam(shameEntries[1].teamId).name }}</p>
+              <p class="shame-b-team">{{ shameEntries[1].name }}</p>
             </div>
-            <div class="shame-b-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(shameEntries[1].teamId).avatarColor})` }">
-              <img v-if="getTeam(shameEntries[1].teamId).avatarUrl" :src="getTeam(shameEntries[1].teamId).avatarUrl" alt="" />
-              <span v-else>{{ getTeam(shameEntries[1].teamId).ownerInitials }}</span>
+            <div class="shame-b-avatar" :style="{ background: `linear-gradient(135deg, ${shameEntries[1].avatarColor})` }">
+              <img v-if="shameEntries[1].avatarUrl" :src="shameEntries[1].avatarUrl" alt="" />
+              <span v-else>{{ shameEntries[1].ownerInitials }}</span>
             </div>
           </div>
         </button>
 
         <button type="button" class="shame-c"
           @click="onRecordClick(shameEntries[2])"
-          :aria-label="`${shameEntries[2].eyebrow}: ${getTeam(shameEntries[2].teamId).name} ${shameEntries[2].value}`">
+          :aria-label="`${shameEntries[2].eyebrow}: ${shameEntries[2].name} ${shameEntries[2].value}`">
           <span class="shame-c-eyebrow">{{ shameEntries[2].eyebrow }}</span>
           <p class="shame-c-text">
-            <strong>{{ getTeam(shameEntries[2].teamId).name }}</strong>
+            <strong>{{ shameEntries[2].name }}</strong>
             <span class="shame-c-dot" aria-hidden="true">·</span>
             <span class="shame-c-value">{{ shameEntries[2].value }}</span>
             <span class="shame-c-dot" aria-hidden="true">·</span>
@@ -599,10 +562,10 @@
 
         <button type="button" class="shame-d"
           @click="onRecordClick(shameEntries[3])"
-          :aria-label="`${shameEntries[3].eyebrow}: ${getTeam(shameEntries[3].teamId).name} ${shameEntries[3].value}`">
+          :aria-label="`${shameEntries[3].eyebrow}: ${shameEntries[3].name} ${shameEntries[3].value}`">
           <span class="shame-d-eyebrow">{{ shameEntries[3].eyebrow }}</span>
           <p class="shame-d-text">
-            <strong>{{ getTeam(shameEntries[3].teamId).name }}</strong>
+            <strong>{{ shameEntries[3].name }}</strong>
             <span class="shame-d-dot" aria-hidden="true">·</span>
             <span class="shame-d-pct">{{ shameEntries[3].value }}</span>
             <span v-if="shameEntries[3].context" class="shame-d-dot" aria-hidden="true">·</span>
@@ -633,7 +596,6 @@ import {
   legacyBreakdowns,
   legacyTrend,
   h2hMatrix,
-  yearlyCatRecords,
   recordBook,
   categoryDynastyBeats,
   type CategoryRecordBookEntry,
@@ -1453,111 +1415,102 @@ const rivalries = computed<RivalryDisplay[]>(() => {
   return out
 })
 
-/* ─── Record book ──────────────────────────────────────────── */
-const activeAwardScope = ref<'all-time' | 'season'>('all-time')
-const availableSeasons = [2025, 2024, 2023, 2022, 2021] as const
-const selectedSeason = ref<number>(availableSeasons[0])
+/* ─── Record book — real, all-time trophy case ────────────────
+   Self-contained entries (carry their own name/logo/color) so a record
+   held by a manager who has left the league still renders. Live: real
+   all-time records from managerLegacy + per-season detail. Demo: the
+   fixture record book, resolved through getTeam. Four fame + four shame
+   so the bold asymmetric layout always has its slots filled. */
+interface RecordDisplay {
+  id: string
+  eyebrow: string
+  value: string
+  metric: string
+  context?: string
+  name: string
+  avatarUrl?: string
+  avatarColor: string
+  ownerInitials: string
+  isMyTeam: boolean
+}
 
-/* All-time scope. Editorial-driven when live data has provided record
-   candidates; fall back to the fixture record book otherwise so the
-   layout always has four fame + four shame tiles to render.
+const recordBookCards = computed<{ fame: RecordDisplay[]; shame: RecordDisplay[] }>(() => {
+  const live = liveData.value?.managerLegacy
+  if (live && live.length) {
+    const disp = (m: NonNullable<typeof live>[number]) => ({
+      name: m.name, avatarUrl: m.logoUrl, avatarColor: m.avatarColor,
+      ownerInitials: m.ownerInitials, isMyTeam: m.isMyTeam,
+    })
+    const pct = (n: number) => n.toFixed(3).replace(/^0\./, '.')
+    const maxBy = (f: (m: typeof live[number]) => number) => [...live].sort((a, b) => f(b) - f(a))[0]
+    const minBy = (f: (m: typeof live[number]) => number) => [...live].sort((a, b) => f(a) - f(b))[0]
 
-   We preserve the fixture's eyebrow (uppercase tile label) + teamId
-   + value layout slots, and promote the editorial body into the
-   `context` slot — that's the supplemental sub-line each tile already
-   displays. The editorial owns voice; the fixture owns layout shape. */
-const allTimeFame = computed<CategoryRecordBookEntry[]>(() => {
-  const edFame = liveEditorial.value.recordBook.fame
-  const fxFame = recordBook.filter((r) => r.kind === 'fame')
-  if (edFame.length === 0) return fxFame
-  return fxFame.map((fx, i) => {
-    const ed = edFame[i]
-    if (!ed) return fx
-    return { ...fx, context: ed.body || fx.context }
-  })
-})
-const allTimeShame = computed<CategoryRecordBookEntry[]>(() => {
-  const edShame = liveEditorial.value.recordBook.shame
-  const fxShame = recordBook.filter((r) => r.kind === 'shame')
-  if (edShame.length === 0) return fxShame
-  return fxShame.map((fx, i) => {
-    const ed = edShame[i]
-    if (!ed) return fx
-    return { ...fx, context: ed.body || fx.context }
-  })
-})
+    // Single-season extremes across everyone's per-season detail.
+    let big = { m: live[0], year: 0, cats: -1 }
+    let worstS = { m: live[0], year: 0, cats: Infinity }
+    for (const m of live) {
+      for (const s of m.seasons) {
+        if (s.catWins > big.cats) big = { m, year: s.year, cats: s.catWins }
+        if (s.completed && s.catWins < worstS.cats) worstS = { m, year: s.year, cats: s.catWins }
+      }
+    }
 
-// Season-scoped entries derive from yearlyCatRecords for the selected year.
-const seasonFame = computed<CategoryRecordBookEntry[]>(() => {
-  const y = selectedSeason.value
-  const yearEntries = yearlyCatRecords.filter((r) => r.year === y)
-  // Best team by total cat wins this year — sum bestValue per team (winners only)
-  const winsByTeam = new Map<string, number>()
-  for (const r of yearEntries) {
-    winsByTeam.set(r.bestTeamId, (winsByTeam.get(r.bestTeamId) ?? 0) + r.bestValue)
+    const catKing = maxBy((m) => m.totalCatWins)
+    const bestPct = maxBy((m) => m.careerWinPct)
+    const mostPlayoffs = maxBy((m) => m.playoffApps)
+    const mostLosses = maxBy((m) => m.totalCatLosses)
+    const worstPct = minBy((m) => m.careerWinPct)
+    const drought = [...live]
+      .filter((m) => m.titles === 0)
+      .sort((a, b) => b.seasonsPlayed - a.seasonsPlayed || b.totalCatWins - a.totalCatWins)[0] ?? live[0]
+
+    const fame: RecordDisplay[] = [
+      { id: 'most-cat-wins', eyebrow: 'MOST CAREER CAT WINS', metric: 'Total cat wins, all seasons',
+        value: String(catKing.totalCatWins), context: `${catKing.seasonsPlayed} seasons of receipts.`, ...disp(catKing) },
+      { id: 'best-ratio', eyebrow: 'BEST CAT W-L RATIO', metric: 'Career cat-win rate',
+        value: pct(bestPct.careerWinPct),
+        context: bestPct.titles > 0 ? `${bestPct.titles} ring${bestPct.titles > 1 ? 's' : ''} to back it up.` : 'Dominant, ring or not.',
+        ...disp(bestPct) },
+      { id: 'most-playoffs', eyebrow: 'MOST PLAYOFF BERTHS', metric: 'Trips to the bracket',
+        value: String(mostPlayoffs.playoffApps),
+        context: mostPlayoffs.titles > 0 ? `Cashed ${mostPlayoffs.titles} into a title.` : 'Always there. No ring yet.',
+        ...disp(mostPlayoffs) },
+      { id: 'biggest-season', eyebrow: 'BIGGEST SEASON', metric: `Cat wins in ${big.year}`,
+        value: String(big.cats), context: 'The high-water mark.', ...disp(big.m) },
+    ]
+    const shame: RecordDisplay[] = [
+      { id: 'most-losses', eyebrow: 'MOST CAREER CAT LOSSES', metric: 'Total cat losses, all seasons',
+        value: String(mostLosses.totalCatLosses), context: 'Somebody has to wear it.', ...disp(mostLosses) },
+      { id: 'worst-ratio', eyebrow: 'WORST CAT W-L RATIO', metric: 'Career cat-win rate',
+        value: pct(worstPct.careerWinPct), ...disp(worstPct) },
+      { id: 'worst-season', eyebrow: 'WORST SEASON', metric: `Cat wins in ${worstS.year}`,
+        value: String(worstS.cats), context: 'A year to bury.', ...disp(worstS.m) },
+      { id: 'drought', eyebrow: 'LONGEST TITLE DROUGHT', metric: 'Seasons, zero titles',
+        value: String(drought.seasonsPlayed), context: 'Still chasing the first.', ...disp(drought) },
+    ]
+    return { fame, shame }
   }
-  const topMostWins = [...winsByTeam.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['ct', 0]
-  // Best single-cat: max bestValue in year
-  const best = yearEntries.reduce((acc, r) => (r.bestValue > acc.bestValue ? r : acc), yearEntries[0])
-  // Biggest cat gap: bestValue - worstValue
-  const biggestGap = yearEntries.reduce(
-    (acc, r) => (r.bestValue - r.worstValue > acc.gap ? { row: r, gap: r.bestValue - r.worstValue } : acc),
-    { row: yearEntries[0], gap: -Infinity },
-  )
-  // Champion of that year (used for best record holder)
-  const seasonRec = seasonHistory.find((s) => s.year === y)
-  const champId = seasonRec?.championTeamId ?? 'ct'
-  return [
-    { id: `season-most-wins-${y}`,    kind: 'fame', eyebrow: 'MOST CAT WINS', metric: `Total cat wins · ${y}`,
-      teamId: topMostWins[0], value: `${topMostWins[1]}`, context: `Across the ${y} season.` },
-    { id: `season-best-record-${y}`,  kind: 'fame', eyebrow: 'BEST CAT W-L',   metric: `Highest cat win rate · ${y}`,
-      teamId: champId, value: seasonRec?.championRecord.split('-').slice(0,2).join('-') ?? '0-0',
-      context: `${getTeam(champId).name} won it all.` },
-    { id: `season-best-cat-${y}`,     kind: 'fame', eyebrow: 'BEST SINGLE-CAT', metric: `${best.catId} wins · ${y}`,
-      teamId: best.bestTeamId, value: `${best.bestValue}`,
-      context: `${best.bestValue} ${best.catId} wins.` },
-    { id: `season-biggest-gap-${y}`,  kind: 'fame', eyebrow: 'BIGGEST DOMINANCE', metric: `${biggestGap.row.catId} gap to #10 · ${y}`,
-      teamId: biggestGap.row.bestTeamId, value: `${biggestGap.gap}`,
-      context: `${biggestGap.row.bestValue} wins vs ${biggestGap.row.worstValue} for last.` },
-  ]
-})
-const seasonShame = computed<CategoryRecordBookEntry[]>(() => {
-  const y = selectedSeason.value
-  const yearEntries = yearlyCatRecords.filter((r) => r.year === y)
-  const lossesByTeam = new Map<string, number>()
-  for (const r of yearEntries) {
-    // Use 30 (cat-wins available) - worstValue as loss count proxy
-    lossesByTeam.set(r.worstTeamId, (lossesByTeam.get(r.worstTeamId) ?? 0) + (30 - r.worstValue))
+
+  // Demo fallback — fixture record book, resolved through getTeam.
+  const map = (e: CategoryRecordBookEntry): RecordDisplay => {
+    const t = getTeam(e.teamId)
+    return {
+      id: e.id, eyebrow: e.eyebrow, value: e.value, metric: e.metric, context: e.context,
+      name: t.name, avatarUrl: t.avatarUrl, avatarColor: t.avatarColor,
+      ownerInitials: t.ownerInitials, isMyTeam: t.isMyTeam,
+    }
   }
-  const topMostLosses = [...lossesByTeam.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['ws', 0]
-  const worst = yearEntries.reduce((acc, r) => (r.worstValue < acc.worstValue ? r : acc), yearEntries[0])
-  const biggestGap = yearEntries.reduce(
-    (acc, r) => (r.bestValue - r.worstValue > acc.gap ? { row: r, gap: r.bestValue - r.worstValue } : acc),
-    { row: yearEntries[0], gap: -Infinity },
-  )
-  const seasonRec = seasonHistory.find((s) => s.year === y)
-  const baseId = seasonRec?.basementTeamId ?? 'ws'
-  return [
-    { id: `season-most-losses-${y}`,  kind: 'shame', eyebrow: 'MOST CAT LOSSES',  metric: `Total cat losses · ${y}`,
-      teamId: topMostLosses[0], value: `${topMostLosses[1]}`, context: `The basement of ${y}.` },
-    { id: `season-worst-record-${y}`, kind: 'shame', eyebrow: 'WORST CAT W-L',     metric: `Lowest cat win rate · ${y}`,
-      teamId: baseId, value: seasonRec?.basementRecord.split('-').slice(0,2).join('-') ?? '0-0',
-      context: `${getTeam(baseId).name} carried the cellar.` },
-    { id: `season-worst-cat-${y}`,    kind: 'shame', eyebrow: 'WORST SINGLE-CAT',  metric: `Lowest ${worst.catId} wins · ${y}`,
-      teamId: worst.worstTeamId, value: `${worst.worstValue}`,
-      context: `${worst.worstValue} ${worst.catId} wins all season.` },
-    { id: `season-biggest-deficit-${y}`, kind: 'shame', eyebrow: 'BIGGEST DEFICIT', metric: `Largest gap to #1 · ${y}`,
-      teamId: biggestGap.row.worstTeamId, value: `${biggestGap.gap}`,
-      context: `Trailed leader by ${biggestGap.gap} ${biggestGap.row.catId} wins.` },
-  ]
+  return {
+    fame: recordBook.filter((e) => e.kind === 'fame').map(map),
+    shame: recordBook.filter((e) => e.kind === 'shame').map(map),
+  }
 })
 
-const fameEntries = computed(() => activeAwardScope.value === 'all-time' ? allTimeFame.value : seasonFame.value)
-const shameEntries = computed(() => activeAwardScope.value === 'all-time' ? allTimeShame.value : seasonShame.value)
+const fameEntries = computed(() => recordBookCards.value.fame)
+const shameEntries = computed(() => recordBookCards.value.shame)
 
-// Click handler — no top-10 modal scope yet; leaving as future hook (no-op).
-function onRecordClick(_entry: CategoryRecordBookEntry) {
-  // Intentional no-op: top-10 award modal not in scope for category league yet.
+// Click handler — no top-10 modal scope yet; intentional no-op.
+function onRecordClick(_entry: RecordDisplay) {
   // Cards remain interactive (focus/active states) for discoverability.
 }
 
