@@ -131,6 +131,38 @@ export interface CategoryLeagueDataSeasonHistory {
   basementName?: string
 }
 
+/** All-time, per-manager legacy aggregation across every connected
+ *  season. The cross-season key is the *manager*, not the team: Yahoo
+ *  (and ESPN/Sleeper) mint a fresh team id each year, so identity has to
+ *  ride on the manager guid. Each entry is self-contained for display
+ *  (name/logo/color) because departed managers won't resolve against the
+ *  current `teams` list; `teamId` is set only when the manager is still
+ *  active in the current season. */
+export interface CategoryLeagueDataManagerLegacy {
+  managerGuid: string
+  /** Current-season team id when the manager is still active (lets the UI
+   *  resolve them against `teams` for click-through); undefined otherwise. */
+  teamId?: string
+  name: string                // most-recent season's team name
+  logoUrl?: string
+  avatarColor: string         // OKLCH gradient stops, comma-separated
+  ownerInitials: string
+  isMyTeam: boolean
+  seasonsPlayed: number
+  titles: number
+  runnerUps: number
+  playoffApps: number
+  totalCatWins: number
+  totalCatLosses: number
+  totalCatTies: number
+  careerWinPct: number
+  /** Defined legacy score; see editorial/legacy.ts. The page shows the
+   *  formula so the number is legible, not a black box. */
+  legacyScore: number
+  /** 1-based rank by legacyScore. */
+  rank: number
+}
+
 /** Per-team aggregated career stats — for the History page. */
 export interface CategoryLeagueDataTeamCareerStats {
   teamId: string
@@ -227,6 +259,11 @@ export interface CategoryLeagueData {
 
   /** Career-level stats keyed by teamId. */
   teamCareerStats?: Record<string, CategoryLeagueDataTeamCareerStats>
+
+  /** All-time per-manager legacy, ranked by the defined legacy score.
+   *  Populated by adapters that can aggregate the user's connected prior
+   *  seasons (matched by manager guid); undefined otherwise. */
+  managerLegacy?: CategoryLeagueDataManagerLegacy[]
 
   /** All-time H2H matrix; one entry per alphabetized team pair. */
   h2hMatrix?: CategoryLeagueDataH2HEntry[]

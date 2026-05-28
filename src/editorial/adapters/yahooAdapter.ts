@@ -43,6 +43,7 @@ import type {
   CategoryLeagueDataStanding,
   CategoryLeagueDataTeam,
   CategoryLeagueDataTeamCareerStats,
+  CategoryLeagueDataManagerLegacy,
   CategoryLeagueDataWeeklyRanks,
   WLT,
 } from '../types'
@@ -57,6 +58,7 @@ import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
+import { computeLegacyScore } from '../legacy'
 
 /* ─────────────────────────────────────────────────────────────────
    CATEGORY MAPPING — Yahoo MLB stat_id → editorial canonical id
@@ -340,9 +342,23 @@ async function buildYahooLeagueData(
     isRoto,
   )
 
+  // Connected prior seasons — fetched ONCE, in parallel, then shared by
+  // both season-history and the legacy aggregation below.
+  const priorKeys = Array.from(
+    new Set((opts?.priorSeasonKeys ?? []).filter((k) => k && k !== leagueKey)),
+  )
+  const priorSeasons = priorKeys.length
+    ? await fetchPriorSeasons(priorKeys, leagueKey)
+    : []
+
   // Multi-season history — prefer the user's connected prior seasons,
-  // fall back to the `renew` chain.
-  const seasonHistory = await buildSeasonHistory(metadata, leagueKey, opts?.priorSeasonKeys)
+  // fall back to the `renew` chain when none are connected.
+  const seasonHistory = await buildSeasonHistory(
+    metadata,
+    leagueKey,
+    priorSeasons,
+    priorKeys.length > 0,
+  )
 
   // Career stats — current season + walked history.
   const teamCareerStats = buildTeamCareerStats(
@@ -350,6 +366,17 @@ async function buildYahooLeagueData(
     standings,
     seasonHistory,
     categories,
+  )
+
+  // All-time legacy — real per-manager aggregation across connected
+  // seasons (synchronous; reuses the shared prior-season fetch).
+  const managerLegacy = buildManagerLegacy(
+    metadata,
+    rawStandings,
+    teamList,
+    playoffCutoff,
+    myGuid,
+    priorSeasons,
   )
 
   // All-time H2H matrix (current season only — walking prior seasons
@@ -405,6 +432,7 @@ async function buildYahooLeagueData(
     matchupsCurrentWeek,
     seasonHistory,
     teamCareerStats,
+    managerLegacy,
     h2hMatrix,
     draft,
     weeklyCatsWon,
@@ -1081,73 +1109,121 @@ function buildWeeklyCatTallies(
 
 const MAX_HISTORY_DEPTH = 5
 
+/** One connected prior season, fetched ONCE and shared by both the
+ *  season-history record builder and the manager-legacy aggregator —
+ *  so we never hit the same season's endpoints twice (which serialized
+ *  the History load and could stall it). */
+interface PriorSeasonData {
+  key: string
+  meta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
+  standings: any[]
+}
+
+/** Per-prior-season fetch budget. A stuck old league (Yahoo proxy can
+ *  hang on dormant leagues) must not stall the whole History page — past
+ *  this, we drop that season and render with whatever resolved. */
+const PRIOR_SEASON_TIMEOUT_MS = 15000
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    ),
+  ])
+}
+
+/** Fetch every connected prior season's metadata + standings, all in
+ *  parallel and each on a timeout budget. Resilient: a season that fails
+ *  or stalls is dropped, never fatal — and never blocks the whole load. */
+async function fetchPriorSeasons(
+  priorSeasonKeys: string[],
+  currentLeagueKey: string,
+): Promise<PriorSeasonData[]> {
+  const keys = Array.from(
+    new Set(priorSeasonKeys.filter((k) => k && k !== currentLeagueKey)),
+  )
+  if (keys.length === 0) return []
+  const results = await Promise.all(
+    keys.map(async (key): Promise<PriorSeasonData | null> => {
+      try {
+        const [meta, standings] = await withTimeout(
+          Promise.all([
+            yahooService.getLeagueMetadata(key),
+            yahooService.getStandings(key),
+          ]),
+          PRIOR_SEASON_TIMEOUT_MS,
+          `prior season ${key}`,
+        )
+        if (!standings || standings.length === 0) return null
+        return { key, meta, standings }
+      } catch (err) {
+        console.warn(`[yahooAdapter] prior-season fetch dropped for ${key}:`, err)
+        return null
+      }
+    }),
+  )
+  return results.filter((r): r is PriorSeasonData => r !== null)
+}
+
+/** Build one season-history record (champion / runner-up / basement,
+ *  names + logos denormalized) from already-fetched standings. */
+function seasonRecordFromStandings(
+  meta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>,
+  standings: any[],
+  currentMetadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>,
+): CategoryLeagueDataSeasonHistory | null {
+  if (!standings || standings.length === 0) return null
+  // Sort by rank ascending (1 = first place).
+  const sorted = [...standings].sort((a, b) => {
+    const ar = a.rank ?? 999
+    const br = b.rank ?? 999
+    if (ar !== br) return ar - br
+    return (b.wins ?? 0) - (a.wins ?? 0)
+  })
+  const champion = sorted[0]
+  const runnerUp = sorted[1] ?? sorted[0]
+  const basement = sorted[sorted.length - 1]
+  if (!champion || !basement) return null
+
+  const year =
+    parseInt(meta.season || '', 10) ||
+    parseInt(currentMetadata.season || '', 10) ||
+    new Date().getFullYear()
+
+  return {
+    year,
+    championTeamId: champion.team_key,
+    championRecord: recordString(champion),
+    runnerUpTeamId: runnerUp.team_key,
+    basementTeamId: basement.team_key,
+    championName: champion.name,
+    championLogo: champion.logo_url || undefined,
+    runnerUpName: runnerUp.name,
+    basementName: basement.name,
+  }
+}
+
 async function buildSeasonHistory(
   currentMetadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>,
   currentLeagueKey: string,
-  priorSeasonKeys?: string[],
+  priorSeasons: PriorSeasonData[],
+  hasPriorKeys: boolean,
 ): Promise<CategoryLeagueDataSeasonHistory[]> {
   const out: CategoryLeagueDataSeasonHistory[] = []
-  const seen = new Set<string>([currentLeagueKey])
 
-  /** Fetch one past season's standings → a history record (champion /
-   *  runner-up / basement) with names + logos denormalized. */
-  const recordFor = async (
-    key: string,
-  ): Promise<CategoryLeagueDataSeasonHistory | null> => {
-    let meta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
-    let standings: any[]
-    try {
-      meta = await yahooService.getLeagueMetadata(key)
-      standings = await yahooService.getStandings(key)
-    } catch (err) {
-      console.warn(`[yahooAdapter] season-history fetch failed for ${key}:`, err)
-      return null
-    }
-    if (!standings || standings.length === 0) return null
-
-    // Sort by rank ascending (1 = first place).
-    const sorted = [...standings].sort((a, b) => {
-      const ar = a.rank ?? 999
-      const br = b.rank ?? 999
-      if (ar !== br) return ar - br
-      return (b.wins ?? 0) - (a.wins ?? 0)
-    })
-    const champion = sorted[0]
-    const runnerUp = sorted[1] ?? sorted[0]
-    const basement = sorted[sorted.length - 1]
-    if (!champion || !basement) return null
-
-    const year =
-      parseInt(meta.season || '', 10) ||
-      parseInt(currentMetadata.season || '', 10) ||
-      new Date().getFullYear()
-
-    return {
-      year,
-      championTeamId: champion.team_key,
-      championRecord: recordString(champion),
-      runnerUpTeamId: runnerUp.team_key,
-      basementTeamId: basement.team_key,
-      championName: champion.name,
-      championLogo: champion.logo_url || undefined,
-      runnerUpName: runnerUp.name,
-      basementName: basement.name,
-    }
-  }
-
-  // Preferred: the user's connected prior-season leagues (matched by
-  // name in the view). Works even when Yahoo's renew chain is empty —
-  // the common case, since Yahoo mints a fresh league each year.
-  if (priorSeasonKeys && priorSeasonKeys.length > 0) {
-    for (const key of priorSeasonKeys) {
-      if (seen.has(key)) continue
-      seen.add(key)
-      const rec = await recordFor(key)
+  if (hasPriorKeys) {
+    // Preferred: the user's connected prior-season leagues, already
+    // fetched in parallel. Works even when Yahoo's renew chain is empty
+    // (the common case — Yahoo mints a fresh league each year).
+    for (const ps of priorSeasons) {
+      const rec = seasonRecordFromStandings(ps.meta, ps.standings, currentMetadata)
       if (rec) out.push(rec)
     }
   } else {
     // Fallback: walk the `renew` chain (only when each season was
-    // renewed from the prior one in Yahoo).
+    // renewed from the prior one in Yahoo). Rare; fetches inline.
+    const seen = new Set<string>([currentLeagueKey])
     let renew = currentMetadata.renew
     let depth = 0
     while (renew && renew.includes('_') && depth < MAX_HISTORY_DEPTH) {
@@ -1156,13 +1232,15 @@ async function buildSeasonHistory(
       if (seen.has(prevKey)) break
       seen.add(prevKey)
       let prevMeta: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
+      let standings: any[]
       try {
         prevMeta = await yahooService.getLeagueMetadata(prevKey)
+        standings = await yahooService.getStandings(prevKey)
       } catch (err) {
         console.warn(`[yahooAdapter] history walk stopped at ${prevKey}:`, err)
         break
       }
-      const rec = await recordFor(prevKey)
+      const rec = seasonRecordFromStandings(prevMeta, standings, currentMetadata)
       if (!rec) break
       out.push(rec)
       renew = prevMeta.renew
@@ -1234,6 +1312,156 @@ function buildTeamCareerStats(
       catDifferential: Math.round(totalCatWins - totalCatLosses),
     }
   }
+  return out
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ALL-TIME MANAGER LEGACY (real cross-season aggregation)
+
+   Yahoo mints a new team_key every season, so career stats can't key on
+   the team — they key on the *manager guid*, which is stable year to
+   year. We fetch each connected season's standings once and fold them
+   together: titles + runner-ups + playoff berths from completed seasons,
+   cat W/L/T summed across every season (including the live one to date).
+   The current in-progress season contributes cats but not honors (no
+   title for a season nobody has won yet).
+─────────────────────────────────────────────────────────────────── */
+
+function buildManagerLegacy(
+  currentMetadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>,
+  currentRawStandings: any[],
+  teamList: CategoryLeagueDataTeam[],
+  playoffCutoff: number,
+  myGuid: string | null,
+  priorSeasons: PriorSeasonData[],
+): CategoryLeagueDataManagerLegacy[] {
+  const currentYear =
+    parseInt(currentMetadata.season || '', 10) || new Date().getFullYear()
+
+  type SeasonStd = { year: number; completed: boolean; rows: any[] }
+  const seasons: SeasonStd[] = [
+    { year: currentYear, completed: false, rows: currentRawStandings },
+  ]
+
+  // Fold in every connected prior season (already fetched once, shared
+  // with buildSeasonHistory — no extra round-trips here). A season older
+  // than the current one is decided, so its rank-1 is a real champion;
+  // the current season is still live and contributes cats but no honors.
+  for (const ps of priorSeasons) {
+    const y = parseInt(ps.meta.season || '', 10) || 0
+    seasons.push({ year: y, completed: y > 0 && y < currentYear, rows: ps.standings })
+  }
+
+  type Acc = {
+    guid: string
+    name: string
+    logo?: string
+    latestYear: number
+    seasonsPlayed: number
+    titles: number
+    runnerUps: number
+    playoffApps: number
+    catW: number
+    catL: number
+    catT: number
+    isMe: boolean
+  }
+  const byGuid = new Map<string, Acc>()
+  for (const s of seasons) {
+    for (const row of s.rows) {
+      const guid: string =
+        (typeof row.manager_guid === 'string' && row.manager_guid) || row.team_key
+      if (!guid) continue
+      let acc = byGuid.get(guid)
+      if (!acc) {
+        acc = {
+          guid,
+          name: row.name || 'Manager',
+          logo: row.logo_url || undefined,
+          latestYear: s.year,
+          seasonsPlayed: 0,
+          titles: 0,
+          runnerUps: 0,
+          playoffApps: 0,
+          catW: 0,
+          catL: 0,
+          catT: 0,
+          isMe: !!myGuid && guid === myGuid,
+        }
+        byGuid.set(guid, acc)
+      }
+      // Teams get renamed across seasons — the most recent name wins.
+      if (s.year >= acc.latestYear) {
+        acc.latestYear = s.year
+        if (row.name) acc.name = row.name
+        if (row.logo_url) acc.logo = row.logo_url
+      }
+      acc.seasonsPlayed++
+      acc.catW += Number(row.wins) || 0
+      acc.catL += Number(row.losses) || 0
+      acc.catT += Number(row.ties) || 0
+      if (s.completed) {
+        const rank = Number(row.rank) || 999
+        if (rank === 1) acc.titles++
+        else if (rank === 2) acc.runnerUps++
+        if (rank <= playoffCutoff) acc.playoffApps++
+      }
+    }
+  }
+
+  // Map manager guid → current-season team id + color, so still-active
+  // managers stay click-through-able and reuse their live avatar color.
+  const currentTeamByGuid = new Map<string, string>()
+  for (const row of currentRawStandings) {
+    if (typeof row.manager_guid === 'string' && row.manager_guid) {
+      currentTeamByGuid.set(row.manager_guid, row.team_key)
+    }
+  }
+  const colorByTeamId = new Map(teamList.map((t) => [t.id, t.avatarColor]))
+
+  const out: CategoryLeagueDataManagerLegacy[] = []
+  for (const acc of byGuid.values()) {
+    const denom = acc.catW + acc.catL + acc.catT
+    const careerWinPct = denom > 0 ? (acc.catW + acc.catT * 0.5) / denom : 0
+    const teamId = currentTeamByGuid.get(acc.guid)
+    // "Me" detection: reuse the team list's (which already combines
+    // Yahoo's is_current_login with the signed-in guid), falling back to
+    // a direct guid match for managers no longer in the current season.
+    const activeTeam = teamId ? teamList.find((t) => t.id === teamId) : undefined
+    out.push({
+      managerGuid: acc.guid,
+      teamId,
+      name: acc.name,
+      logoUrl: acc.logo,
+      avatarColor:
+        (teamId && colorByTeamId.get(teamId)) ||
+        teamColorHash(`${acc.guid}:${acc.name}`),
+      ownerInitials: initialsOf(acc.name),
+      isMyTeam: activeTeam?.isMyTeam || acc.isMe,
+      seasonsPlayed: acc.seasonsPlayed,
+      titles: acc.titles,
+      runnerUps: acc.runnerUps,
+      playoffApps: acc.playoffApps,
+      totalCatWins: acc.catW,
+      totalCatLosses: acc.catL,
+      totalCatTies: acc.catT,
+      careerWinPct,
+      legacyScore: computeLegacyScore({
+        titles: acc.titles,
+        playoffApps: acc.playoffApps,
+        careerWinPct,
+        totalCatWins: acc.catW,
+      }),
+      rank: 0,
+    })
+  }
+  out.sort(
+    (a, b) =>
+      b.legacyScore - a.legacyScore ||
+      b.titles - a.titles ||
+      b.totalCatWins - a.totalCatWins,
+  )
+  out.forEach((e, i) => (e.rank = i + 1))
   return out
 }
 

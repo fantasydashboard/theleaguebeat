@@ -125,94 +125,117 @@
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="legacy-heading">All-time legacy</p>
         <h2 class="section-headline">Who's the best to ever do it.</h2>
+        <p class="legacy-context">{{ legacyManagerCount }} managers across {{ displaySeasonCount }} seasons.</p>
+        <p class="legacy-formula">{{ legacyFormulaLabel }}</p>
       </header>
 
       <div class="podium" role="list">
         <!-- #2 -->
-        <button
-          type="button"
+        <component
+          :is="legacyInteractive ? 'button' : 'div'"
+          v-if="podium[1]"
+          :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-2"
+          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[1].isMyTeam }"
           role="listitem"
-          @click="openLegacyModal(podium[1].teamId)"
-          :style="{ '--podium-accent': accentOf(podium[1].teamId) } as any"
-          :aria-label="`Rank 2 ${getTeam(podium[1].teamId).name}, ${podium[1].total} points`"
+          @click="onLegacyClick(podium[1])"
+          :style="{ '--podium-accent': accentOfEntry(podium[1]) } as any"
+          :aria-label="`Rank 2 ${podium[1].name}, ${podium[1].score} legacy`"
         >
           <span class="podium-rank-badge">#2</span>
           <div
             class="podium-avatar podium-avatar-2"
-            :style="{ background: `linear-gradient(135deg, ${getTeam(podium[1].teamId).avatarColor})` }"
+            :style="{ background: `linear-gradient(135deg, ${podium[1].avatarColor})` }"
           >
-            <img v-if="getTeam(podium[1].teamId).avatarUrl" :src="getTeam(podium[1].teamId).avatarUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ getTeam(podium[1].teamId).ownerInitials }}</span>
+            <img v-if="podium[1].logoUrl" :src="podium[1].logoUrl" class="podium-avatar-img" alt="" />
+            <span v-else>{{ podium[1].ownerInitials }}</span>
           </div>
-          <p class="podium-score podium-score-2">{{ podium[1].total }}</p>
-          <p class="podium-team">{{ getTeam(podium[1].teamId).name }}</p>
+          <p class="podium-score podium-score-2">{{ podium[1].score }}</p>
+          <p class="podium-team">{{ podium[1].name }}</p>
+          <p class="podium-seasons">{{ podium[1].seasonsPlayed }} season{{ podium[1].seasonsPlayed === 1 ? '' : 's' }}</p>
           <ul class="podium-badges" role="list">
-            <li class="podium-badge">Titles {{ careerOf(podium[1].teamId).titles }}</li>
-            <li class="podium-badge">Playoffs {{ careerOf(podium[1].teamId).playoffApps }}</li>
+            <li v-if="podium[1].titles > 0" class="podium-badge podium-badge-gold">{{ podium[1].titles }} title{{ podium[1].titles === 1 ? '' : 's' }}</li>
+            <li v-if="podium[1].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[1].playoffApps) }}</li>
+            <li class="podium-badge">{{ podium[1].totalCatWins }} cat wins</li>
           </ul>
-        </button>
+        </component>
 
         <!-- #1 -->
-        <button
-          type="button"
+        <component
+          :is="legacyInteractive ? 'button' : 'div'"
+          v-if="podium[0]"
+          :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-1"
+          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[0].isMyTeam }"
           role="listitem"
-          @click="openLegacyModal(podium[0].teamId)"
-          :style="{ '--podium-accent': accentOf(podium[0].teamId) } as any"
-          :aria-label="`Rank 1 ${getTeam(podium[0].teamId).name}, ${podium[0].total} points`"
+          @click="onLegacyClick(podium[0])"
+          :style="{ '--podium-accent': accentOfEntry(podium[0]) } as any"
+          :aria-label="`Rank 1 ${podium[0].name}, ${podium[0].score} legacy`"
         >
           <span class="podium-rank-badge podium-rank-1">#1</span>
           <div
             class="podium-avatar podium-avatar-1"
-            :style="{ background: `linear-gradient(135deg, ${getTeam(podium[0].teamId).avatarColor})` }"
+            :style="{ background: `linear-gradient(135deg, ${podium[0].avatarColor})` }"
           >
-            <img v-if="getTeam(podium[0].teamId).avatarUrl" :src="getTeam(podium[0].teamId).avatarUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ getTeam(podium[0].teamId).ownerInitials }}</span>
+            <img v-if="podium[0].logoUrl" :src="podium[0].logoUrl" class="podium-avatar-img" alt="" />
+            <span v-else>{{ podium[0].ownerInitials }}</span>
           </div>
-          <p class="podium-score podium-score-1">{{ podium[0].total }}</p>
-          <p class="podium-team">{{ getTeam(podium[0].teamId).name }}</p>
+          <p class="podium-score podium-score-1">{{ podium[0].score }}</p>
+          <p class="podium-team">{{ podium[0].name }}</p>
+          <p class="podium-seasons">{{ podium[0].seasonsPlayed }} season{{ podium[0].seasonsPlayed === 1 ? '' : 's' }}</p>
           <ul class="podium-badges" role="list">
-            <li class="podium-badge">Titles {{ careerOf(podium[0].teamId).titles }}</li>
-            <li class="podium-badge">Playoffs {{ careerOf(podium[0].teamId).playoffApps }}</li>
+            <li v-if="podium[0].titles > 0" class="podium-badge podium-badge-gold">{{ podium[0].titles }} title{{ podium[0].titles === 1 ? '' : 's' }}</li>
+            <li v-if="podium[0].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[0].playoffApps) }}</li>
+            <li class="podium-badge">{{ podium[0].totalCatWins }} cat wins</li>
           </ul>
-          <p class="podium-1-sub">{{ legacyHeroCopy.body || 'Highest legacy score in league history.' }}</p>
-        </button>
+          <p class="podium-1-sub">{{ podiumLede(podium[0]) }}</p>
+        </component>
 
         <!-- #3 -->
-        <button
-          type="button"
+        <component
+          :is="legacyInteractive ? 'button' : 'div'"
+          v-if="podium[2]"
+          :type="legacyInteractive ? 'button' : undefined"
           class="podium-card podium-3"
+          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[2].isMyTeam }"
           role="listitem"
-          @click="openLegacyModal(podium[2].teamId)"
-          :style="{ '--podium-accent': accentOf(podium[2].teamId) } as any"
-          :aria-label="`Rank 3 ${getTeam(podium[2].teamId).name}, ${podium[2].total} points`"
+          @click="onLegacyClick(podium[2])"
+          :style="{ '--podium-accent': accentOfEntry(podium[2]) } as any"
+          :aria-label="`Rank 3 ${podium[2].name}, ${podium[2].score} legacy`"
         >
           <span class="podium-rank-badge">#3</span>
           <div
             class="podium-avatar podium-avatar-3"
-            :style="{ background: `linear-gradient(135deg, ${getTeam(podium[2].teamId).avatarColor})` }"
+            :style="{ background: `linear-gradient(135deg, ${podium[2].avatarColor})` }"
           >
-            <img v-if="getTeam(podium[2].teamId).avatarUrl" :src="getTeam(podium[2].teamId).avatarUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ getTeam(podium[2].teamId).ownerInitials }}</span>
+            <img v-if="podium[2].logoUrl" :src="podium[2].logoUrl" class="podium-avatar-img" alt="" />
+            <span v-else>{{ podium[2].ownerInitials }}</span>
           </div>
-          <p class="podium-score podium-score-3">{{ podium[2].total }}</p>
-          <p class="podium-team">{{ getTeam(podium[2].teamId).name }}</p>
+          <p class="podium-score podium-score-3">{{ podium[2].score }}</p>
+          <p class="podium-team">{{ podium[2].name }}</p>
+          <p class="podium-seasons">{{ podium[2].seasonsPlayed }} season{{ podium[2].seasonsPlayed === 1 ? '' : 's' }}</p>
           <ul class="podium-badges" role="list">
-            <li class="podium-badge">Titles {{ careerOf(podium[2].teamId).titles }}</li>
-            <li class="podium-badge">Playoffs {{ careerOf(podium[2].teamId).playoffApps }}</li>
+            <li v-if="podium[2].titles > 0" class="podium-badge podium-badge-gold">{{ podium[2].titles }} title{{ podium[2].titles === 1 ? '' : 's' }}</li>
+            <li v-if="podium[2].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[2].playoffApps) }}</li>
+            <li class="podium-badge">{{ podium[2].totalCatWins }} cat wins</li>
           </ul>
-        </button>
+        </component>
+      </div>
+
+      <div class="legacy-rows-head" aria-hidden="true">
+        <span>The rest of the field</span>
+        <span class="legacy-rows-head-score">Legacy</span>
       </div>
 
       <ol class="legacy-rows" role="list">
-        <li v-for="entry in legacyTail" :key="entry.teamId" role="listitem">
-          <button
-            type="button"
+        <li v-for="entry in legacyTail" :key="entry.teamId || entry.name" role="listitem">
+          <component
+            :is="legacyInteractive ? 'button' : 'div'"
+            :type="legacyInteractive ? 'button' : undefined"
             class="legacy-row"
-            @click="openLegacyModal(entry.teamId)"
-            :class="getTeam(entry.teamId).isMyTeam ? 'legacy-row-me' : ''"
-            :aria-label="`Rank ${entry.rank} ${getTeam(entry.teamId).name}, ${entry.total} points`"
+            @click="onLegacyClick(entry)"
+            :class="{ 'legacy-row-me': entry.isMyTeam, 'is-static': !legacyInteractive }"
+            :aria-label="`Rank ${entry.rank} ${entry.name}, ${entry.score} legacy`"
           >
             <span class="legacy-rank">{{ entry.rank }}</span>
             <span class="legacy-mepin" aria-hidden="true">
@@ -220,22 +243,22 @@
             </span>
             <div
               class="legacy-avatar"
-              :style="{ background: `linear-gradient(135deg, ${getTeam(entry.teamId).avatarColor})` }"
+              :style="{ background: `linear-gradient(135deg, ${entry.avatarColor})` }"
             >
-              <img v-if="getTeam(entry.teamId).avatarUrl" :src="getTeam(entry.teamId).avatarUrl" class="legacy-avatar-img" alt="" />
-              <span v-else>{{ getTeam(entry.teamId).ownerInitials }}</span>
+              <img v-if="entry.logoUrl" :src="entry.logoUrl" class="legacy-avatar-img" alt="" />
+              <span v-else>{{ entry.ownerInitials }}</span>
             </div>
             <div class="legacy-meta">
-              <p class="legacy-team">{{ getTeam(entry.teamId).name }}</p>
-              <p class="legacy-seasons">{{ careerOf(entry.teamId).seasonsPlayed }} seasons</p>
+              <p class="legacy-team">{{ entry.name }}</p>
+              <p class="legacy-seasons">{{ entry.seasonsPlayed }} season{{ entry.seasonsPlayed === 1 ? '' : 's' }}</p>
             </div>
             <ul class="legacy-badges" role="list">
-              <li v-if="careerOf(entry.teamId).titles > 0" class="legacy-badge legacy-badge-gold">{{ careerOf(entry.teamId).titles }} title{{ careerOf(entry.teamId).titles > 1 ? 's' : '' }}</li>
-              <li class="legacy-badge">{{ careerOf(entry.teamId).playoffApps }} playoffs</li>
-              <li class="legacy-badge">{{ careerOf(entry.teamId).totalCatWins }} cat wins</li>
+              <li v-if="entry.titles > 0" class="legacy-badge legacy-badge-gold">{{ entry.titles }} title{{ entry.titles > 1 ? 's' : '' }}</li>
+              <li v-if="entry.playoffApps > 0" class="legacy-badge">{{ playoffWord(entry.playoffApps) }}</li>
+              <li class="legacy-badge">{{ entry.totalCatWins }} cat wins</li>
             </ul>
-            <span class="legacy-score">{{ entry.total }}</span>
-          </button>
+            <span class="legacy-score">{{ entry.score }}</span>
+          </component>
         </li>
       </ol>
     </section>
@@ -759,6 +782,7 @@ import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
+import { LEGACY_FORMULA_LABEL, computeLegacyScore } from '@/editorial/legacy'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
@@ -1070,11 +1094,6 @@ const currentSeasonCard = computed(() => {
   }
 })
 
-/* ─── Editorial wiring for the legacy hero podium ──────────── */
-const legacyHeroCopy = computed(() => liveEditorial.value.allTimeLegacyHero ?? {
-  teamId: '', eyebrow: '', headline: '', body: '',
-})
-
 /* ─── Editorial wiring for dynasty beats ───────────────────────
    The fixture beats carry layout-critical metadata (cats array, the
    catWinTotal numbers, the punt-streak number). The editorial only
@@ -1142,15 +1161,133 @@ function topCareerByPicker(
   return top.teamId
 }
 
-/* ─── Legacy podium and tail ───────────────────────────────── */
-const legacyRanked = computed(() => {
-  return Object.values(legacyBreakdowns).sort((a, b) => a.rank - b.rank)
+/* ─── Legacy podium and tail ───────────────────────────────────
+   Live league: real per-manager aggregation across connected seasons
+   (data.managerLegacy). Demo: the fixture teams, scored with the SAME
+   defined formula so the on-page formula caption stays honest in both
+   modes. Entries are self-contained for display so a manager who has
+   left the league still renders (no getTeam dependency). */
+interface LegacyDisplay {
+  rank: number
+  score: number
+  teamId: string            // '' for managers no longer in the league
+  name: string
+  logoUrl?: string
+  avatarColor: string
+  ownerInitials: string
+  isMyTeam: boolean
+  seasonsPlayed: number
+  titles: number
+  playoffApps: number
+  totalCatWins: number
+  careerWinPct: number
+}
+
+const legacyFormulaLabel = LEGACY_FORMULA_LABEL
+
+/** Live legacy cards are non-interactive for now: the detail modal is
+ *  still fixture-backed, so opening it on a real team would leak demo
+ *  data. The demo route keeps the modal. */
+const legacyInteractive = computed(() => !isStrictLiveMode.value)
+
+const legacyEntries = computed<LegacyDisplay[]>(() => {
+  const live = liveData.value?.managerLegacy
+  if (live && live.length > 0) {
+    return live.map((m) => ({
+      rank: m.rank,
+      score: m.legacyScore,
+      teamId: m.teamId ?? '',
+      name: m.name,
+      logoUrl: m.logoUrl,
+      avatarColor: m.avatarColor,
+      ownerInitials: m.ownerInitials,
+      isMyTeam: m.isMyTeam,
+      seasonsPlayed: m.seasonsPlayed,
+      titles: m.titles,
+      playoffApps: m.playoffApps,
+      totalCatWins: m.totalCatWins,
+      careerWinPct: m.careerWinPct,
+    }))
+  }
+  return Object.values(legacyBreakdowns)
+    .map((b) => {
+      const c = teamCareerStats[b.teamId]
+      const t = getTeam(b.teamId)
+      const careerWinPct = c?.careerWinPct ?? 0
+      return {
+        rank: 0,
+        score: computeLegacyScore({
+          titles: c?.titles ?? 0,
+          playoffApps: c?.playoffApps ?? 0,
+          careerWinPct,
+          totalCatWins: c?.totalCatWins ?? 0,
+        }),
+        teamId: b.teamId,
+        name: t.name,
+        logoUrl: t.avatarUrl,
+        avatarColor: t.avatarColor,
+        ownerInitials: t.ownerInitials,
+        isMyTeam: t.isMyTeam,
+        seasonsPlayed: c?.seasonsPlayed ?? 0,
+        titles: c?.titles ?? 0,
+        playoffApps: c?.playoffApps ?? 0,
+        totalCatWins: c?.totalCatWins ?? 0,
+        careerWinPct,
+      } as LegacyDisplay
+    })
+    .sort((a, b) => b.score - a.score || b.titles - a.titles || b.totalCatWins - a.totalCatWins)
+    .map((e, i) => ({ ...e, rank: i + 1 }))
 })
-const podium = computed(() => legacyRanked.value.slice(0, 3))
-const legacyTail = computed(() => legacyRanked.value.slice(3))
+
+const podium = computed(() => legacyEntries.value.slice(0, 3))
+const legacyTail = computed(() => legacyEntries.value.slice(3))
+
+/** Lead OKLCH stop of an entry's gradient — the card's glow accent. */
+function accentOfEntry(e: LegacyDisplay): string {
+  const stops = e.avatarColor
+    .split(/\)\s*,\s*/)
+    .map((s) => (s.endsWith(')') ? s : `${s})`))
+  return stops[0]
+}
+
+function onLegacyClick(e: LegacyDisplay): void {
+  if (legacyInteractive.value && e.teamId) openLegacyModal(e.teamId)
+}
+
+/** Win% as a leading-dot rate, e.g. .598. */
+function legacyPct(n: number): string {
+  return n.toFixed(3).replace(/^0\./, '.')
+}
+
+/** "1 playoff" / "2 playoffs" — correct pluralization. */
+function playoffWord(n: number): string {
+  return `${n} playoff${n === 1 ? '' : 's'}`
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** Number-anchored lede for the #1 hero card. Title-holders lead with
+ *  the ring; the ringless lead with the positive so it never opens on
+ *  "0 titles". Seasons show as their own tag, so they stay out of here. */
+function podiumLede(e: LegacyDisplay): string {
+  if (e.titles > 0) {
+    const r = `${numberToWord(e.titles)} ${e.titles === 1 ? 'ring' : 'rings'}`
+    return `${cap(r)}, ${legacyPct(e.careerWinPct)} lifetime.`
+  }
+  if (e.playoffApps > 0) {
+    const p = `${numberToWord(e.playoffApps)} playoff berth${e.playoffApps === 1 ? '' : 's'}`
+    return `${cap(p)}, ${legacyPct(e.careerWinPct)} lifetime, still ringless.`
+  }
+  return `${e.totalCatWins} cat wins, ${legacyPct(e.careerWinPct)} lifetime.`
+}
+
+/** Distinct managers across all connected seasons — reconciles the
+ *  16-deep legacy list with the current-season "12 teams" pill. */
+const legacyManagerCount = computed(() => legacyEntries.value.length)
 
 const teamIds = teams.map((t) => t.id)
-const careerOf = (id: string) => teamCareerStats[id]
 
 const careerRows = computed(() => {
   return [...Object.values(teamCareerStats)].sort(
@@ -1762,6 +1899,61 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   .podium-card:hover { transform: translateY(-2px); }
 }
 .podium-card:active { transform: scale(0.99); transition-duration: 100ms; }
+
+/* Live mode: legacy cards are display-only (the detail modal is still
+   fixture-backed), so suppress the click affordances — no pointer, no
+   hover lift, no press. */
+.podium-card.is-static,
+.legacy-row.is-static { cursor: default; }
+.podium-card.is-static:active,
+.legacy-row.is-static:active { transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .podium-card.is-static:hover { transform: none; }
+  .legacy-row.is-static:hover { transform: none; border-color: oklch(0.16 0.015 90); }
+  .legacy-row-me.is-static:hover { border-color: oklch(0.78 0.18 92 / 0.55); }
+}
+
+/* Manager count — reconciles the 16-deep list with the 12-team pill. */
+.legacy-context {
+  margin: 10px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+}
+
+/* The defined legacy formula, shown so the score is never a black box. */
+.legacy-formula {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The signed-in manager's own card — findable at a glance on a page
+   that is explicitly "your league". Magenta ring stays distinct from
+   the gold #1 treatment and the per-card accent borders. */
+.podium-card-me {
+  box-shadow: inset 0 0 0 2px oklch(0.72 0.16 330 / 0.85);
+}
+
+/* Column header above the tail, so the right-hand number stays labeled
+   once the formula caption has scrolled out of view. */
+.legacy-rows-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 22px 2px 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.legacy-rows-head-score { color: var(--ink-2); }
 .podium-1 {
   order: 2;
   border-color: oklch(0.50 0.10 90);
@@ -1825,6 +2017,15 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   font-size: 1.05rem;
   line-height: 1.1;
   color: var(--ink-1);
+  margin: 0 0 3px;
+}
+.podium-seasons {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
   margin: 0 0 10px;
 }
 .podium-badges {
@@ -1846,6 +2047,11 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   padding: 3px 8px;
   border-radius: 999px;
 }
+.podium-badge-gold {
+  color: var(--gold);
+  border-color: oklch(0.50 0.12 90 / 0.5);
+  background: oklch(0.84 0.16 90 / 0.10);
+}
 .podium-1-sub {
   margin: 12px 0 0;
   font-size: 0.8rem;
@@ -1859,7 +2065,7 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   grid-template-columns: 28px 16px 36px minmax(160px, 1.8fr) minmax(0, 1.7fr) 70px;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: oklch(0.10 0.015 90);
   border: 1px solid oklch(0.16 0.015 90);
   border-radius: 12px;
