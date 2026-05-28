@@ -332,72 +332,60 @@
     ────────────────────────────────────────────────────────────── -->
     <section class="h2h" aria-labelledby="h2h-heading">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="h2h-heading">All-time series</p>
+        <p class="section-eyebrow section-eyebrow-teal" id="h2h-heading">The rivalries</p>
         <h2 class="section-headline">Who owns who.</h2>
-        <p class="section-sub">Read horizontally. Each row shows that team's record against opponents.</p>
+        <p class="section-sub">Head-to-head from this season's matchups.</p>
       </header>
 
-      <div class="h2h-matrix-wrap">
-        <table class="h2h-matrix" role="table" aria-label="All-time head-to-head matrix">
-          <thead>
-            <tr>
-              <th scope="col" class="h2h-corner" aria-label="Team"></th>
-              <th
-                v-for="cid in teamIds"
-                :key="`col-${cid}`"
-                scope="col"
-                class="h2h-col-head"
+      <div v-if="rivalries.length" class="rivalry-grid">
+        <article
+          v-for="r in rivalries"
+          :key="r.kind"
+          class="rivalry-card"
+          :class="{ 'rivalry-card-me': r.kind !== 'blowout' }"
+        >
+          <p class="rivalry-eyebrow">{{ r.eyebrow }}</p>
+
+          <div class="rivalry-faces">
+            <div class="rivalry-face">
+              <div
+                class="rivalry-avatar"
+                :class="{ 'rivalry-avatar-me': getTeam(r.leftId).isMyTeam }"
+                :style="{ background: `linear-gradient(135deg, ${getTeam(r.leftId).avatarColor})` }"
               >
-                <div
-                  class="h2h-col-avatar"
-                  :style="{ background: `linear-gradient(135deg, ${getTeam(cid).avatarColor})` }"
-                  :title="getTeam(cid).name"
-                >
-                  <img v-if="getTeam(cid).avatarUrl" :src="getTeam(cid).avatarUrl" class="h2h-col-avatar-img" alt="" />
-                  <span v-else>{{ getTeam(cid).ownerInitials }}</span>
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="rid in teamIds"
-              :key="`row-${rid}`"
-              :class="getTeam(rid).isMyTeam ? 'h2h-row-me' : ''"
-            >
-              <th scope="row" class="h2h-row-head">
-                <div
-                  class="h2h-row-avatar"
-                  :style="{ background: `linear-gradient(135deg, ${getTeam(rid).avatarColor})` }"
-                >
-                  <img v-if="getTeam(rid).avatarUrl" :src="getTeam(rid).avatarUrl" class="h2h-row-avatar-img" alt="" />
-                  <span v-else>{{ getTeam(rid).ownerInitials }}</span>
-                </div>
-                <span class="h2h-row-name">{{ getTeam(rid).name }}</span>
-              </th>
-              <td
-                v-for="cid in teamIds"
-                :key="`cell-${rid}-${cid}`"
-                class="h2h-cell"
-                :class="cellClass(rid, cid)"
+                <img v-if="getTeam(r.leftId).avatarUrl" :src="getTeam(r.leftId).avatarUrl" alt="" />
+                <span v-else>{{ getTeam(r.leftId).ownerInitials }}</span>
+              </div>
+              <p class="rivalry-name">{{ getTeam(r.leftId).name }}</p>
+            </div>
+
+            <p class="rivalry-record">
+              {{ r.leftWins }}<span class="rivalry-dash">–</span>{{ r.rightWins }}<span v-if="r.ties" class="rivalry-ties">–{{ r.ties }}</span>
+            </p>
+
+            <div class="rivalry-face">
+              <div
+                class="rivalry-avatar"
+                :class="{ 'rivalry-avatar-me': getTeam(r.rightId).isMyTeam }"
+                :style="{ background: `linear-gradient(135deg, ${getTeam(r.rightId).avatarColor})` }"
               >
-                <span v-if="rid === cid" class="h2h-cell-self" aria-hidden="true">—</span>
-                <button
-                  v-else
-                  type="button"
-                  class="h2h-cell-btn"
-                  :style="{ '--cell-tint': cellTint(rid, cid) } as any"
-                  :aria-label="`${getTeam(rid).name} vs ${getTeam(cid).name}: ${cellRecord(rid, cid)}, ${cellDiffLabel(rid, cid)}`"
-                  @click="openRivalryModal(rid, cid)"
-                >
-                  <span class="h2h-cell-rec">{{ cellRecord(rid, cid) }}</span>
-                  <span class="h2h-cell-diff">{{ cellDiffLabel(rid, cid) }}</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <img v-if="getTeam(r.rightId).avatarUrl" :src="getTeam(r.rightId).avatarUrl" alt="" />
+                <span v-else>{{ getTeam(r.rightId).ownerInitials }}</span>
+              </div>
+              <p class="rivalry-name">{{ getTeam(r.rightId).name }}</p>
+            </div>
+          </div>
+
+          <p class="rivalry-meta">
+            <span v-if="r.dominantCatDiff > 0">+{{ r.dominantCatDiff }} cats</span>
+            <span v-if="r.dominantCatDiff > 0" class="rivalry-dot" aria-hidden="true">·</span>
+            <span>{{ r.meetings }} meeting{{ r.meetings === 1 ? '' : 's' }}</span>
+          </p>
+          <p class="rivalry-caption">{{ r.caption }}</p>
+        </article>
       </div>
+
+      <p v-else class="rivalry-empty">Head-to-head meetings haven't been logged yet this season.</p>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
@@ -405,84 +393,42 @@
     ────────────────────────────────────────────────────────────── -->
     <section class="dynasties" aria-labelledby="dynasties-heading">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="dynasties-heading">The dynasties</p>
-        <h2 class="section-headline">Six years, eleven cats, one ladder.</h2>
+        <p class="section-eyebrow section-eyebrow-teal" id="dynasties-heading">Category crowns</p>
+        <h2 class="section-headline">Who rules each cat.</h2>
+        <p class="section-sub">This season's category leaders. Moves every week.</p>
       </header>
 
-      <div class="dyn-grid">
-        <!-- Hitting king — wider, green-tinted, logo larger -->
-        <article class="dyn-card dyn-hitting" aria-labelledby="dyn-hit">
-          <p class="dyn-eyebrow" id="dyn-hit">{{ hittingBeat.eyebrow }}</p>
-          <div class="dyn-body">
+      <div v-if="categoryCrowns.length" class="crown-grid">
+        <article
+          v-for="c in categoryCrowns"
+          :key="c.kind"
+          class="crown-card"
+          :class="`crown-${c.kind}`"
+        >
+          <p class="crown-eyebrow">{{ c.eyebrow }}</p>
+          <div class="crown-id">
             <div
-              class="dyn-avatar dyn-avatar-lg"
-              :style="{ background: `linear-gradient(135deg, ${getTeam(hittingBeat.teamId).avatarColor})` }"
+              class="crown-avatar"
+              :class="{ 'crown-avatar-me': getTeam(c.teamId).isMyTeam }"
+              :style="{ background: `linear-gradient(135deg, ${getTeam(c.teamId).avatarColor})` }"
             >
-              <img v-if="getTeam(hittingBeat.teamId).avatarUrl" :src="getTeam(hittingBeat.teamId).avatarUrl" class="dyn-avatar-img" alt="" />
-              <span v-else>{{ getTeam(hittingBeat.teamId).ownerInitials }}</span>
+              <img v-if="getTeam(c.teamId).avatarUrl" :src="getTeam(c.teamId).avatarUrl" alt="" />
+              <span v-else>{{ getTeam(c.teamId).ownerInitials }}</span>
             </div>
-            <div class="dyn-text">
-              <h3 class="dyn-headline">{{ hittingBeat.headline }}</h3>
-              <p class="dyn-prose">{{ hittingBeat.body }}</p>
-              <div class="dyn-foot">
-                <ul class="dyn-cats" role="list">
-                  <li v-for="c in hittingBeat.cats" :key="c" class="dyn-cat-chip dyn-cat-chip-hit">{{ c }}</li>
-                </ul>
-                <p class="dyn-stat">
-                  <span class="dyn-stat-num">{{ hittingBeat.catWinTotal }}</span>
-                  <span class="dyn-stat-lbl">hitting cats won</span>
-                </p>
-              </div>
-            </div>
+            <p class="crown-name">{{ getTeam(c.teamId).name }}</p>
           </div>
-        </article>
-
-        <!-- Pitching king — narrower, teal-tinted, logo smaller -->
-        <article class="dyn-card dyn-pitching" aria-labelledby="dyn-pit">
-          <p class="dyn-eyebrow" id="dyn-pit">{{ pitchingBeat.eyebrow }}</p>
-          <div
-            class="dyn-avatar"
-            :style="{ background: `linear-gradient(135deg, ${getTeam(pitchingBeat.teamId).avatarColor})` }"
-          >
-            <img v-if="getTeam(pitchingBeat.teamId).avatarUrl" :src="getTeam(pitchingBeat.teamId).avatarUrl" class="dyn-avatar-img" alt="" />
-            <span v-else>{{ getTeam(pitchingBeat.teamId).ownerInitials }}</span>
-          </div>
-          <h3 class="dyn-headline">{{ pitchingBeat.headline }}</h3>
-          <p class="dyn-prose">{{ pitchingBeat.body }}</p>
-          <div class="dyn-foot">
-            <ul class="dyn-cats" role="list">
-              <li v-for="c in pitchingBeat.cats" :key="c" class="dyn-cat-chip dyn-cat-chip-pit">{{ c }}</li>
-            </ul>
-            <p class="dyn-stat">
-              <span class="dyn-stat-num">{{ pitchingBeat.catWinTotal }}</span>
-              <span class="dyn-stat-lbl">pitching cats won</span>
-            </p>
-          </div>
-        </article>
-
-        <!-- Punt kings — full-width, magenta border, asymmetric layout -->
-        <article class="dyn-card dyn-punt" aria-labelledby="dyn-punt">
-          <div class="dyn-punt-side">
-            <p class="dyn-eyebrow dyn-eyebrow-punt" id="dyn-punt">{{ puntBeat.eyebrow }}</p>
-            <h3 class="dyn-headline">{{ puntBeat.headline }}</h3>
-            <p class="dyn-prose">{{ puntBeat.body }}</p>
-          </div>
-          <div class="dyn-punt-meta">
-            <div
-              class="dyn-avatar dyn-avatar-md"
-              :style="{ background: `linear-gradient(135deg, ${getTeam(puntBeat.teamId).avatarColor})` }"
-            >
-              <img v-if="getTeam(puntBeat.teamId).avatarUrl" :src="getTeam(puntBeat.teamId).avatarUrl" class="dyn-avatar-img" alt="" />
-              <span v-else>{{ getTeam(puntBeat.teamId).ownerInitials }}</span>
-            </div>
-            <p class="dyn-mega">
-              <span class="dyn-mega-num">{{ puntBeat.puntStreak }}</span>
-              <span class="dyn-mega-lbl">seasons</span>
-            </p>
-            <p class="dyn-mega-trail">Punted {{ puntBeat.puntedCat }}</p>
-          </div>
+          <p class="crown-count">
+            <span class="crown-num">{{ c.count }}</span>
+            <span class="crown-label">{{ c.kind === 'punt' ? 'cats in the cellar' : 'cats led' }}</span>
+          </p>
+          <ul v-if="c.cats.length" class="crown-cats" role="list">
+            <li v-for="cat in c.cats" :key="cat" class="crown-cat-chip" :class="`crown-cat-${c.kind}`">{{ cat }}</li>
+          </ul>
+          <p class="crown-caption">{{ c.caption }}</p>
         </article>
       </div>
+
+      <p v-else class="crown-empty">Category leaders post once the season's first matchups settle.</p>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
@@ -666,77 +612,11 @@
       </div>
     </section>
 
-    <!-- ─────────────────────────────────────────────────────────────
-         SECTION 8 — CAREER STATISTICS
-    ────────────────────────────────────────────────────────────── -->
-    <section class="career" aria-labelledby="career-heading">
-      <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-mute" id="career-heading">Career statistics</p>
-        <h2 class="section-headline">The whole picture.</h2>
-      </header>
-
-      <div class="career-table-wrap">
-        <table class="career-table" aria-label="All-time team statistics">
-          <thead>
-            <tr>
-              <th scope="col" class="th-team">Team</th>
-              <th scope="col" class="th-num">Seasons</th>
-              <th scope="col" class="th-num">Titles</th>
-              <th scope="col" class="th-num">Record</th>
-              <th scope="col" class="th-num">Win %</th>
-              <th scope="col" class="th-num">Hit W</th>
-              <th scope="col" class="th-num">Pitch W</th>
-              <th scope="col" class="th-num">Cat +/-</th>
-              <th scope="col" class="th-cat">Best cat</th>
-              <th scope="col" class="th-cat">Worst cat</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in careerRows"
-              :key="row.teamId"
-              :class="getTeam(row.teamId).isMyTeam ? 'career-row-me' : ''"
-            >
-              <th scope="row" class="td-team">
-                <button type="button" class="career-row-btn" @click="openLegacyModal(row.teamId)" :aria-label="`Open legacy detail for ${getTeam(row.teamId).name}`">
-                  <div class="career-avatar" :style="{ background: `linear-gradient(135deg, ${getTeam(row.teamId).avatarColor})` }">
-                    <img v-if="getTeam(row.teamId).avatarUrl" :src="getTeam(row.teamId).avatarUrl" alt="" />
-                    <span v-else>{{ getTeam(row.teamId).ownerInitials }}</span>
-                  </div>
-                  <span class="career-team-name">{{ getTeam(row.teamId).name }}</span>
-                </button>
-              </th>
-              <td class="td-num">{{ row.seasonsPlayed }}</td>
-              <td class="td-num">
-                <span v-if="row.titles > 0" class="career-title-chip">{{ row.titles }}</span>
-                <span v-else class="career-dash">—</span>
-              </td>
-              <td class="td-num">{{ row.totalCatWins }}-{{ row.totalCatLosses }}-{{ row.totalCatTies }}</td>
-              <td class="td-num">{{ (row.careerWinPct * 100).toFixed(1) }}%</td>
-              <td class="td-num">{{ row.hitCatsWon }}</td>
-              <td class="td-num">{{ row.pitchCatsWon }}</td>
-              <td class="td-num" :class="row.catDifferential >= 0 ? 'td-pos' : 'td-neg'">{{ formatDiff(row.catDifferential) }}</td>
-              <td class="td-cat"><span class="career-cat-chip career-cat-best">{{ row.bestCat }}</span></td>
-              <td class="td-cat"><span class="career-cat-chip career-cat-worst">{{ row.worstCat }}</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
     <!-- Modals -->
     <CategoryTeamLegacyModal
       v-if="activeLegacyTeamId"
       :team-id="activeLegacyTeamId"
       @close="activeLegacyTeamId = null"
-      @open-signup="$emit('open-signup')"
-    />
-    <CategoryRivalryModal
-      v-if="activeRivalry"
-      :team-a-id="activeRivalry.a"
-      :team-b-id="activeRivalry.b"
-      :override-narrative="rivalryOverrideFor(activeRivalry.a, activeRivalry.b)"
-      @close="activeRivalry = null"
       @open-signup="$emit('open-signup')"
     />
   </div>
@@ -759,7 +639,6 @@ import {
   type CategoryRecordBookEntry,
 } from '@/fixtures/categoriesLeague'
 import CategoryTeamLegacyModal from '@/components/demo/CategoryTeamLegacyModal.vue'
-import CategoryRivalryModal from '@/components/demo/CategoryRivalryModal.vue'
 import { linearPath, type Point } from '@/utils/svgPath'
 import { renderHistoryPage, type RenderedHistoryCopy } from '@/editorial/render-history'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -1078,72 +957,89 @@ const currentSeasonCard = computed(() => {
   }
 })
 
-/* ─── Editorial wiring for dynasty beats ───────────────────────
-   The fixture beats carry layout-critical metadata (cats array, the
-   catWinTotal numbers, the punt-streak number). The editorial only
-   supplies eyebrow/headline/body. We overlay the editorial copy on
-   the fixture row when the fixture row exists, and otherwise rely
-   on the editorial-derived team id to keep the avatar block valid.
-─────────────────────────────────────────────────────────────── */
-const hittingFixture = computed(() => categoryDynastyBeats.find((b) => b.kind === 'hitting-king')!)
-const pitchingFixture = computed(() => categoryDynastyBeats.find((b) => b.kind === 'pitching-king')!)
-const puntFixture = computed(() => categoryDynastyBeats.find((b) => b.kind === 'punt-kings')!)
-
-const hittingBeat = computed(() => {
-  const ed = liveEditorial.value.dynasties.hitting
-  const fx = hittingFixture.value
-  if (!ed) return fx
-  // teamId from editorial when live data drove it; fall back to fixture so the
-  // avatar block always resolves.
-  const detectedTeamId = liveData.value
-    ? topCareerByPicker(liveData.value, (s) => s.hitCatsWon) ?? fx.teamId
-    : fx.teamId
-  const detectedCount = liveData.value?.teamCareerStats?.[detectedTeamId]?.hitCatsWon ?? fx.catWinTotal
-  return {
-    ...fx,
-    eyebrow: ed.eyebrow,
-    headline: ed.headline,
-    body: ed.body || fx.body,
-    teamId: detectedTeamId,
-    catWinTotal: detectedCount,
-  }
-})
-
-const pitchingBeat = computed(() => {
-  const ed = liveEditorial.value.dynasties.pitching
-  const fx = pitchingFixture.value
-  if (!ed) return fx
-  const detectedTeamId = liveData.value
-    ? topCareerByPicker(liveData.value, (s) => s.pitchCatsWon) ?? fx.teamId
-    : fx.teamId
-  const detectedCount = liveData.value?.teamCareerStats?.[detectedTeamId]?.pitchCatsWon ?? fx.catWinTotal
-  return {
-    ...fx,
-    eyebrow: ed.eyebrow,
-    headline: ed.headline,
-    body: ed.body || fx.body,
-    teamId: detectedTeamId,
-    catWinTotal: detectedCount,
-  }
-})
-
-const puntBeat = computed(() => {
-  // Detection is intentionally skipped for punt-kings (see detect-history.ts).
-  // The fixture beat remains the source of truth for this slot.
-  return puntFixture.value
-})
-
-function topCareerByPicker(
-  data: CategoryLeagueData,
-  picker: (s: NonNullable<CategoryLeagueData['teamCareerStats']>[string]) => number,
-): string | null {
-  const career = data.teamCareerStats
-  if (!career) return null
-  const entries = Object.values(career)
-  if (entries.length === 0) return null
-  const top = entries.reduce((best, s) => (picker(s) > picker(best) ? s : best))
-  return top.teamId
+/* ─── Category crowns — this season's per-cat leaders ──────────
+   The old "dynasties" beat needed per-category history every season
+   (which cat each team won), data we don't fetch for past years. So
+   this is the honest, *current-season* version, built from the live
+   categoryRanks the adapter already computes: who leads the most
+   hitting cats, the most pitching cats, and who's stuck in the cellar.
+   It moves every week — a freshness beat as well as a real one.
+   Demo route maps the fixture dynasty beats into the same shape. */
+interface CrownBeat {
+  kind: 'bats' | 'arms' | 'punt'
+  eyebrow: string
+  teamId: string
+  count: number
+  cats: string[]
+  caption: string
 }
+
+const categoryCrowns = computed<CrownBeat[]>(() => {
+  const data = liveData.value
+  if (data && data.categoryRanks?.length) {
+    const numTeams = data.teams.length
+    const sideOf = new Map(data.categories.map((c) => [c.id, c.side]))
+    const labelOf = new Map(data.categories.map((c) => [c.id, c.label]))
+    type Tally = { teamId: string; hitLed: string[]; pitLed: string[]; punted: string[] }
+    const tallies: Tally[] = data.categoryRanks.map((cr) => {
+      const hitLed: string[] = []
+      const pitLed: string[] = []
+      const punted: string[] = []
+      for (const [catId, rank] of Object.entries(cr.catRanks)) {
+        const lbl = labelOf.get(catId) ?? catId
+        if (rank === 1) {
+          if (sideOf.get(catId) === 'hit') hitLed.push(lbl)
+          else if (sideOf.get(catId) === 'pit') pitLed.push(lbl)
+        }
+        if (numTeams > 0 && rank >= numTeams) punted.push(lbl)
+      }
+      return { teamId: cr.teamId, hitLed, pitLed, punted }
+    })
+    const bats = [...tallies].sort((a, b) => b.hitLed.length - a.hitLed.length)[0]
+    const arms = [...tallies].sort((a, b) => b.pitLed.length - a.pitLed.length)[0]
+    const punt = [...tallies].sort((a, b) => b.punted.length - a.punted.length)[0]
+    const out: CrownBeat[] = []
+    if (bats && bats.hitLed.length > 0) {
+      out.push({
+        kind: 'bats', eyebrow: 'The bats', teamId: bats.teamId,
+        count: bats.hitLed.length, cats: bats.hitLed,
+        caption: `${getTeam(bats.teamId).name} leads the league in ${bats.hitLed.length} hitting cat${bats.hitLed.length === 1 ? '' : 's'} this season.`,
+      })
+    }
+    if (arms && arms.pitLed.length > 0) {
+      out.push({
+        kind: 'arms', eyebrow: 'The arms', teamId: arms.teamId,
+        count: arms.pitLed.length, cats: arms.pitLed,
+        caption: `${getTeam(arms.teamId).name} owns the mound, fronting ${arms.pitLed.length} pitching cat${arms.pitLed.length === 1 ? '' : 's'}.`,
+      })
+    }
+    if (punt && punt.punted.length > 0) {
+      out.push({
+        kind: 'punt', eyebrow: 'The punt', teamId: punt.teamId,
+        count: punt.punted.length, cats: punt.punted,
+        caption: `${getTeam(punt.teamId).name} sits dead last in ${punt.punted.length} cat${punt.punted.length === 1 ? '' : 's'}. The line nobody wants.`,
+      })
+    }
+    return out
+  }
+  // Demo fallback — map fixture dynasty beats into crown beats.
+  const fxMeta: Record<string, { kind: CrownBeat['kind']; eyebrow: string }> = {
+    'hitting-king': { kind: 'bats', eyebrow: 'The bats' },
+    'pitching-king': { kind: 'arms', eyebrow: 'The arms' },
+    'punt-kings': { kind: 'punt', eyebrow: 'The punt' },
+  }
+  return categoryDynastyBeats.map((b) => {
+    const meta = fxMeta[b.kind] ?? { kind: 'bats' as const, eyebrow: 'The bats' }
+    return {
+      kind: meta.kind,
+      eyebrow: meta.eyebrow,
+      teamId: b.teamId,
+      count: b.cats?.length ?? 0,
+      cats: b.cats ?? [],
+      caption: b.body || b.headline || '',
+    }
+  })
+})
 
 /* ─── Legacy podium and tail ───────────────────────────────────
    Live league: real per-manager aggregation across connected seasons
@@ -1270,21 +1166,6 @@ function podiumLede(e: LegacyDisplay): string {
 /** Distinct managers across all connected seasons — reconciles the
  *  16-deep legacy list with the current-season "12 teams" pill. */
 const legacyManagerCount = computed(() => legacyEntries.value.length)
-
-const teamIds = teams.map((t) => t.id)
-
-const careerRows = computed(() => {
-  return [...Object.values(teamCareerStats)].sort(
-    (a, b) => (legacyBreakdowns[a.teamId]?.total ?? 0) < (legacyBreakdowns[b.teamId]?.total ?? 0) ? 1 : -1,
-  )
-})
-
-
-function formatDiff(n: number): string {
-  if (n > 0) return `+${n}`
-  if (n < 0) return `${n}`
-  return '0'
-}
 
 /* ─── Across the years — finish-position bump chart ──────────────
    The page already ranks managers two ways (champions, legacy). The one
@@ -1447,57 +1328,130 @@ const bumpLabels = computed(() => {
   return lbls
 })
 
-/* ─── H2H matrix helpers ───────────────────────────────────── */
-function getH2H(a: string, b: string): { aWins: number; bWins: number; ties: number; catDiffA: number; meetings: number } | null {
-  if (a === b) return null
-  // canonical alphabetized lookup
-  const lo = a < b ? a : b
-  const hi = a < b ? b : a
-  const cell = h2hMatrix.find((c) => c.teamA === lo && c.teamB === hi)
-  if (!cell) return null
-  const m = cell.recordA.match(/^(\d+)-(\d+)-(\d+)$/)
-  if (!m) return null
-  const aWins = parseInt(m[1], 10)
-  const bWins = parseInt(m[2], 10)
-  const ties  = parseInt(m[3], 10)
-  if (a < b) {
-    return { aWins, bWins, ties, catDiffA: cell.catDiffA, meetings: cell.meetings }
-  }
-  // viewing from b (=a-param)
-  return { aWins: bWins, bWins: aWins, ties, catDiffA: -cell.catDiffA, meetings: cell.meetings }
+/* ─── The rivalries — current-season head-to-head story cards ──
+   Recast from the 12x12 all-time matrix (which would have required
+   expensive cross-season matchup fetching) into a few real rivalry
+   stories built from the current season's h2h matrix the adapter
+   already computes: who owns you, who you own, and the league's most
+   lopsided non-you series. Honest scope (this season), magazine shape. */
+
+interface RivalryDisplay {
+  kind: 'owned-by' | 'you-own' | 'blowout'
+  eyebrow: string
+  leftId: string            // displayed left; this is the *dominant* team
+  rightId: string           // displayed right; the dominated team
+  leftWins: number
+  rightWins: number
+  ties: number
+  meetings: number
+  dominantCatDiff: number   // absolute; left's cat advantage over right
+  caption: string
 }
 
-function cellRecord(rid: string, cid: string): string {
-  if (rid === cid) return '—'
-  const r = getH2H(rid, cid)
-  if (!r) return '—'
-  return r.ties ? `${r.aWins}-${r.bWins}-${r.ties}` : `${r.aWins}-${r.bWins}`
-}
-function cellDiffLabel(rid: string, cid: string): string {
-  if (rid === cid) return ''
-  const r = getH2H(rid, cid)
-  if (!r) return ''
-  return r.catDiffA === 0 ? '0 cats' : (r.catDiffA > 0 ? `+${r.catDiffA} cats` : `${r.catDiffA} cats`)
-}
-function cellClass(rid: string, cid: string): string {
-  if (rid === cid) return 'h2h-cell-diag'
-  const r = getH2H(rid, cid)
-  if (!r) return ''
-  const diff = r.aWins - r.bWins
-  if (diff === 0) return 'h2h-cell-even'
-  return diff > 0 ? 'h2h-cell-win' : 'h2h-cell-loss'
-}
-function cellTint(rid: string, cid: string): string {
-  if (rid === cid) return '0'
-  const r = getH2H(rid, cid)
-  if (!r) return '0'
-  const total = r.aWins + r.bWins
-  if (!total) return '0'
-  const diff = Math.abs(r.aWins - r.bWins)
-  if (diff === 0) return '0'
-  const ratio = Math.max(0.35, Math.min(1, diff / Math.max(4, total)))
-  return ratio.toFixed(2)
-}
+const rivalries = computed<RivalryDisplay[]>(() => {
+  const matrix = liveData.value?.h2hMatrix ?? h2hMatrix
+  const teamsList = liveData.value?.teams ?? teams
+  if (!matrix || matrix.length === 0) return []
+  const myId = teamsList.find((t) => t.isMyTeam)?.id ?? null
+
+  const parseRec = (r: string) => {
+    const m = r.match(/^(\d+)-(\d+)(?:-(\d+))?$/)
+    if (!m) return { w: 0, l: 0, t: 0 }
+    return { w: parseInt(m[1], 10), l: parseInt(m[2], 10), t: parseInt(m[3] ?? '0', 10) }
+  }
+  const nameOf = (id: string) => teamsList.find((t) => t.id === id)?.name ?? 'Them'
+
+  // Re-shape each of-the-viewer entry from my perspective.
+  const myEntries = myId
+    ? matrix
+        .map((e) => {
+          const rec = parseRec(e.recordA)
+          const aIsMe = e.teamA === myId
+          const bIsMe = e.teamB === myId
+          if (!aIsMe && !bIsMe) return null
+          const oppId = aIsMe ? e.teamB : e.teamA
+          const myWins = aIsMe ? rec.w : rec.l
+          const oppWins = aIsMe ? rec.l : rec.w
+          const myCatDiff = aIsMe ? e.catDiffA : -e.catDiffA
+          return { oppId, myWins, oppWins, ties: rec.t, meetings: e.meetings, myCatDiff }
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+    : []
+
+  const out: RivalryDisplay[] = []
+
+  // Your tormentor — opponent with the biggest net wins over you.
+  const tormentor = myEntries
+    .filter((x) => x.oppWins > x.myWins)
+    .sort((a, b) => (b.oppWins - b.myWins) - (a.oppWins - a.myWins))[0]
+  if (tormentor && myId) {
+    out.push({
+      kind: 'owned-by',
+      eyebrow: 'Owned by',
+      leftId: tormentor.oppId,
+      rightId: myId,
+      leftWins: tormentor.oppWins,
+      rightWins: tormentor.myWins,
+      ties: tormentor.ties,
+      meetings: tormentor.meetings,
+      dominantCatDiff: Math.abs(tormentor.myCatDiff),
+      caption: `${nameOf(tormentor.oppId)} has your number.`,
+    })
+  }
+
+  // Your prey — your most lopsided winning series.
+  const prey = myEntries
+    .filter((x) => x.myWins > x.oppWins)
+    .sort((a, b) => (b.myWins - b.oppWins) - (a.myWins - a.oppWins))[0]
+  if (prey && myId) {
+    out.push({
+      kind: 'you-own',
+      eyebrow: 'You own',
+      leftId: myId,
+      rightId: prey.oppId,
+      leftWins: prey.myWins,
+      rightWins: prey.oppWins,
+      ties: prey.ties,
+      meetings: prey.meetings,
+      dominantCatDiff: Math.abs(prey.myCatDiff),
+      caption: `${nameOf(prey.oppId)} is your customer.`,
+    })
+  }
+
+  // League's biggest non-you blowout — keeps the third card neutral
+  // when you're already represented in the first two.
+  const blowoutCand = matrix
+    .filter((e) => !myId || (e.teamA !== myId && e.teamB !== myId))
+    .map((e) => {
+      const rec = parseRec(e.recordA)
+      return { e, rec, diff: Math.abs(rec.w - rec.l) }
+    })
+    .filter((x) => x.diff > 0)
+    .sort((a, b) => b.diff - a.diff)[0]
+  if (blowoutCand) {
+    const { e, rec } = blowoutCand
+    const aWinsMore = rec.w >= rec.l
+    const dominantId = aWinsMore ? e.teamA : e.teamB
+    const dominatedId = aWinsMore ? e.teamB : e.teamA
+    const domWins = aWinsMore ? rec.w : rec.l
+    const dedWins = aWinsMore ? rec.l : rec.w
+    const domCatDiff = aWinsMore ? e.catDiffA : -e.catDiffA
+    out.push({
+      kind: 'blowout',
+      eyebrow: 'League blowout',
+      leftId: dominantId,
+      rightId: dominatedId,
+      leftWins: domWins,
+      rightWins: dedWins,
+      ties: rec.t,
+      meetings: e.meetings,
+      dominantCatDiff: Math.abs(domCatDiff),
+      caption: `${nameOf(dominantId)} owns ${nameOf(dominatedId)}.`,
+    })
+  }
+
+  return out
+})
 
 /* ─── Record book ──────────────────────────────────────────── */
 const activeAwardScope = ref<'all-time' | 'season'>('all-time')
@@ -1607,25 +1561,10 @@ function onRecordClick(_entry: CategoryRecordBookEntry) {
   // Cards remain interactive (focus/active states) for discoverability.
 }
 
-/* ─── Rivalry editorial passthrough — provides the marquee/procedural
-   narrative that the rivalry modal will display as its lead paragraph.
-   The modal already falls back to its existing authored profile, then
-   to a procedural string, when no override is provided. */
-function rivalryOverrideFor(a: string, b: string): string | null {
-  const key = a < b ? `${a}-${b}` : `${b}-${a}`
-  const entry = liveEditorial.value.rivalryProfiles[key]
-  if (!entry) return null
-  // Use the body when it carries something specific; otherwise headline.
-  const text = entry.body && entry.body.length > 0 ? entry.body : entry.headline
-  return text && text.length > 0 ? text : null
-}
-
 /* ─── Modals state ─────────────────────────────────────────── */
 const activeLegacyTeamId = ref<string | null>(null)
-const activeRivalry = ref<{ a: string; b: string } | null>(null)
 
 function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
-function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b } }
 </script>
 
 <style scoped>
@@ -2349,285 +2288,229 @@ function openRivalryModal(a: string, b: string) { activeRivalry.value = { a, b }
   white-space: nowrap;
 }
 
-/* ─── 5. H2H MATRIX ──────────────────────────────────────────── */
-.h2h-matrix-wrap {
+/* ─── 5. THE RIVALRIES — head-to-head story cards ──────────── */
+.rivalry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 820px) {
+  .rivalry-grid { grid-template-columns: 1fr; }
+}
+.rivalry-card {
+  display: flex;
+  flex-direction: column;
   background: oklch(0.10 0.015 90);
   border: 1px solid oklch(0.16 0.015 90);
   border-radius: 14px;
-  padding: 14px;
-  overflow-x: auto;
+  padding: 16px 14px 14px;
 }
-.h2h-matrix {
-  border-collapse: separate;
-  border-spacing: 4px;
-  width: 100%;
-  min-width: 820px;
+.rivalry-card-me {
+  border-color: oklch(0.78 0.18 92 / 0.45);
+  background:
+    radial-gradient(ellipse at top, oklch(0.78 0.18 92 / 0.06), transparent 65%),
+    oklch(0.10 0.015 90);
 }
-.h2h-corner { width: 180px; }
-.h2h-col-head {
-  padding: 2px 0;
-  text-align: center;
-}
-.h2h-col-avatar, .h2h-row-avatar {
-  width: 30px; height: 30px;
-  border-radius: 8px;
-  display: inline-grid;
-  place-items: center;
+.rivalry-eyebrow {
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
   font-size: 0.72rem;
-  color: oklch(0.12 0.012 90);
-  overflow: hidden;
-  vertical-align: middle;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 12px;
 }
-.h2h-col-avatar-img, .h2h-row-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.h2h-row-head {
-  text-align: left;
-  font-weight: 600;
-  padding-right: 8px;
+.rivalry-card-me .rivalry-eyebrow { color: oklch(0.84 0.16 90); }
+
+.rivalry-faces {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.rivalry-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+}
+.rivalry-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 8px;
-  white-space: nowrap;
+  justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 0.85rem;
+  color: oklch(0.12 0.012 90);
+  margin-bottom: 6px;
 }
-.h2h-row-me .h2h-row-name { color: oklch(0.84 0.16 90); }
-.h2h-row-name {
+.rivalry-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rivalry-avatar-me {
+  box-shadow: 0 0 0 2px oklch(0.10 0.015 90), 0 0 0 3px oklch(0.84 0.16 90);
+}
+.rivalry-name {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 800;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
   color: var(--ink-1);
-  white-space: nowrap;
+  margin: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  white-space: nowrap;
 }
-.h2h-cell {
-  text-align: center;
-  padding: 0;
-}
-.h2h-cell-self {
-  display: inline-block;
-  width: 100%;
-  padding: 12px 0;
-  color: var(--ink-3);
-  font-weight: 700;
-}
-.h2h-cell-btn {
-  width: 100%;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border: 1px solid oklch(0.18 0.015 90);
-  border-radius: 6px;
-  background: oklch(0.12 0.015 90);
+.rivalry-record {
   font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1;
   color: var(--ink-1);
   font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  padding: 0 2px;
-  gap: 1px;
+  margin: 0;
+  text-align: center;
 }
-.h2h-cell-rec {
-  font-weight: 800;
-  font-size: 0.8rem;
-}
-.h2h-cell-diff {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+.rivalry-dash {
+  margin: 0 4px;
   color: var(--ink-3);
+  font-weight: 700;
 }
-.h2h-cell-win .h2h-cell-btn {
-  background: color-mix(in oklch, oklch(0.74 0.18 145) calc(var(--cell-tint, 0) * 32%), oklch(0.12 0.015 90));
-  border-color: oklch(0.74 0.18 145 / 0.4);
+.rivalry-ties {
+  font-size: 0.85rem;
+  color: var(--ink-3);
+  font-weight: 700;
+  margin-left: 4px;
 }
-.h2h-cell-win .h2h-cell-diff { color: oklch(0.74 0.18 145); }
-.h2h-cell-loss .h2h-cell-btn {
-  background: color-mix(in oklch, oklch(0.70 0.27 350) calc(var(--cell-tint, 0) * 32%), oklch(0.12 0.015 90));
-  border-color: oklch(0.70 0.27 350 / 0.4);
+.rivalry-meta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: center;
+  margin: 0 0 8px;
 }
-.h2h-cell-loss .h2h-cell-diff { color: oklch(0.70 0.27 350); }
-.h2h-cell-even .h2h-cell-btn { background: oklch(0.14 0.015 90); }
-.h2h-cell-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
-@media (prefers-reduced-motion: no-preference) {
-  .h2h-cell-btn { transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), border-color 140ms cubic-bezier(0.22, 1, 0.36, 1); }
-  @media (hover: hover) and (pointer: fine) {
-    .h2h-cell-btn:hover { transform: scale(1.04); border-color: oklch(0.40 0.015 90); }
-  }
+.rivalry-dot { margin: 0 6px; opacity: 0.5; }
+.rivalry-caption {
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--ink-2);
+  text-align: center;
+  margin: 0;
 }
-.h2h-cell-btn:active { transform: scale(0.98); transition-duration: 100ms; }
+.rivalry-empty {
+  font-style: italic;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 24px 12px;
+  border: 1px dashed oklch(0.18 0.015 90);
+  border-radius: 12px;
+}
 
-/* ─── 6. DYNASTIES ───────────────────────────────────────────── */
-.dyn-grid {
+/* ─── 6. CATEGORY CROWNS — this season's per-cat leaders ──────── */
+.crown-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
-.dyn-card {
+@media (max-width: 820px) {
+  .crown-grid { grid-template-columns: 1fr; }
+}
+.crown-card {
+  display: flex;
+  flex-direction: column;
   background: oklch(0.10 0.015 90);
   border: 1px solid oklch(0.18 0.015 90);
   border-radius: 16px;
-  padding: 20px 22px;
+  padding: 18px 18px 16px;
 }
-.dyn-hitting {
-  background:
-    linear-gradient(135deg, oklch(0.74 0.18 145 / 0.06), oklch(0.10 0.015 90) 60%);
-  border-left: 3px solid var(--accent-up);
-}
-.dyn-pitching {
-  background:
-    linear-gradient(135deg, oklch(0.72 0.18 195 / 0.08), oklch(0.10 0.015 90) 60%);
-  border-left: 3px solid var(--accent-tertiary);
-}
-.dyn-punt {
-  grid-column: 1 / -1;
-  border-left: 3px solid var(--accent-secondary);
-  background:
-    linear-gradient(90deg, oklch(0.70 0.27 350 / 0.06), transparent 60%),
-    oklch(0.10 0.015 90);
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 20px;
-  align-items: center;
-  padding: 22px 24px;
-}
-.dyn-eyebrow {
+.crown-bats  { background: linear-gradient(160deg, oklch(0.74 0.18 145 / 0.07), oklch(0.10 0.015 90) 55%); border-color: oklch(0.74 0.18 145 / 0.30); }
+.crown-arms  { background: linear-gradient(160deg, oklch(0.72 0.18 195 / 0.08), oklch(0.10 0.015 90) 55%); border-color: oklch(0.72 0.18 195 / 0.30); }
+.crown-punt  { background: linear-gradient(160deg, oklch(0.70 0.27 350 / 0.07), oklch(0.10 0.015 90) 55%); border-color: oklch(0.70 0.27 350 / 0.30); }
+.crown-eyebrow {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.74rem; font-weight: 800;
-  letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--accent-up);
-  margin: 0 0 10px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  margin: 0 0 12px;
 }
-.dyn-pitching .dyn-eyebrow { color: var(--accent-tertiary); }
-.dyn-eyebrow-punt { color: var(--accent-secondary) !important; }
+.crown-bats .crown-eyebrow { color: var(--accent-up); }
+.crown-arms .crown-eyebrow { color: var(--accent-tertiary); }
+.crown-punt .crown-eyebrow { color: var(--accent-secondary); }
 
-.dyn-body {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 18px;
-  align-items: center;
-}
-.dyn-text { min-width: 0; }
-.dyn-headline {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
-  font-size: 1.3rem;
-  line-height: 1.1;
-  letter-spacing: -0.005em;
-  color: var(--ink-1);
-  margin: 0 0 8px;
-}
-.dyn-prose {
-  font-size: 0.94rem;
-  color: var(--ink-2);
-  line-height: 1.5;
-  margin: 0;
-  max-width: 56ch;
-}
-.dyn-avatar {
-  width: 56px; height: 56px;
-  border-radius: 14px;
-  display: grid; place-items: center;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900; font-size: 1.1rem;
-  color: oklch(0.12 0.012 90);
-  overflow: hidden;
-  box-shadow: 0 10px 28px -14px oklch(0 0 0 / 0.6);
-  margin-bottom: 14px;
-}
-.dyn-avatar-md { width: 80px; height: 80px; font-size: 1.4rem; margin-bottom: 0; }
-.dyn-avatar-lg { width: 92px; height: 92px; font-size: 1.6rem; margin-bottom: 0; }
-.dyn-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.dyn-foot {
-  margin-top: 14px;
+.crown-id {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding-top: 12px;
-  border-top: 1px dashed oklch(0.18 0.015 90);
+  gap: 10px;
+  margin-bottom: 12px;
 }
-.dyn-cats {
-  list-style: none; padding: 0; margin: 0;
-  display: inline-flex; gap: 4px;
-}
-.dyn-cat-chip {
+.crown-avatar {
+  width: 44px; height: 44px;
+  border-radius: 11px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid;
+  font-weight: 900; font-size: 0.85rem;
+  color: oklch(0.12 0.012 90);
+  flex: none;
 }
-.dyn-cat-chip-hit {
-  color: var(--accent-up);
-  border-color: oklch(0.74 0.18 145 / 0.4);
-  background: oklch(0.74 0.18 145 / 0.08);
-}
-.dyn-cat-chip-pit {
-  color: var(--accent-tertiary);
-  border-color: oklch(0.72 0.18 195 / 0.4);
-  background: oklch(0.72 0.18 195 / 0.08);
-}
-.dyn-stat { margin: 0; text-align: right; }
-.dyn-stat-num {
+.crown-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.crown-avatar-me { box-shadow: 0 0 0 2px oklch(0.10 0.015 90), 0 0 0 3px oklch(0.84 0.16 90); }
+.crown-name {
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
-  font-size: 1.6rem;
+  font-weight: 800; font-size: 1rem;
+  color: var(--ink-1);
+  margin: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.crown-count {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 12px;
+}
+.crown-num {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 2.4rem; line-height: 1;
   color: var(--ink-1);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  display: block;
-  line-height: 1;
 }
-.dyn-stat-lbl {
+.crown-label {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.66rem; font-weight: 700;
-  letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--ink-4);
-}
-
-/* Punt card right side */
-.dyn-punt-side { min-width: 0; }
-.dyn-punt-meta {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
-  text-align: right;
-}
-.dyn-mega {
-  margin: 8px 0 0;
-  display: flex; align-items: baseline; gap: 6px;
-}
-.dyn-mega-num {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
-  font-size: clamp(3.6rem, 9vw, 5rem);
-  line-height: 0.86;
-  letter-spacing: -0.02em;
-  color: var(--accent-secondary);
-  font-variant-numeric: tabular-nums;
-}
-.dyn-mega-lbl {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.86rem; font-weight: 800;
-  letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--ink-3);
 }
-.dyn-mega-trail {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.74rem; font-weight: 800;
-  letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--accent-secondary);
-  margin: 0;
+.crown-cats {
+  list-style: none; padding: 0; margin: 0 0 12px;
+  display: flex; flex-wrap: wrap; gap: 5px;
 }
-
-@media (max-width: 720px) {
-  .dyn-grid { grid-template-columns: 1fr; }
-  .dyn-body { grid-template-columns: 1fr; gap: 14px; }
-  .dyn-punt { grid-template-columns: 1fr; }
-  .dyn-punt-meta { align-items: flex-start; text-align: left; }
+.crown-cat-chip {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid;
+}
+.crown-cat-bats { color: var(--accent-up); border-color: oklch(0.74 0.18 145 / 0.4); background: oklch(0.74 0.18 145 / 0.08); }
+.crown-cat-arms { color: var(--accent-tertiary); border-color: oklch(0.72 0.18 195 / 0.4); background: oklch(0.72 0.18 195 / 0.08); }
+.crown-cat-punt { color: var(--accent-secondary); border-color: oklch(0.70 0.27 350 / 0.4); background: oklch(0.70 0.27 350 / 0.08); }
+.crown-caption {
+  font-size: 0.88rem; line-height: 1.4;
+  color: var(--ink-2);
+  margin: auto 0 0;
+}
+.crown-empty {
+  font-style: italic;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 24px 12px;
+  border: 1px dashed oklch(0.18 0.015 90);
+  border-radius: 12px;
 }
 
 /* ─── 7. AWARDS ──────────────────────────────────────────────── */
