@@ -3,38 +3,25 @@
     <div class="cmm-root" role="presentation">
       <div class="cmm-backdrop" @click="onClose" aria-hidden="true"></div>
       <div
+        v-if="matchup && homeTeam && awayTeam && homeStanding && awayStanding"
         ref="dialogRef"
         class="cmm-dialog"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`cmm-title-${matchup.id}`"
       >
-        <!-- ─── HEADER ──────────────────────────────────────────────── -->
-        <header class="cmm-head">
-          <p class="cmm-eyebrow">Week {{ matchup.weekNumber }}</p>
-          <div class="cmm-head-faceoff">
-            <div class="cmm-head-team">
-              <div
-                class="cmm-head-avatar"
-                :style="{ background: `linear-gradient(135deg, ${homeTeam.avatarColor})` }"
-              >
-                <img v-if="homeTeam.avatarUrl" :src="homeTeam.avatarUrl" class="cmm-avatar-img" alt="" />
-                <span v-else>{{ homeTeam.ownerInitials }}</span>
-              </div>
-              <h2 :id="`cmm-title-${matchup.id}`" class="cmm-head-name">{{ homeTeam.name }}</h2>
-            </div>
-            <span class="cmm-head-vs" aria-hidden="true">vs</span>
-            <div class="cmm-head-team cmm-head-team-away">
-              <h2 class="cmm-head-name">{{ awayTeam.name }}</h2>
-              <div
-                class="cmm-head-avatar"
-                :style="{ background: `linear-gradient(135deg, ${awayTeam.avatarColor})` }"
-              >
-                <img v-if="awayTeam.avatarUrl" :src="awayTeam.avatarUrl" class="cmm-avatar-img" alt="" />
-                <span v-else>{{ awayTeam.ownerInitials }}</span>
-              </div>
-            </div>
-          </div>
+        <!-- ─── HEADER ──────────────────────────────────────────────────
+             Minimal chrome — week eyebrow + status badge + close. The
+             team identification happens in the WP section below where
+             the big avatars already do that work; a second small-avatar
+             row up here was just duplicated identification. The screen-
+             reader title is attached to the eyebrow.
+        ────────────────────────────────────────────────────────────── -->
+        <header class="cmm-head cmm-head-minimal">
+          <p :id="`cmm-title-${matchup.id}`" class="cmm-eyebrow">
+            Week {{ weekNumber }}
+            <span class="cmm-sr-only"> matchup: {{ homeTeam.name }} versus {{ awayTeam.name }}</span>
+          </p>
 
           <div class="cmm-head-status">
             <span v-if="matchup.status === 'live'" class="cmm-status cmm-status-live">
@@ -78,11 +65,13 @@
               <span v-else>{{ homeTeam.ownerInitials }}</span>
             </div>
             <p class="cmm-wp-name">{{ homeTeam.name }}</p>
-            <span class="cmm-wp-pct" :style="{ color: homePctColor }">{{ homeWinPct }}%</span>
+            <span v-if="homeWinPct !== null" class="cmm-wp-pct" :style="{ color: homePctColor }">{{ homeWinPct }}%</span>
             <p class="cmm-wp-scores">
-              <span class="cmm-wp-current">{{ matchup.aWins }} wins</span>
-              <span class="cmm-wp-sep" aria-hidden="true">·</span>
-              <span class="cmm-wp-proj">proj {{ matchup.aProj }}-{{ 11 - matchup.aProj }}</span>
+              <span class="cmm-wp-current">{{ matchup.homeCatWins }} wins</span>
+              <template v-if="homeProjStr">
+                <span class="cmm-wp-sep" aria-hidden="true">·</span>
+                <span class="cmm-wp-proj">proj {{ homeProjStr }}</span>
+              </template>
             </p>
           </div>
 
@@ -93,7 +82,7 @@
                 <polyline points="23 4 23 10 17 10"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
-              <span>10,000 Monte Carlo sims, updated 8 minutes ago.</span>
+              <span>{{ projectionCaption }}</span>
             </p>
           </div>
 
@@ -106,17 +95,19 @@
               <span v-else>{{ awayTeam.ownerInitials }}</span>
             </div>
             <p class="cmm-wp-name">{{ awayTeam.name }}</p>
-            <span class="cmm-wp-pct" :style="{ color: awayPctColor }">{{ awayWinPct }}%</span>
+            <span v-if="awayWinPct !== null" class="cmm-wp-pct" :style="{ color: awayPctColor }">{{ awayWinPct }}%</span>
             <p class="cmm-wp-scores">
-              <span class="cmm-wp-current">{{ matchup.bWins }} wins</span>
-              <span class="cmm-wp-sep" aria-hidden="true">·</span>
-              <span class="cmm-wp-proj">proj {{ matchup.bProj }}-{{ 11 - matchup.bProj }}</span>
+              <span class="cmm-wp-current">{{ matchup.awayCatWins }} wins</span>
+              <template v-if="awayProjStr">
+                <span class="cmm-wp-sep" aria-hidden="true">·</span>
+                <span class="cmm-wp-proj">proj {{ awayProjStr }}</span>
+              </template>
             </p>
           </div>
         </section>
 
-        <!-- ─── DAILY WIN-PROB CHART ────────────────────────────────── -->
-        <section class="cmm-chart" aria-labelledby="cmm-chart-eyebrow">
+        <!-- ─── DAILY WIN-PROB CHART — hidden on live until snapshots accrue ─── -->
+        <section v-if="hasDailyTrend" class="cmm-chart" aria-labelledby="cmm-chart-eyebrow">
           <p class="cmm-section-eyebrow cmm-section-eyebrow-teal" id="cmm-chart-eyebrow">Across the week</p>
           <h3 class="cmm-section-headline">How this matchup shifted.</h3>
 
@@ -218,7 +209,7 @@
                   </p>
                 </div>
               </header>
-              <p class="cmm-scout-body">{{ homeScout }}</p>
+              <p v-if="homeScout" class="cmm-scout-body">{{ homeScout }}</p>
               <p class="cmm-form-label">Last 5</p>
               <ul class="cmm-form-row" :aria-label="`Last five results for ${homeTeam.name}`" role="list">
                 <li v-for="(r, i) in homeForm" :key="`hf-${i}`" :class="['cmm-form-pip', formClass(r)]">{{ r }}</li>
@@ -243,7 +234,7 @@
                   </p>
                 </div>
               </header>
-              <p class="cmm-scout-body">{{ awayScout }}</p>
+              <p v-if="awayScout" class="cmm-scout-body">{{ awayScout }}</p>
               <p class="cmm-form-label">Last 5</p>
               <ul class="cmm-form-row" :aria-label="`Last five results for ${awayTeam.name}`" role="list">
                 <li v-for="(r, i) in awayForm" :key="`af-${i}`" :class="['cmm-form-pip', formClass(r)]">{{ r }}</li>
@@ -255,45 +246,43 @@
         <!-- ─── CAT-BY-CAT BATTLE ───────────────────────────────────── -->
         <section class="cmm-cats" aria-labelledby="cmm-cats-eyebrow">
           <p class="cmm-section-eyebrow" id="cmm-cats-eyebrow">Cat-by-cat battle</p>
-          <p class="cmm-cats-summary">
-            <strong class="cmm-cats-strong">{{ decidedForAway }} decided</strong> for {{ awayTeam.name }}.
-            <strong class="cmm-cats-strong">{{ contestedCount }} contested</strong>.
-            <strong class="cmm-cats-strong">{{ concededByAway }} conceded</strong> by {{ awayTeam.name }}.
+          <p v-if="stateOfPlay" class="cmm-cats-summary">
+            <strong class="cmm-cats-strong">{{ stateOfPlay }}</strong>
           </p>
 
           <div class="cmm-cats-wrap">
             <ul class="cmm-cats-list" role="list">
               <li
-                v-for="line in matchup.catLines"
+                v-for="line in matchup.catLines ?? []"
                 :key="line.catId"
                 class="cmm-cats-row"
                 :class="rowClassFor(line)"
               >
                 <span
                   class="cmm-cats-val cmm-cats-val-a"
-                  :class="{ 'cmm-cats-val-lead': aHasLead(line) }"
-                  :style="aHasLead(line) ? { color: homeAccent } : undefined"
-                >{{ formatVal(line.catId, line.aCurrent) }}</span>
+                  :class="{ 'cmm-cats-val-lead': homeHasLead(line) }"
+                  :style="homeHasLead(line) ? { color: homeAccent } : undefined"
+                >{{ formatVal(line.catId, line.homeCurrent) }}</span>
 
                 <span class="cmm-cats-margin cmm-cats-margin-a">
-                  <span v-if="marginFor(line, 'a')" class="cmm-cats-chip" :style="chipStyle(line, 'a')">
-                    {{ marginFor(line, 'a') }}
+                  <span v-if="marginFor(line, 'home')" class="cmm-cats-chip" :style="chipStyle(line, 'home')">
+                    {{ marginFor(line, 'home') }}
                   </span>
                 </span>
 
                 <span class="cmm-cats-label">{{ line.catId }}</span>
 
                 <span class="cmm-cats-margin cmm-cats-margin-b">
-                  <span v-if="marginFor(line, 'b')" class="cmm-cats-chip" :style="chipStyle(line, 'b')">
-                    {{ marginFor(line, 'b') }}
+                  <span v-if="marginFor(line, 'away')" class="cmm-cats-chip" :style="chipStyle(line, 'away')">
+                    {{ marginFor(line, 'away') }}
                   </span>
                 </span>
 
                 <span
                   class="cmm-cats-val cmm-cats-val-b"
-                  :class="{ 'cmm-cats-val-lead': bHasLead(line) }"
-                  :style="bHasLead(line) ? { color: awayAccent } : undefined"
-                >{{ formatVal(line.catId, line.bCurrent) }}</span>
+                  :class="{ 'cmm-cats-val-lead': awayHasLead(line) }"
+                  :style="awayHasLead(line) ? { color: awayAccent } : undefined"
+                >{{ formatVal(line.catId, line.awayCurrent) }}</span>
 
                 <span class="cmm-cats-status">
                   <span
@@ -304,7 +293,7 @@
                     Live
                   </span>
                   <span
-                    v-else-if="line.status === 'punted-a' || line.status === 'punted-b'"
+                    v-else-if="line.status === 'punted-home' || line.status === 'punted-away'"
                     class="cmm-cats-status-chip cmm-cats-status-chip-punt"
                   >Punt</span>
                   <span
@@ -323,13 +312,13 @@
         </section>
 
         <!-- ─── WHAT TO WATCH ──────────────────────────────────────── -->
-        <section class="cmm-watch" aria-label="What to watch">
+        <section v-if="watchBody" class="cmm-watch" aria-label="What to watch">
           <p class="cmm-watch-eyebrow">{{ watchEyebrow }}</p>
           <p class="cmm-watch-body">{{ watchBody }}</p>
         </section>
 
         <!-- ─── SEASON SERIES ──────────────────────────────────────── -->
-        <section class="cmm-series" aria-labelledby="cmm-series-eyebrow">
+        <section v-if="seriesProse" class="cmm-series" aria-labelledby="cmm-series-eyebrow">
           <p class="cmm-section-eyebrow" id="cmm-series-eyebrow">{{ seriesEyebrow }}</p>
           <p class="cmm-series-body">{{ seriesProse }}</p>
         </section>
@@ -351,71 +340,118 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type {
+  CategoryLeagueData,
+  CategoryLeagueDataMatchup,
+  CategoryLeagueDataCatLine,
+  CategoryLeagueDataTeam,
+  CategoryLeagueDataStanding,
+} from '@/editorial/types'
 import {
-  getTeam,
-  getMatchup,
-  standings2026Week8,
   teamScoutingProse,
   teamLastFiveH2H,
   matchupSeriesProse,
-  type CategoryMatchupCatLine,
-  type CategoryId,
 } from '@/fixtures/categoriesLeague'
-import { accentFor } from '@/utils/teamColor'
+import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
+// Hard left/right binary — matches the matchups view's HOME_COLOR /
+// AWAY_COLOR. Decouples per-cat / margin-chip / cat-row tint signals
+// from team-avatar accents, which can collide on similar palettes.
+const HOME_COLOR = 'oklch(0.74 0.18 145)'   // green - left
+const AWAY_COLOR = 'oklch(0.70 0.27 350)'   // magenta - right
 import { smoothPath, type Point } from '@/utils/svgPath'
 import { useDemoModal } from '@/composables/useDemoModal'
+import {
+  LOWER_BETTER_BASEBALL_CATS,
+  summarizeLocks,
+  daysLeftInCurrentWeek,
+} from '@/editorial/matchups-projection'
 
 const props = defineProps<{
   matchupId: string
-  /** Optional editorial override for the "What to watch" callout. When
-   *  present, replaces the hand-authored fixture string. Provided by
-   *  the Matchups page's live editorial pipeline. */
+  /** Live league data when the page is wired to a connected league.
+   *  When null/undefined, the modal falls back to the fixture (same
+   *  path the Matchups page follows). */
+  liveData?: CategoryLeagueData | null
   whatToWatchOverride?: { eyebrow?: string; headline?: string }
-  /** Optional editorial override for the Season Series prose. When
-   *  present, replaces the fixture's `matchupSeriesProse` lookup. */
   seasonSeriesOverride?: { eyebrow?: string; body?: string }
 }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'open-signup'): void }>()
 
-const matchup = computed(() => getMatchup(props.matchupId))
-const homeTeam = computed(() => getTeam(matchup.value.homeTeamId))
-const awayTeam = computed(() => getTeam(matchup.value.awayTeamId))
-const homeStanding = computed(
-  () => standings2026Week8.find((s) => s.teamId === matchup.value.homeTeamId)!,
+// Single data source: live when present, fixture-via-adapter otherwise.
+let _demoCache: CategoryLeagueData | null = null
+function demoData(): CategoryLeagueData {
+  if (!_demoCache) _demoCache = categoriesFixtureToLeagueData()
+  return _demoCache
+}
+const data = computed<CategoryLeagueData>(() => props.liveData ?? demoData())
+const isLive = computed(() => !!props.liveData)
+
+const matchup = computed<CategoryLeagueDataMatchup | null>(
+  () => data.value.matchupsCurrentWeek?.find((m) => m.id === props.matchupId) ?? null,
 )
-const awayStanding = computed(
-  () => standings2026Week8.find((s) => s.teamId === matchup.value.awayTeamId)!,
+const homeTeam = computed<CategoryLeagueDataTeam | null>(() => {
+  const m = matchup.value
+  return m ? data.value.teams.find((t) => t.id === m.homeTeamId) ?? null : null
+})
+const awayTeam = computed<CategoryLeagueDataTeam | null>(() => {
+  const m = matchup.value
+  return m ? data.value.teams.find((t) => t.id === m.awayTeamId) ?? null : null
+})
+const homeStanding = computed<CategoryLeagueDataStanding | null>(() => {
+  const m = matchup.value
+  return m ? data.value.standings.find((s) => s.teamId === m.homeTeamId) ?? null : null
+})
+const awayStanding = computed<CategoryLeagueDataStanding | null>(() => {
+  const m = matchup.value
+  return m ? data.value.standings.find((s) => s.teamId === m.awayTeamId) ?? null : null
+})
+
+const homeAccent = computed(() => HOME_COLOR)
+const awayAccent = computed(() => AWAY_COLOR)
+
+const homeWinPct = computed(() => {
+  const p = matchup.value?.homeWinProb
+  return p === undefined ? null : clampWP(p * 100)
+})
+const awayWinPct = computed(() =>
+  homeWinPct.value === null ? null : 100 - homeWinPct.value,
 )
 
-const homeAccent = computed(() => accentFor(homeTeam.value))
-const awayAccent = computed(() => accentFor(awayTeam.value))
-
-const homeWinPct = computed(() => clampWP(matchup.value.homeWinProb))
-const awayWinPct = computed(() => 100 - homeWinPct.value)
-
-// Color the win-probability percent: green if leading, magenta if trailing.
 const homePctColor = computed(() =>
-  homeWinPct.value >= awayWinPct.value
-    ? 'oklch(0.74 0.18 145)'  // green: ahead
-    : 'oklch(0.70 0.27 350)', // magenta: behind
+  (homeWinPct.value ?? 50) >= (awayWinPct.value ?? 50)
+    ? 'oklch(0.74 0.18 145)'
+    : 'oklch(0.70 0.27 350)',
 )
 const awayPctColor = computed(() =>
-  awayWinPct.value >= homeWinPct.value
+  (awayWinPct.value ?? 50) >= (homeWinPct.value ?? 50)
     ? 'oklch(0.74 0.18 145)'
     : 'oklch(0.70 0.27 350)',
 )
 
-// Daily series — pull from matchup.dailyTrend.
+const totalCats = computed(() => data.value.categories.length)
+const homeProjStr = computed(() => {
+  const m = matchup.value
+  if (!m || m.homeProj === undefined) return ''
+  const h = Math.round(m.homeProj)
+  return `${h}-${Math.max(0, totalCats.value - h)}`
+})
+const awayProjStr = computed(() => {
+  const m = matchup.value
+  if (!m || m.awayProj === undefined) return ''
+  const a = Math.round(m.awayProj)
+  return `${a}-${Math.max(0, totalCats.value - a)}`
+})
+
+const hasDailyTrend = computed(() => (matchup.value?.dailyTrend?.length ?? 0) > 0)
 const homeSeries = computed(() =>
-  matchup.value.dailyTrend.map((d) => clampWP(d.aWinProb)),
+  (matchup.value?.dailyTrend ?? []).map((d) => clampWP(d.homeWinProb * 100)),
 )
 const awaySeries = computed(() =>
-  matchup.value.dailyTrend.map((d) => clampWP(d.bWinProb)),
+  (matchup.value?.dailyTrend ?? []).map((d) => clampWP(d.awayWinProb * 100)),
 )
 const currentDayIndex = computed(() => {
-  // last day that's not a projection
   let idx = -1
-  matchup.value.dailyTrend.forEach((d, i) => {
+  ;(matchup.value?.dailyTrend ?? []).forEach((d, i) => {
     if (!d.isProjection) idx = i
   })
   return idx === -1 ? null : idx
@@ -423,11 +459,31 @@ const currentDayIndex = computed(() => {
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-// Scouting
-const homeScout = computed(() => teamScoutingProse[matchup.value.homeTeamId] ?? '')
-const awayScout = computed(() => teamScoutingProse[matchup.value.awayTeamId] ?? '')
-const homeForm = computed(() => teamLastFiveH2H[matchup.value.homeTeamId] ?? [])
-const awayForm = computed(() => teamLastFiveH2H[matchup.value.awayTeamId] ?? [])
+// Scouting — fixture-only for now. Live shows Last-5 form derived from
+// standings.lastSix; the hand-authored prose paragraph is hidden until
+// a live scouting source exists.
+const homeScout = computed(() => {
+  const m = matchup.value
+  if (!m || isLive.value) return ''
+  return teamScoutingProse[m.homeTeamId] ?? ''
+})
+const awayScout = computed(() => {
+  const m = matchup.value
+  if (!m || isLive.value) return ''
+  return teamScoutingProse[m.awayTeamId] ?? ''
+})
+const homeForm = computed<('W' | 'L' | 'T')[]>(() => {
+  const m = matchup.value
+  if (!m) return []
+  if (isLive.value) return (homeStanding.value?.lastSix ?? []).slice(-5)
+  return teamLastFiveH2H[m.homeTeamId] ?? []
+})
+const awayForm = computed<('W' | 'L' | 'T')[]>(() => {
+  const m = matchup.value
+  if (!m) return []
+  if (isLive.value) return (awayStanding.value?.lastSix ?? []).slice(-5)
+  return teamLastFiveH2H[m.awayTeamId] ?? []
+})
 
 function formClass(r: 'W' | 'L' | 'T') {
   if (r === 'W') return 'cmm-form-pip-win'
@@ -435,86 +491,90 @@ function formClass(r: 'W' | 'L' | 'T') {
   return 'cmm-form-pip-tie'
 }
 
-// Cat summary counts — relative to away (b) team, which is the one
-// editorial copy frames. e.g. "5 decided for MV. 4 contested. 2 conceded by MV."
-const decidedForAway = computed(
-  () => matchup.value.catLines.filter((c) => c.status === 'decided-b').length,
-)
-const decidedForHome = computed(
-  () => matchup.value.catLines.filter((c) => c.status === 'decided-a').length,
-)
-const contestedCount = computed(
-  () => matchup.value.catLines.filter((c) => c.status === 'contested').length,
-)
-const concededByAway = computed(
-  () => matchup.value.catLines.filter((c) => c.status === 'punted-b').length,
-)
-const concededByHome = computed(
-  () => matchup.value.catLines.filter((c) => c.status === 'punted-a').length,
-)
-// Suppress "unused computed" warnings if framing flips — these are kept
-// in case the editorial copy wants the other side's framing.
-void decidedForHome
-void concededByHome
+// State-of-play sentence — same logic as the hero's cat-strip footer
+// replaces the sterile "X decided / Y contested / Z conceded" line
+// that never moved mid-week. Day-aware: "Down to AVG and SB." on
+// Sunday, "11 cats still in play. 0 locked." on Monday.
+const stateOfPlay = computed<string | null>(() => {
+  const m = matchup.value
+  if (!m?.catLines?.length) return null
+  const daysLeft = daysLeftInCurrentWeek()
+  const summary = summarizeLocks(m.catLines, daysLeft)
+  const moving = summary.movingCatIds
+  const totalLocks = summary.homeLocks + summary.awayLocks
+  if (moving.length === 0) return 'Mathematically over.'
+  if (moving.length === 1) return `Down to ${moving[0]}.`
+  if (moving.length === 2) return `Down to ${moving[0]} and ${moving[1]}.`
+  if (moving.length === 3) return `Down to ${moving[0]}, ${moving[1]}, and ${moving[2]}.`
+  if (totalLocks >= 5) return `${totalLocks} cats locked. ${moving.length} still in play.`
+  return `${moving.length} cats still in play. ${totalLocks} locked.`
+})
 
-// Cat row helpers — display, lead detection, margin chip, tint.
-function formatVal(catId: CategoryId, v: number): string {
-  if (catId === 'AVG') return v.toFixed(3).replace(/^0/, '')
-  if (catId === 'ERA') return v.toFixed(2)
+const decidedForAway = computed(() =>
+  (matchup.value?.catLines ?? []).filter((c) => c.status === 'decided-away').length,
+)
+const contestedCount = computed(() =>
+  (matchup.value?.catLines ?? []).filter((c) => c.status === 'contested').length,
+)
+const concededByAway = computed(() =>
+  (matchup.value?.catLines ?? []).filter((c) => c.status === 'punted-away').length,
+)
+
+function formatVal(catId: string, v: number): string {
+  if (catId === 'AVG' || catId === 'OBP' || catId === 'SLG' || catId === 'OPS') {
+    return v.toFixed(3).replace(/^0/, '')
+  }
+  if (catId === 'ERA' || catId === 'WHIP' || catId === 'BAA' || catId === 'K/9') {
+    return v.toFixed(2)
+  }
   return Math.round(v).toString()
 }
-
-// Lower is better for ERA only.
-function lowerBetter(catId: CategoryId): boolean {
-  return catId === 'ERA'
+function lowerBetter(catId: string): boolean {
+  return LOWER_BETTER_BASEBALL_CATS.has(catId)
 }
-
-function aHasLead(line: CategoryMatchupCatLine): boolean {
-  if (line.aCurrent === line.bCurrent) return false
+function homeHasLead(line: CategoryLeagueDataCatLine): boolean {
+  if (line.homeCurrent === line.awayCurrent) return false
   return lowerBetter(line.catId)
-    ? line.aCurrent < line.bCurrent
-    : line.aCurrent > line.bCurrent
+    ? line.homeCurrent < line.awayCurrent
+    : line.homeCurrent > line.awayCurrent
 }
-function bHasLead(line: CategoryMatchupCatLine): boolean {
-  if (line.aCurrent === line.bCurrent) return false
+function awayHasLead(line: CategoryLeagueDataCatLine): boolean {
+  if (line.homeCurrent === line.awayCurrent) return false
   return lowerBetter(line.catId)
-    ? line.bCurrent < line.aCurrent
-    : line.bCurrent > line.aCurrent
+    ? line.awayCurrent < line.homeCurrent
+    : line.awayCurrent > line.homeCurrent
 }
 
-function marginFor(line: CategoryMatchupCatLine, side: 'a' | 'b'): string | null {
-  // For punted cats, no chip on the punting side — keep the row dim.
-  if (line.status === 'punted-a' && side === 'a') return null
-  if (line.status === 'punted-b' && side === 'b') return null
-  if (line.aCurrent === line.bCurrent) return null
-  const diff = Math.abs(line.aCurrent - line.bCurrent)
-  const sideHasLead = side === 'a' ? aHasLead(line) : bHasLead(line)
+function marginFor(line: CategoryLeagueDataCatLine, side: 'home' | 'away'): string | null {
+  if (line.status === 'punted-home' && side === 'home') return null
+  if (line.status === 'punted-away' && side === 'away') return null
+  if (line.homeCurrent === line.awayCurrent) return null
+  const diff = Math.abs(line.homeCurrent - line.awayCurrent)
+  const sideHasLead = side === 'home' ? homeHasLead(line) : awayHasLead(line)
   if (!sideHasLead) return null
-  if (line.catId === 'AVG') {
+  if (line.catId === 'AVG' || line.catId === 'OBP' || line.catId === 'SLG' || line.catId === 'OPS') {
     return `+${diff.toFixed(3).replace(/^0/, '')}`
   }
-  if (line.catId === 'ERA') {
+  if (line.catId === 'ERA' || line.catId === 'WHIP' || line.catId === 'BAA') {
     return `-${diff.toFixed(2)}`
   }
   return `+${Math.round(diff)}`
 }
 
-function chipStyle(line: CategoryMatchupCatLine, side: 'a' | 'b') {
-  const sideHasLead = side === 'a' ? aHasLead(line) : bHasLead(line)
+function chipStyle(line: CategoryLeagueDataCatLine, side: 'home' | 'away') {
+  const sideHasLead = side === 'home' ? homeHasLead(line) : awayHasLead(line)
   if (!sideHasLead) return undefined
-  // Green for the lead's chip when contested, accent-team color when locked.
   const isLocked =
-    (line.status === 'decided-a' && side === 'a') ||
-    (line.status === 'decided-b' && side === 'b')
+    (line.status === 'decided-home' && side === 'home') ||
+    (line.status === 'decided-away' && side === 'away')
   if (isLocked) {
-    const color = side === 'a' ? homeAccent.value : awayAccent.value
+    const color = side === 'home' ? homeAccent.value : awayAccent.value
     return {
       color,
       backgroundColor: tintFrom(color, 0.14),
       borderColor: tintFrom(color, 0.34),
     }
   }
-  // contested lead
   return {
     color: 'oklch(0.78 0.18 92)',
     backgroundColor: 'oklch(0.78 0.18 92 / 0.12)',
@@ -522,7 +582,7 @@ function chipStyle(line: CategoryMatchupCatLine, side: 'a' | 'b') {
   }
 }
 
-function rowClassFor(line: CategoryMatchupCatLine): string {
+function rowClassFor(line: CategoryLeagueDataCatLine): string {
   return `cmm-cats-row-${line.status}`
 }
 
@@ -535,7 +595,9 @@ function clampWP(v: number): number {
   return Math.max(1, Math.min(99, Math.round(v)))
 }
 
-/* ─── What-to-watch copy (editorial-aware) ───────────────────── */
+const weekNumber = computed(() => data.value.currentWeek)
+
+/* ─── What-to-watch copy (editorial-aware) ──────────────────── */
 const watchEyebrow = computed(() => {
   const eb = props.whatToWatchOverride?.eyebrow
   if (eb && eb.trim().length > 0) return eb
@@ -544,10 +606,10 @@ const watchEyebrow = computed(() => {
 const watchBody = computed(() => {
   const body = props.whatToWatchOverride?.headline
   if (body && body.trim().length > 0) return body
-  return matchup.value.whatToWatch
+  return ''   // no live "what to watch" prose source yet
 })
 
-/* ─── Season series prose lookup (editorial-aware) ───────────── */
+/* ─── Season-series prose ──────────────────────────────────── */
 const seriesEyebrow = computed(() => {
   const eb = props.seasonSeriesOverride?.eyebrow
   if (eb && eb.trim().length > 0) return eb
@@ -556,14 +618,25 @@ const seriesEyebrow = computed(() => {
 const seriesProse = computed(() => {
   const overrideBody = props.seasonSeriesOverride?.body
   if (overrideBody && overrideBody.trim().length > 0) return overrideBody
-  const hId = matchup.value.homeTeamId
-  const aId = matchup.value.awayTeamId
+  if (isLive.value) return ''
+  const m = matchup.value
+  if (!m || !homeTeam.value || !awayTeam.value) return ''
+  const hId = m.homeTeamId
+  const aId = m.awayTeamId
   const direct = matchupSeriesProse[`${hId}-${aId}`]
   if (direct) return direct.body
   const flipped = matchupSeriesProse[`${aId}-${hId}`]
   if (flipped) return flipped.body
   return `First meeting of the season. ${homeTeam.value.name} and ${awayTeam.value.name} have no recent head-to-head history on file.`
 })
+
+// Honest projection caption — replaces the prior "10,000 Monte Carlo
+// sims" claim, which we never actually ran.
+const projectionCaption = computed(() =>
+  isLive.value
+    ? 'Projected from the cats still in play, refreshed live.'
+    : 'Projected from the cats still in play.',
+)
 
 /* ─── Chart geometry ──────────────────────────────────────────── */
 const CHART_W = 640
@@ -672,6 +745,31 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
   align-items: start;
   gap: 12px 16px;
   margin-bottom: 22px;
+}
+/* Minimal variant — no faceoff row; eyebrow + status + close only.
+   Big WP avatars below carry the team identification. */
+.cmm-head-minimal {
+  align-items: center;
+  margin-bottom: 14px;
+}
+.cmm-head-minimal .cmm-eyebrow {
+  grid-column: 1;
+  align-self: center;
+}
+.cmm-head-minimal .cmm-head-status {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  margin-right: 44px;   /* leave room for the close button */
+}
+.cmm-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .cmm-eyebrow {
   grid-column: 1 / -1;
@@ -1088,18 +1186,17 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
   font-variant-numeric: tabular-nums;
 }
 .cmm-cats-row:last-child { border-bottom: none; }
-.cmm-cats-row-decided-a {
-  background: oklch(from var(--ink-6) l c h / 1);
-  background-color: oklch(0.70 0.22 0 / 0.06);
+.cmm-cats-row-decided-home {
+  background-color: oklch(0.74 0.18 145 / 0.06);  /* green - home left */
 }
-.cmm-cats-row-decided-b {
-  background-color: oklch(0.74 0.18 145 / 0.06);
+.cmm-cats-row-decided-away {
+  background-color: oklch(0.70 0.27 350 / 0.06);  /* magenta - away right */
 }
 .cmm-cats-row-contested {
   background-color: oklch(0.78 0.18 92 / 0.05);
 }
-.cmm-cats-row-punted-a,
-.cmm-cats-row-punted-b {
+.cmm-cats-row-punted-home,
+.cmm-cats-row-punted-away {
   background-color: transparent;
   opacity: 0.55;
 }

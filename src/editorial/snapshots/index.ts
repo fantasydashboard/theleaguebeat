@@ -72,6 +72,10 @@ export function extractSnapshot(data: CategoryLeagueData): LeagueSnapshot {
     homeCatWins: m.homeCatWins,
     awayCatWins: m.awayCatWins,
     ties: m.ties,
+    // Win probs captured at snapshot time so the matchup-trajectory
+    // chart can rebuild a real day-by-day history (vs fabricating one).
+    homeWinProb: m.homeWinProb,
+    awayWinProb: m.awayWinProb,
   }))
 
   return {
@@ -243,6 +247,144 @@ function leadOf(home: number, away: number): 'home' | 'away' | 'tied' {
   if (home > away) return 'home'
   if (away > home) return 'away'
   return 'tied'
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   WEEK SNAPSHOTS — all captured days for the current week. Drives the
+   matchup-trajectory chart (real captured points, no fabrication).
+───────────────────────────────────────────────────────────────── */
+
+/** All snapshots saved for this league/week, oldest first. Empty when
+ *  no history has been captured yet (first visit, first day). */
+export async function fetchWeekSnapshots(
+  leagueRowId: string,
+  currentWeek: number,
+): Promise<LeagueSnapshot[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase
+      .from('league_snapshots')
+      .select('snapshot_date, current_week, standings, matchups')
+      .eq('league_id', leagueRowId)
+      .eq('current_week', currentWeek)
+      .order('snapshot_date', { ascending: true })
+    if (error || !data) return []
+    return data.map((row: any) => ({
+      snapshotDate: row.snapshot_date as string,
+      currentWeek: row.current_week as number,
+      standings: row.standings as SnapshotStanding[],
+      matchups: row.matchups as SnapshotMatchup[],
+    }))
+  } catch (err) {
+    console.warn('[snapshots] week fetch failed:', err)
+    return []
+  }
+}
+
+/** Convert a YYYY-MM-DD date string to a day-of-week index where Mon=0
+ *  and Sun=6. Matches the matchups-projection.ts helper. */
+function dayIndexFromDateString(yyyymmdd: string): number {
+  const d = new Date(yyyymmdd + 'T12:00:00')
+  const dow = d.getDay()   // 0=Sun..6=Sat
+  return dow === 0 ? 6 : dow - 1
+}
+
+/** Build a 7-day win-prob trajectory for one matchup. Captured days
+ *  come from snapshots (isProjection=false). Past days without a
+ *  snapshot forward-fill from the last known point. Today is the
+ *  current adapter projection (isProjection=false, since it's
+ *  measured now). Future days hold the current projection forward
+ *  with isProjection=true. */
+export function buildDailyTrendForMatchup(
+  matchupId: string,
+  currentHomeWinProb: number | undefined,
+  currentAwayWinProb: number | undefined,
+  snapshots: LeagueSnapshot[],
+  todayDayIndex: number,
+): Array<{ day: number; homeWinProb: number; awayWinProb: number; isProjection: boolean }> {
+  // Index captured days for THIS matchup.
+  const captured = new Map<number, { homeWinProb: number; awayWinProb: number }>()
+  for (const snap of snapshots) {
+    const day = dayIndexFromDateString(snap.snapshotDate)
+    const m = snap.matchups.find((x) => x.matchupId === matchupId)
+    if (!m || m.homeWinProb === undefined || m.awayWinProb === undefined) continue
+    captured.set(day, { homeWinProb: m.homeWinProb, awayWinProb: m.awayWinProb })
+  }
+
+  const points: Array<{ day: number; homeWinProb: number; awayWinProb: number; isProjection: boolean }> = []
+  let lastKnown: { homeWinProb: number; awayWinProb: number } | null = null
+
+  for (let day = 0; day <= 6; day++) {
+    const snap = captured.get(day)
+    if (snap) {
+      lastKnown = snap
+      points.push({ day, homeWinProb: snap.homeWinProb, awayWinProb: snap.awayWinProb, isProjection: false })
+      continue
+    }
+    if (day === todayDayIndex) {
+      const hp = currentHomeWinProb ?? lastKnown?.homeWinProb ?? 0.5
+      const ap = currentAwayWinProb ?? lastKnown?.awayWinProb ?? 0.5
+      lastKnown = { homeWinProb: hp, awayWinProb: ap }
+      points.push({ day, homeWinProb: hp, awayWinProb: ap, isProjection: false })
+      continue
+    }
+    if (day < todayDayIndex) {
+      // Past day, missed snapshot — forward-fill from last known (or
+      // 50/50 if nothing came before).
+      const hp = lastKnown?.homeWinProb ?? 0.5
+      const ap = lastKnown?.awayWinProb ?? 0.5
+      points.push({ day, homeWinProb: hp, awayWinProb: ap, isProjection: false })
+      continue
+    }
+    // Future day — current projection held forward.
+    const hp = lastKnown?.homeWinProb ?? currentHomeWinProb ?? 0.5
+    const ap = lastKnown?.awayWinProb ?? currentAwayWinProb ?? 0.5
+    points.push({ day, homeWinProb: hp, awayWinProb: ap, isProjection: true })
+  }
+
+  return points
+}
+
+/** Attach `dailyTrend` to each current-week matchup. Reads saved
+ *  week-snapshots + the current live projection. Mutates the data
+ *  in place. Non-fatal on any error. */
+export async function hydrateMatchupDailyTrends(
+  leagueRowId: string | undefined,
+  data: CategoryLeagueData,
+): Promise<void> {
+  if (!leagueRowId || !data.matchupsCurrentWeek?.length) return
+  try {
+    const snapshots = await fetchWeekSnapshots(leagueRowId, data.currentWeek)
+    const todayDayIndex = dayIndexFromDateString(todayDateEt())
+    for (const m of data.matchupsCurrentWeek) {
+      // A "captured day" is a snapshot that physically exists in the
+      // DB for this matchup on a day OTHER than today. Today's value
+      // is always the current adapter projection (not a saved row),
+      // so it doesn't count as history — the chart needs at least one
+      // real prior day to be honest.
+      let hasPriorCapture = false
+      for (const snap of snapshots) {
+        const matched = snap.matchups.find((x) => x.matchupId === m.id)
+        if (!matched || matched.homeWinProb === undefined) continue
+        const day = dayIndexFromDateString(snap.snapshotDate)
+        if (day !== todayDayIndex) {
+          hasPriorCapture = true
+          break
+        }
+      }
+      if (!hasPriorCapture) continue
+
+      m.dailyTrend = buildDailyTrendForMatchup(
+        m.id,
+        m.homeWinProb,
+        m.awayWinProb,
+        snapshots,
+        todayDayIndex,
+      )
+    }
+  } catch (err) {
+    console.warn('[snapshots] hydrateMatchupDailyTrends failed:', err)
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────

@@ -25,44 +25,47 @@
       </div>
     </header>
 
-    <!-- Secondary nav strip: demo page tabs.
-         Each tab preserves the current `?leagueId=&platform=` query so
-         the live-data context survives navigation between pages. The
-         "back to homepage" and "connect a league" links above
-         intentionally drop the query — those navigate away from the
-         live league experience. -->
-    <nav class="demo-nav" aria-label="Demo pages">
+    <!-- Magazine masthead nav. Same 3-section model as the live
+         league layout — THE BEAT (daily home), THE ISSUE (weekly
+         analysis: power rankings, matchups, draft), CHRONICLES
+         (history, archive). A sub-nav row appears when the user is
+         inside ISSUE or CHRONICLES.
+
+         Each link preserves the current `?leagueId=&platform=` query
+         so the live-data context survives navigation. -->
+    <nav class="demo-nav" aria-label="Demo sections">
       <div class="demo-nav-inner">
         <router-link
           class="demo-nav-tab"
           :to="{ path: '/demo-categories/home', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >Home</router-link>
+          :class="{ 'demo-nav-tab-active': activeSection === 'beat' }"
+        >The Beat</router-link>
         <router-link
           class="demo-nav-tab"
           :to="{ path: '/demo-categories/power-rankings', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >Power Rankings</router-link>
-        <router-link
-          class="demo-nav-tab"
-          :to="{ path: '/demo-categories/matchups', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >Matchups</router-link>
-        <router-link
-          class="demo-nav-tab"
-          :to="{ path: '/demo-categories/draft', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >Draft</router-link>
+          :class="{ 'demo-nav-tab-active': activeSection === 'issue' }"
+        >The Issue</router-link>
         <router-link
           class="demo-nav-tab"
           :to="{ path: '/demo-categories/history', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >History</router-link>
+          :class="{ 'demo-nav-tab-active': activeSection === 'chronicles' }"
+        >Chronicles</router-link>
+      </div>
+    </nav>
+
+    <nav
+      v-if="subNav.length > 0"
+      class="demo-subnav"
+      :aria-label="`${activeSection === 'issue' ? 'The Issue' : 'Chronicles'} pages`"
+    >
+      <div class="demo-subnav-inner">
         <router-link
-          class="demo-nav-tab"
-          :to="{ path: '/demo-categories/archive', query: $route.query }"
-          active-class="demo-nav-tab-active"
-        >Archive</router-link>
+          v-for="tab in subNav"
+          :key="tab.path"
+          class="demo-subnav-tab"
+          :to="{ path: `/demo-categories/${tab.path}`, query: $route.query }"
+          active-class="demo-subnav-tab-active"
+        >{{ tab.label }}</router-link>
       </div>
     </nav>
 
@@ -85,11 +88,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import TLBFooter from '@/components/TLBFooter.vue'
 import IssueMasthead from '@/components/issue/IssueMasthead.vue'
 import { currentWeek as fixtureWeek } from '@/fixtures/categoriesLeague'
 
 defineEmits<{ (e: 'open-signup'): void }>()
+
+const route = useRoute()
 
 /** First-paint fallback so the masthead reads consistently with
  *  the rest of the demo content before a child view publishes the
@@ -98,6 +104,41 @@ const demoFallback = computed(() => ({
   week: fixtureWeek,
   season: new Date().getFullYear(),
 }))
+
+/* ─────────────────────────────────────────────────────────────────
+   3-section nav model. Mirrors MyLeagueLayout's logic — top tabs
+   map to THE BEAT / THE ISSUE / CHRONICLES, sub-nav row surfaces
+   the leaf pages of the current section.
+───────────────────────────────────────────────────────────────── */
+
+type SectionKey = 'beat' | 'issue' | 'chronicles'
+
+const ISSUE_PATHS = ['power-rankings', 'matchups', 'draft'] as const
+const CHRONICLES_PATHS = ['history', 'archive'] as const
+
+const activeSection = computed<SectionKey>(() => {
+  const p = route.path
+  if (ISSUE_PATHS.some((slug) => p.endsWith(`/${slug}`))) return 'issue'
+  if (CHRONICLES_PATHS.some((slug) => p.endsWith(`/${slug}`))) return 'chronicles'
+  return 'beat'
+})
+
+const subNav = computed<Array<{ path: string; label: string }>>(() => {
+  if (activeSection.value === 'issue') {
+    return [
+      { path: 'power-rankings', label: 'Power Rankings' },
+      { path: 'matchups',       label: 'Matchups'       },
+      { path: 'draft',          label: 'Draft'          },
+    ]
+  }
+  if (activeSection.value === 'chronicles') {
+    return [
+      { path: 'history', label: 'History' },
+      { path: 'archive', label: 'Archive' },
+    ]
+  }
+  return []
+})
 </script>
 
 <style scoped>
@@ -107,7 +148,7 @@ const demoFallback = computed(() => ({
   --ink-1: oklch(0.97 0.005 90);
   --ink-2: oklch(0.78 0.008 90);
   --ink-3: oklch(0.55 0.010 90);
-  --ink-4: oklch(0.32 0.012 90);
+  --ink-4: oklch(0.48 0.012 90);   /* tertiary text (captions, deck, owner names, week labels) — ~5:1 contrast on L=0.08 bg, distinct from --ink-3 */
   --ink-5: oklch(0.20 0.015 90);
   --ink-6: oklch(0.14 0.018 90);
   --ink-7: oklch(0.10 0.015 90);
@@ -306,6 +347,59 @@ const demoFallback = computed(() => ({
   pointer-events: none;
 }
 
+/* Sub-nav row — same hierarchy story as the live layout. Quieter
+   than the primary nav so it reads as department-level, not as a
+   competing tab strip. */
+.demo-subnav {
+  position: sticky;
+  top: 96px;
+  z-index: 89;
+  background: oklch(0.06 0.012 90 / 0.96);
+  border-bottom: 1px solid oklch(0.16 0.013 90);
+  backdrop-filter: blur(6px);
+}
+.demo-subnav-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.demo-subnav-inner::-webkit-scrollbar { display: none; }
+.demo-subnav-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 2px 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: oklch(0.50 0.010 90);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .demo-subnav-tab:hover:not(.demo-subnav-tab-active) {
+    color: oklch(0.78 0.008 90);
+  }
+}
+.demo-subnav-tab-active {
+  color: oklch(0.97 0.005 90);
+  border-bottom-color: var(--accent-secondary);
+}
+.demo-subnav-tab:focus-visible {
+  outline: 2px solid oklch(0.78 0.18 92);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 @media (max-width: 720px) {
   .demo-bar-inner { padding: 10px 16px; gap: 10px; }
   .demo-bar-name { display: none; }
@@ -314,5 +408,8 @@ const demoFallback = computed(() => ({
   .demo-nav-inner { padding: 0 16px; gap: 18px; }
   .demo-nav-tab { font-size: 0.76rem; padding: 10px 2px 9px; }
   .demo-nav { top: 45px; }
+  .demo-subnav { top: 86px; }
+  .demo-subnav-inner { padding: 0 16px; gap: 14px; }
+  .demo-subnav-tab { font-size: 0.68rem; padding: 7px 2px 6px; }
 }
 </style>

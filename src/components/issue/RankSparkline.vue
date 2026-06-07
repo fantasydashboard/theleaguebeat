@@ -14,7 +14,7 @@
   -->
   <svg
     :viewBox="`0 0 ${VB_W} ${VB_H_TOTAL}`"
-    :class="['rank-spark', { 'rank-spark-logos': endpointLogos }]"
+    :class="['rank-spark', { 'rank-spark-logos': endpointLogos, 'is-revealed': revealed }]"
     role="img"
     :aria-label="ariaLabel ?? 'Team rank trajectory'"
     preserveAspectRatio="xMidYMid meet"
@@ -43,6 +43,7 @@
       :d="line.d"
       :stroke="line.color"
       class="rank-spark-fg"
+      pathLength="1"
     />
 
     <!-- Circular clip paths for the endpoint logos. -->
@@ -100,7 +101,7 @@
 
     <!-- Focus endpoints — logo medallion + tone ring + rank, or a
          plain tone dot when endpointLogos is off (hero usage). -->
-    <g v-for="(line, i) in focusLines" :key="`end-${line.id}`">
+    <g v-for="(line, i) in focusLines" :key="`end-${line.id}`" class="rank-spark-end">
       <template v-if="endpointLogos">
         <circle :cx="line.lastX" :cy="line.lastY" :r="FOCUS_R" :fill="line.color" />
         <image
@@ -156,9 +157,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { CategoryLeagueData } from '@/editorial/types'
 import { smoothPath, type Point } from '@/utils/svgPath'
+
+// One-time entrance: the focus lines draw left-to-right and the
+// medallions fade in just after. Reduced-motion users get it instantly.
+// The actual easing/duration live in CSS (gated by prefers-reduced-motion).
+const prefersReduced =
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const revealed = ref(prefersReduced)
+onMounted(() => {
+  if (revealed.value) return
+  requestAnimationFrame(() => requestAnimationFrame(() => { revealed.value = true }))
+})
 
 const props = defineProps<{
   data: CategoryLeagueData
@@ -343,6 +356,34 @@ const backgroundLines = computed<SparkLine[]>(() => {
   /* Subtle glow that picks up the line's own color via currentColor.
      Reads as accent depth without becoming a haze. */
   filter: drop-shadow(0 0 8px currentColor);
+}
+
+/* ── One-time entrance ──────────────────────────────────────────
+   The focus lines draw left-to-right (stroke-dashoffset) and the
+   endpoint medallions fade in just after. pathLength="1" normalizes
+   every path so the dash math is length-independent. Reduced-motion
+   users skip straight to the drawn state (revealed from first render,
+   transitions gated below). Plays once, on mount. */
+.rank-spark-fg {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.rank-spark.is-revealed .rank-spark-fg {
+  stroke-dashoffset: 0;
+}
+.rank-spark-end {
+  opacity: 0;
+}
+.rank-spark.is-revealed .rank-spark-end {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rank-spark-fg {
+    transition: stroke-dashoffset 540ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .rank-spark-end {
+    transition: opacity 240ms cubic-bezier(0.22, 1, 0.36, 1) 360ms;
+  }
 }
 
 .rank-spark-axis text {

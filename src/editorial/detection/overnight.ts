@@ -44,7 +44,7 @@ export function detectOvernightStories(
       (m.homeTeamId === myTeamId || m.awayTeamId === myTeamId)
 
     if (m.tipped) {
-      out.push(buildMatchupTipped(m, data, involvesMe, delta.daysSince))
+      out.push(buildMatchupTipped(m, data, involvesMe, delta.daysSince, myTeamId))
     } else {
       // No flip — but score moved. Worth surfacing if it moved
       // material (≥2 cats one direction).
@@ -52,7 +52,7 @@ export function detectOvernightStories(
       if (swing < 2) continue
       // Determine which side improved most.
       const homeImproved = m.homeCatDelta > m.awayCatDelta
-      out.push(buildMatchupPulse(m, data, homeImproved, swing, involvesMe, delta.daysSince))
+      out.push(buildMatchupPulse(m, data, homeImproved, swing, involvesMe, delta.daysSince, myTeamId))
     }
   }
 
@@ -75,6 +75,7 @@ function buildMatchupTipped(
   data: CategoryLeagueData,
   involvesMe: boolean,
   daysSince: number,
+  myTeamId: string | null,
 ): StoryCandidate {
   const homeName = teamNameOf(data, m.homeTeamId)
   const awayName = teamNameOf(data, m.awayTeamId)
@@ -82,6 +83,12 @@ function buildMatchupTipped(
     m.leadNow === 'home' ? homeName : m.leadNow === 'away' ? awayName : 'Nobody'
   const thenLeaderName =
     m.leadThen === 'home' ? homeName : m.leadThen === 'away' ? awayName : 'Nobody'
+  // Subject name = the viewer's team name when the matchup involves
+  // them. Used by the headline to name the team explicitly instead
+  // of falling back to "Your matchup" voice.
+  const subjectName = involvesMe && myTeamId
+    ? (m.homeTeamId === myTeamId ? homeName : awayName)
+    : undefined
 
   return {
     type: 'matchup-tipped',
@@ -107,7 +114,7 @@ function buildMatchupTipped(
       awayCatDelta: m.awayCatDelta,
       involvesMe,
       daysSince,
-      headline: matchupTippedHeadline(nowLeaderName, thenLeaderName, involvesMe),
+      headline: matchupTippedHeadline(nowLeaderName, thenLeaderName, involvesMe, subjectName),
       summary: matchupTippedSummary(homeName, awayName, m),
     },
     signature: signature(['matchup-tipped', m.matchupId, daysSince]),
@@ -121,6 +128,7 @@ function buildMatchupPulse(
   swing: number,
   involvesMe: boolean,
   daysSince: number,
+  myTeamIdParam: string | null,
 ): StoryCandidate {
   const homeName = teamNameOf(data, m.homeTeamId)
   const awayName = teamNameOf(data, m.awayTeamId)
@@ -128,11 +136,30 @@ function buildMatchupPulse(
   const loserName = homeImproved ? awayName : homeName
 
   // From the viewer's POV: are they the winner of this swing?
-  const myTeamId = data.teams.find((t) => t.isMyTeam)?.id
+  const myTeamId = myTeamIdParam ?? data.teams.find((t) => t.isMyTeam)?.id ?? null
   const myImproved =
     myTeamId != null &&
     ((homeImproved && myTeamId === m.homeTeamId) ||
       (!homeImproved && myTeamId === m.awayTeamId))
+  // Subject name when the matchup involves the viewer's team. Used
+  // by the headline to name that team explicitly (Wire voice rule —
+  // team names in third person, never "you").
+  const subjectName = involvesMe && myTeamId
+    ? (m.homeTeamId === myTeamId ? homeName : awayName)
+    : undefined
+
+  // Direction-aware leadership state from the snapshot delta. When
+  // the viewer is currently leading, an opponent overnight gain
+  // hasn't "pulled away" — they've cut into the lead. The headline
+  // builder needs this to avoid claiming directional movement that
+  // contradicts the current state.
+  const myLeadNow: 'leading' | 'trailing' | 'tied' = (() => {
+    if (myTeamId == null) return 'tied'
+    if (m.leadNow === 'tied') return 'tied'
+    if (m.leadNow === 'home') return myTeamId === m.homeTeamId ? 'leading' : 'trailing'
+    if (m.leadNow === 'away') return myTeamId === m.awayTeamId ? 'leading' : 'trailing'
+    return 'tied'
+  })()
 
   return {
     type: myImproved
@@ -159,8 +186,8 @@ function buildMatchupPulse(
       involvesMe,
       myImproved,
       daysSince,
-      headline: matchupPulseHeadline(winnerName, swing, myImproved, involvesMe),
-      summary: `${winnerName} gained ${swing} cat${swing === 1 ? '' : 's'} on ${loserName}.`,
+      headline: matchupPulseHeadline(winnerName, swing, myImproved, involvesMe, myLeadNow, subjectName),
+      summary: matchupPulseSummary(winnerName, loserName, swing, myImproved, involvesMe, myLeadNow),
     },
     signature: signature(['matchup-pulse', m.matchupId, daysSince]),
   }
@@ -206,12 +233,22 @@ function buildRankShift(
    COPY
 ───────────────────────────────────────────────────────────────── */
 
+/** Tipped-matchup headline.
+ *
+ *  Voice rule: the Wire uses team names in third person. Reserve
+ *  "you/your" exclusively for the ON YOUR LINE strip — the magazine
+ *  has one consistent narrator across surfaces. When the matchup
+ *  involves the viewer's team, we still name that team explicitly
+ *  ("{nowLeader} took the lead on {subjectName} overnight") rather
+ *  than collapsing to "Your matchup flipped."
+ */
 function matchupTippedHeadline(
   nowLeader: string,
   _thenLeader: string,
   involvesMe: boolean,
+  subjectName?: string,
 ): string {
-  if (involvesMe) return `Your matchup flipped — ${nowLeader} now leads.`
+  if (involvesMe && subjectName) return `${nowLeader} took the lead on ${subjectName} overnight.`
   return `${nowLeader} took the lead overnight.`
 }
 
@@ -222,40 +259,115 @@ function matchupTippedSummary(
 ): string {
   const homeNet = m.homeCatDelta
   const awayNet = m.awayCatDelta
-  return `${homeName} ${formatDelta(homeNet)}, ${awayName} ${formatDelta(awayNet)}.`
+  // Early-week snapshots can produce big-looking deltas (Monday: 1
+  // cat decided; Tuesday: 10 cats decided → home "+9") which read
+  // as implausible overnight motion. Reframe as "cat LEADS gained
+  // since yesterday" — accurate to what the snapshot measures, and
+  // doesn't claim impossible stat motion. Drop the "unchanged" word
+  // (which was confusing when the team is actively losing the
+  // matchup) in favour of just naming who gained ground.
+  const homeGained = homeNet > 0
+  const awayGained = awayNet > 0
+  if (homeGained && !awayGained) {
+    return `${homeName} picked up ${plural(homeNet, 'cat lead')} since yesterday.`
+  }
+  if (awayGained && !homeGained) {
+    return `${awayName} picked up ${plural(awayNet, 'cat lead')} since yesterday.`
+  }
+  if (homeGained && awayGained) {
+    return `${homeName} gained ${plural(homeNet, 'cat lead')}; ${awayName} gained ${plural(awayNet, 'cat lead')}.`
+  }
+  return `Cats redistributed overnight.`
 }
 
-function formatDelta(d: number): string {
-  if (d > 0) return `+${d} cats`
-  if (d < 0) return `${d} cats`
-  return 'unchanged'
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
+/** Direction-aware pulse headline.
+ *
+ *  Voice: team names in third person across all branches. The
+ *  myImproved branch names the subject team (the viewer's team)
+ *  explicitly. The previous "You picked up..." voice collided
+ *  with the LEDE rule of team-name third person and has been
+ *  retired in favor of consistency across the Wire.
+ */
 function matchupPulseHeadline(
   winnerName: string,
   swing: number,
   myImproved: boolean,
   involvesMe: boolean,
+  myLeadNow: 'leading' | 'trailing' | 'tied',
+  subjectName?: string,
 ): string {
-  if (myImproved) return `You picked up ${swing} cats overnight.`
-  if (involvesMe) return `${winnerName} pulled away on you.`
+  if (myImproved) {
+    const me = subjectName ?? winnerName
+    if (myLeadNow === 'leading') {
+      return `${me} picked up ${plural(swing, 'cat lead')} overnight.`
+    }
+    if (myLeadNow === 'tied') {
+      return `${me} evened the matchup overnight.`
+    }
+    return `${me} cut into the deficit overnight.`
+  }
+  if (involvesMe) {
+    if (myLeadNow === 'leading') {
+      return `${winnerName} chipped at the lead overnight.`
+    }
+    if (myLeadNow === 'tied') {
+      return `${winnerName} pulled the matchup level overnight.`
+    }
+    return subjectName
+      ? `${winnerName} pulled away on ${subjectName}.`
+      : `${winnerName} pulled away.`
+  }
   return `${winnerName} stretched the lead.`
+}
+
+/** Direction-aware body for the matchup-pulse Wire card. Reads as
+ *  the "what actually moved overnight" sentence; pairs with the
+ *  headline's framing so they don't contradict.
+ *
+ *  Voice: team names, third person. The summary intentionally avoids
+ *  re-naming the subject team since the headline already did — uses
+ *  "the lead" / "the deficit" / "the matchup" instead. */
+function matchupPulseSummary(
+  winnerName: string,
+  loserName: string,
+  swing: number,
+  myImproved: boolean,
+  involvesMe: boolean,
+  myLeadNow: 'leading' | 'trailing' | 'tied',
+): string {
+  // "Cat leads" not "cats" — the swing measures lead movement, not
+  // raw category wins. Saying "gained 8 cats" reads as winning 8
+  // categories overnight, which is impossible in a 9-cat league.
+  const leadWord = plural(swing, 'cat lead')
+  if (myImproved && involvesMe) {
+    if (myLeadNow === 'leading') return `The lead grew by ${leadWord}.`
+    if (myLeadNow === 'tied') return `${leadWord} landed for the comeback; the matchup is now level.`
+    return `${leadWord} moved the right direction, but the deficit holds.`
+  }
+  if (!myImproved && involvesMe) {
+    if (myLeadNow === 'leading') return `${winnerName} took ${leadWord} back; the lead holds.`
+    if (myLeadNow === 'tied') return `${winnerName} pulled ${leadWord} back to level.`
+    return `${winnerName} extended the gap by ${leadWord}.`
+  }
+  return `${winnerName} gained ${leadWord} on ${loserName}.`
 }
 
 function rankShiftHeadline(
   teamName: string,
   prev: number,
   now: number,
-  isMyTeam: boolean,
+  _isMyTeam: boolean,
 ): string {
+  // Voice: team names in third person across the Wire. The previous
+  // "You climbed / You slipped" voice has been retired — same rule
+  // as the matchup-pulse headlines.
   const moves = Math.abs(prev - now)
   const verb = now < prev ? 'climbed' : 'slipped'
-  if (isMyTeam) {
-    return now < prev
-      ? `You climbed to #${now}.`
-      : `You slipped to #${now}.`
-  }
-  return `${teamName} ${verb} ${moves} ${moves === 1 ? 'spot' : 'spots'}.`
+  return `${teamName} ${verb} ${moves} ${moves === 1 ? 'spot' : 'spots'} to #${now}.`
 }
 
 /* ─────────────────────────────────────────────────────────────────

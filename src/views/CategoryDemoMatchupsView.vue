@@ -27,23 +27,57 @@
         <p class="page-sub">Daily scores. Live cat math. Who's flipping, who's folded.</p>
       </div>
       <ul class="page-status" role="list" aria-label="Status overview">
-        <li class="page-status-item">
+        <li v-if="liveCount" class="page-status-item">
           <span class="page-status-dot page-status-dot-live" aria-hidden="true"></span>
           <span class="page-status-num">{{ liveCount }}</span>
           <span class="page-status-label">live</span>
         </li>
-        <li class="page-status-sep" aria-hidden="true"></li>
-        <li class="page-status-item">
-          <span class="page-status-num">{{ coastingCount }}</span>
-          <span class="page-status-label">coasting</span>
+        <li v-if="coinFlipCount" class="page-status-sep" aria-hidden="true"></li>
+        <li v-if="coinFlipCount" class="page-status-item">
+          <span class="page-status-num">{{ coinFlipCount }}</span>
+          <span class="page-status-label">coin flip</span>
         </li>
-        <li class="page-status-sep" aria-hidden="true"></li>
-        <li class="page-status-item">
+        <li v-if="sealedCount" class="page-status-sep" aria-hidden="true"></li>
+        <li v-if="sealedCount" class="page-status-item">
+          <span class="page-status-num">{{ sealedCount }}</span>
+          <span class="page-status-label">sealed</span>
+        </li>
+        <li v-if="lockedCount" class="page-status-sep" aria-hidden="true"></li>
+        <li v-if="lockedCount" class="page-status-item">
           <span class="page-status-num">{{ lockedCount }}</span>
           <span class="page-status-label">locked</span>
         </li>
       </ul>
     </header>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         1B. DAILY BEATS — the morning paper. What flipped overnight,
+             who lit it up, what to watch today. Hidden when none of
+             the three beats have data (first visit, no MLB games).
+    ────────────────────────────────────────────────────────────── -->
+    <section v-if="hasBeats" class="beats" aria-label="Today's beats">
+      <header class="beats-head">
+        <p class="beats-eyebrow">
+          <span class="beats-eyebrow-bar" aria-hidden="true"></span>
+          Today's beats
+        </p>
+        <p class="beats-day">{{ todayLabel }} morning</p>
+      </header>
+      <ul class="beats-list" role="list">
+        <li v-if="lastDeltaBeat" class="beats-item beats-item-last">
+          <p class="beats-tag">{{ lastDeltaBeat.tag }}</p>
+          <p class="beats-line">{{ lastDeltaBeat.line }}</p>
+        </li>
+        <li v-if="bigNightBeat" class="beats-item beats-item-big">
+          <p class="beats-tag">Big night</p>
+          <p class="beats-line">{{ bigNightBeat }}</p>
+        </li>
+        <li v-if="watchBeat" class="beats-item beats-item-watch">
+          <p class="beats-tag">Watch today</p>
+          <p class="beats-line">{{ watchBeat }}</p>
+        </li>
+      </ul>
+    </section>
 
     <!-- ─────────────────────────────────────────────────────────────
          2. MATCHUP OF THE WEEK — hero
@@ -69,8 +103,8 @@
 
       <p v-if="heroBody" class="hero-body">{{ heroBody }}</p>
 
-      <div class="hero-faceoff">
-        <!-- HOME (team A) -->
+      <div v-if="heroHomeTeam && heroAwayTeam && heroHomeStanding && heroAwayStanding" class="hero-faceoff">
+        <!-- HOME -->
         <article class="hero-team hero-team-home">
           <div
             class="hero-avatar"
@@ -85,22 +119,22 @@
             <span class="hero-team-meta-dot" aria-hidden="true">·</span>
             #{{ heroHomeStanding.rank }}
           </p>
-          <p class="hero-wp" :style="{ color: heroHomePctColor }">{{ heroHomePct }}%</p>
-          <p class="hero-wp-label">win prob</p>
+          <p v-if="heroHomePct !== null" class="hero-wp" :style="{ color: heroHomePctColor }">{{ heroHomePct }}%</p>
+          <p v-if="heroHomePct !== null" class="hero-wp-label">win prob</p>
         </article>
 
         <!-- CENTER COLUMN -->
         <div class="hero-center">
           <p class="hero-score-block">
-            <span class="hero-score">{{ heroMatchup.aWins }}</span>
+            <span class="hero-score">{{ heroMatchup.homeCatWins }}</span>
             <span class="hero-score-sep" aria-hidden="true">·</span>
-            <span class="hero-score">{{ heroMatchup.bWins }}</span>
+            <span class="hero-score">{{ heroMatchup.awayCatWins }}</span>
           </p>
           <p class="hero-score-label">cat record</p>
           <p class="hero-contested">{{ heroMatchup.contestedCount }} still contested</p>
         </div>
 
-        <!-- AWAY (team B) -->
+        <!-- AWAY -->
         <article class="hero-team hero-team-away">
           <div
             class="hero-avatar"
@@ -115,45 +149,59 @@
             <span class="hero-team-meta-dot" aria-hidden="true">·</span>
             #{{ heroAwayStanding.rank }}
           </p>
-          <p class="hero-wp" :style="{ color: heroAwayPctColor }">{{ heroAwayPct }}%</p>
-          <p class="hero-wp-label">win prob</p>
+          <p v-if="heroAwayPct !== null" class="hero-wp" :style="{ color: heroAwayPctColor }">{{ heroAwayPct }}%</p>
+          <p v-if="heroAwayPct !== null" class="hero-wp-label">win prob</p>
         </article>
       </div>
 
-      <!-- Cat battle strip -->
-      <ul class="cat-strip" :aria-label="`Category battle for ${heroHomeTeam.name} versus ${heroAwayTeam.name}`" role="list">
+      <!-- Cat battle tiles — each cat is its own little story with a
+           margin chip + proportional bar. -->
+      <ul
+        v-if="heroHomeTeam && heroAwayTeam"
+        class="cat-strip"
+        :aria-label="`Category battle for ${heroHomeTeam.name} versus ${heroAwayTeam.name}`"
+        role="list"
+      >
         <li
-          v-for="line in heroMatchup.catLines"
+          v-for="line in heroMatchup.catLines ?? []"
           :key="line.catId"
-          :class="['cat-cell', `cat-cell-${line.status}`]"
-          :style="catCellStyle(line)"
+          class="cat-tile"
+          :class="tileBgClass(line)"
         >
-          <span class="cat-cell-label">{{ line.catId }}</span>
-          <span class="cat-cell-values">
+          <div class="cat-tile-head">
+            <span class="cat-tile-label">{{ line.catId }}</span>
             <span
-              class="cat-cell-val"
-              :class="{ 'cat-cell-val-lead': heroAHasLead(line) && line.status !== 'punted-a' }"
-              :style="heroAHasLead(line) ? { color: heroHomeAccent } : undefined"
-            >{{ formatVal(line.catId, line.aCurrent) }}</span>
-            <span class="cat-cell-sep" aria-hidden="true">·</span>
+              v-if="tileChip(line)"
+              class="cat-tile-chip"
+              :class="[`cat-tile-chip-${tileLeaderSide(line)}`, tileChipExtraClass(line)]"
+            >{{ tileChip(line) }}</span>
+            <span v-else class="cat-tile-evens">EVEN</span>
+          </div>
+          <div class="cat-tile-values">
             <span
-              class="cat-cell-val"
-              :class="{ 'cat-cell-val-lead': heroBHasLead(line) && line.status !== 'punted-b' }"
-              :style="heroBHasLead(line) ? { color: heroAwayAccent } : undefined"
-            >{{ formatVal(line.catId, line.bCurrent) }}</span>
-          </span>
-          <span v-if="line.status === 'punted-a' || line.status === 'punted-b'" class="cat-cell-tag">Punt</span>
+              class="cat-tile-val cat-tile-val-home"
+              :class="{ 'cat-tile-val-lead': heroHomeHasLead(line) }"
+            >{{ formatVal(line.catId, line.homeCurrent) }}</span>
+            <span class="cat-tile-vs" aria-hidden="true">·</span>
+            <span
+              class="cat-tile-val cat-tile-val-away"
+              :class="{ 'cat-tile-val-lead': heroAwayHasLead(line) }"
+            >{{ formatVal(line.catId, line.awayCurrent) }}</span>
+          </div>
+          <div class="cat-tile-bar" aria-hidden="true">
+            <span class="cat-tile-bar-home" :style="{ width: tileHomeBarPct(line) }"></span>
+            <span class="cat-tile-bar-away" :style="{ width: tileAwayBarPct(line) }"></span>
+          </div>
         </li>
       </ul>
-      <p class="cat-strip-context">
-        <strong class="cat-strip-strong">{{ heroDecidedB }} decided</strong> for {{ heroAwayTeam.name }}.
-        <strong class="cat-strip-strong">{{ heroContested }} contested</strong>.
-        <strong class="cat-strip-strong">{{ heroConcededB }} conceded</strong> by {{ heroAwayTeam.name }}.
+      <p v-if="heroStateOfPlay" class="cat-strip-context">
+        <strong class="cat-strip-strong">{{ heroStateOfPlay }}</strong>
       </p>
       <p v-if="heroSubContext" class="hero-sub-context">{{ heroSubContext }}</p>
 
-      <!-- Daily trend chart -->
-      <div class="hero-chart-wrap">
+      <!-- Daily trend chart — only when real day-by-day history exists.
+           Live leagues hide this until daily snapshots accrue. -->
+      <div v-if="hasDailyTrend" class="hero-chart-wrap">
         <svg
           class="hero-chart"
           :viewBox="`0 0 ${HERO_W} ${HERO_H}`"
@@ -246,8 +294,8 @@
                   #{{ standingOf(m.homeTeamId).rank }}
                 </p>
               </div>
-              <p class="feed-cats" :style="m.aWins > m.bWins ? { color: feedAccentHome(m) } : undefined">
-                {{ m.aWins }}<span class="feed-cats-suf">cats</span>
+              <p class="feed-cats" :style="m.homeCatWins > m.awayCatWins ? { color: feedAccentHome(m) } : undefined">
+                {{ m.homeCatWins }}<span class="feed-cats-suf">cats</span>
               </p>
             </div>
 
@@ -277,17 +325,17 @@
 
               <span class="feed-vs" aria-hidden="true">vs</span>
 
-              <span class="feed-wp">
-                <span class="feed-wp-pct" :style="{ color: feedAccentHome(m) }">{{ clampWP(m.homeWinProb) }}%</span>
+              <span v-if="feedHomePct(m) !== null" class="feed-wp">
+                <span class="feed-wp-pct" :style="{ color: feedAccentHome(m) }">{{ feedHomePct(m) }}%</span>
                 <span class="feed-wp-pct-sep" aria-hidden="true">·</span>
-                <span class="feed-wp-pct" :style="{ color: feedAccentAway(m) }">{{ 100 - clampWP(m.homeWinProb) }}%</span>
+                <span class="feed-wp-pct" :style="{ color: feedAccentAway(m) }">{{ 100 - (feedHomePct(m) ?? 50) }}%</span>
               </span>
             </div>
 
             <!-- AWAY -->
             <div class="feed-team feed-team-away">
-              <p class="feed-cats" :style="m.bWins > m.aWins ? { color: feedAccentAway(m) } : undefined">
-                {{ m.bWins }}<span class="feed-cats-suf">cats</span>
+              <p class="feed-cats" :style="m.awayCatWins > m.homeCatWins ? { color: feedAccentAway(m) } : undefined">
+                {{ m.awayCatWins }}<span class="feed-cats-suf">cats</span>
               </p>
               <div class="feed-team-text feed-team-text-right">
                 <p class="feed-team-name">{{ awayOf(m).name }}</p>
@@ -349,6 +397,7 @@
     <CategoryMatchupDetailModal
       v-if="detailMatchupId"
       :matchup-id="detailMatchupId"
+      :live-data="liveData"
       :what-to-watch-override="detailWhatToWatch"
       :season-series-override="detailSeasonSeries"
       @close="closeDetail"
@@ -360,18 +409,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  currentWeek,
-  getTeam,
-  matchupsWeek8,
-  matchupOfTheWeekId,
-  standings2026Week8,
-  type CategoryMatchup,
-  type CategoryMatchupCatLine,
-  type CategoryId,
-} from '@/fixtures/categoriesLeague'
+import type {
+  CategoryLeagueData,
+  CategoryLeagueDataMatchup,
+  CategoryLeagueDataCatLine,
+  CategoryLeagueDataTeam,
+  CategoryLeagueDataStanding,
+} from '@/editorial/types'
 import CategoryMatchupDetailModal from '@/components/demo/CategoryMatchupDetailModal.vue'
-import { accentFor } from '@/utils/teamColor'
+// Hard left/right binary for per-cat signals (cat-tile leaders, margin
+// chips, feed-card tints, modal cat values). Decouples the matchup
+// display from team-avatar accents, which can collide when two teams
+// happen to share a hue (a real photo + a green skull both reading as
+// green-ish). HOME (left) is always green, AWAY (right) is always
+// magenta — predictable scan, no collisions.
+const HOME_COLOR = 'oklch(0.74 0.18 145)'
+const AWAY_COLOR = 'oklch(0.70 0.27 350)'
 import { smoothPath, type Point } from '@/utils/svgPath'
 import {
   renderMatchupsPage,
@@ -381,7 +434,14 @@ import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
+import {
+  LOWER_BETTER_BASEBALL_CATS,
+  effectiveCatStatus,
+  summarizeLocks,
+  daysLeftInCurrentWeek,
+} from '@/editorial/matchups-projection'
 import { usePlatformsStore } from '@/stores/platforms'
+import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
@@ -389,35 +449,52 @@ defineEmits<{ (e: 'open-signup'): void }>()
 const route = useRoute()
 
 /* ─────────────────────────────────────────────────────────────────
-   EDITORIAL — live copy from the detection + rendering pipeline.
+   DATA SOURCES — universal contract from either platform adapter or
+   the fixture (via the same fixture→contract adapter). The view never
+   reads the raw fixture shape; everything below speaks
+   CategoryLeagueData so live + demo paths share one code path.
 
-   Source of truth:
-   - Default: the hand-authored fixture (the demo experience).
-   - When `?leagueId=…&platform=sleeper` is present in the URL:
-     fetch live data via the matching adapter and re-render copy.
-     The fixture render is kept as the synchronous initial value
-     so the template never sees a null editorial during load.
-
-   `shallowRef` mirrors the Home view pattern — the rendered tree is
-   always replaced wholesale, never mutated in place.
+   The hero matchup, editorial copy, projections, and trajectory chart
+   all degrade gracefully when their optional fields are absent — live
+   leagues have win prob + projections from the adapter but no daily
+   history yet, so the trajectory chart simply hides itself.
 ───────────────────────────────────────────────────────────────── */
-const liveEditorial = shallowRef<RenderedMatchupsCopy>(
-  renderMatchupsPage(categoriesFixtureToLeagueData()),
-)
+const demoData: CategoryLeagueData = categoriesFixtureToLeagueData()
+const liveData = shallowRef<CategoryLeagueData | null>(null)
+const data = computed<CategoryLeagueData>(() => liveData.value ?? demoData)
+
+const liveEditorial = shallowRef<RenderedMatchupsCopy>(renderMatchupsPage(demoData))
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
-const liveLeagueId = computed(() => {
+
+// Strict route (`/leagues/:leagueId/matchups`) resolves the league via
+// the leagues store; soft mode (`?leagueId=&platform=`) reads the query
+// directly. Without the strict path, deep-linked live leagues silently
+// fall back to fixtures — that's the bug that showed demo team names
+// on a real Yahoo league here.
+const leaguesStore = useLeaguesStore()
+const strictLeagueRecord = computed(() => {
+  const uuid = route.params.leagueId
+  if (typeof uuid !== 'string' || uuid.length === 0) return null
+  return leaguesStore.leagues.find((l) => l.id === uuid) ?? null
+})
+const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
+
+const liveLeagueId = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform_league_id ?? null
+  }
   const v = route.query.leagueId
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
-const livePlatform = computed(() => {
+const livePlatform = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform ?? null
+  }
   const v = route.query.platform
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
 
-// Human-readable platform label, surfaced by the loading banner so the
-// "Loading your league from X" copy matches the platform the user
-// actually picked on the Connect screen.
 const platformLabel = computed(() => {
   const p = livePlatform.value
   if (p === 'yahoo') return 'Yahoo'
@@ -426,35 +503,45 @@ const platformLabel = computed(() => {
   return 'your league'
 })
 
+const currentWeek = computed(() => data.value.currentWeek)
+
 onMounted(async () => {
+  // Strict deep-link / refresh: hydrate the leagues store first so we
+  // can resolve the platform + platform_league_id for the URL UUID.
+  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
+    try {
+      await leaguesStore.fetchLeagues()
+    } catch (err) {
+      console.warn('[CategoryDemoMatchupsView] fetchLeagues failed:', err)
+    }
+  }
+
   const id = liveLeagueId.value
   const platform = livePlatform.value
   if (!id || (platform !== 'sleeper' && platform !== 'espn' && platform !== 'yahoo')) {
-    return  // fixture-only path
+    return  // fixture-only path (demo, or league row not resolved yet)
   }
-
   liveLoading.value = true
   liveError.value = null
   try {
-    // See CategoryDemoHomeView for why we pass identity explicitly.
-    const opts = { userIdentity: collectUserIdentity() }
-    const data =
-      platform === 'espn'
-        ? await espnLeagueToCategoryData(id, opts)
-        : platform === 'yahoo'
-        ? await yahooLeagueToCategoryData(id, opts)
-        : await sleeperLeagueToCategoryData(id, opts)
-    liveEditorial.value = renderMatchupsPage(data)
+    const leagueRowId =
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined
+    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
+    const fetched =
+      platform === 'espn'   ? await espnLeagueToCategoryData(id, opts)
+      : platform === 'yahoo' ? await yahooLeagueToCategoryData(id, opts)
+      :                        await sleeperLeagueToCategoryData(id, opts)
+    liveData.value = fetched
+    liveEditorial.value = renderMatchupsPage(fetched)
   } catch (err) {
-    const platformLabel =
+    const labelFor =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
-    liveError.value = (err as Error).message || `Failed to load ${platformLabel} league data.`
+    liveError.value = (err as Error).message || `Failed to load ${labelFor} league data.`
   } finally {
     liveLoading.value = false
   }
 })
 
-/** See CategoryDemoHomeView.collectUserIdentity for the rationale. */
 function collectUserIdentity() {
   try {
     const platformsStore = usePlatformsStore()
@@ -465,6 +552,39 @@ function collectUserIdentity() {
     }
   } catch {
     return {}
+  }
+}
+
+/* ─── Helpers over `data` ────────────────────────────────────── */
+const allMatchups = computed<CategoryLeagueDataMatchup[]>(
+  () => data.value.matchupsCurrentWeek ?? [],
+)
+function teamById(id: string): CategoryLeagueDataTeam {
+  const found = data.value.teams.find((t) => t.id === id)
+  if (found) return found
+  return {
+    id,
+    name: `Team ${id}`,
+    ownerName: '',
+    ownerInitials: '?',
+    avatarColor: 'oklch(0.40 0 90)',
+    isMyTeam: false,
+  }
+}
+function standingById(id: string): CategoryLeagueDataStanding {
+  const found = data.value.standings.find((s) => s.teamId === id)
+  if (found) return found
+  return {
+    rank: 0,
+    teamId: id,
+    catWins: 0,
+    catLosses: 0,
+    catTies: 0,
+    winPct: 0,
+    streak: { type: 'W', length: 0 },
+    lastSix: [],
+    ownsCount: 0,
+    bleedingCount: 0,
   }
 }
 
@@ -493,26 +613,290 @@ function closeDetail() {
   lastClickedRef.value?.focus?.()
 }
 
-/* ─── Status counts ─────────────────────────────────────────── */
-const liveCount     = computed(() => matchupsWeek8.filter((m) => m.status === 'live').length)
-const coastingCount = computed(() => matchupsWeek8.filter((m) => m.status === 'coasting').length)
-const lockedCount   = computed(() => matchupsWeek8.filter((m) => m.status === 'final').length)
+/* ─── Status counts ─────────────────────────────────────────────
+   Yahoo's status flags only know "live vs final" (final = winner_team_key
+   set, which doesn't happen until Monday rollover). For mid-week
+   reading we need a richer bucket: SEALED matchups (one side has
+   ≥90% win prob — mathematically over but not officially), COIN
+   FLIP matchups (45-55% — the genuinely tight ones), LIVE for the
+   middle, LOCKED for Yahoo-final. The whole page becomes day-aware.
+─────────────────────────────────────────────────────────────── */
 
-/* ─── Hero matchup ──────────────────────────────────────────── */
-const heroMatchup = computed(() => matchupsWeek8.find((m) => m.id === matchupOfTheWeekId)!)
+function matchupBucket(m: CategoryLeagueDataMatchup): 'locked' | 'sealed' | 'coin-flip' | 'live' {
+  if (m.status === 'final') return 'locked'
+  const wp = m.homeWinProb ?? 0.5
+  if (wp >= 0.90 || wp <= 0.10) return 'sealed'
+  if (wp >= 0.45 && wp <= 0.55) return 'coin-flip'
+  return 'live'
+}
 
-/* Editorial hero copy — driven by the renderer, which picked the
- *  matchup it considers the strongest hero. The hero face-off, cat
- *  strip, and chart still bind to the data-driven `heroMatchup`
- *  fixture entry; only the eyebrow / headline / body / sub-context
- *  strings come from the editorial pipeline. */
+const liveCount     = computed(() => allMatchups.value.filter((m) => matchupBucket(m) === 'live').length)
+const sealedCount   = computed(() => allMatchups.value.filter((m) => matchupBucket(m) === 'sealed').length)
+const coinFlipCount = computed(() => allMatchups.value.filter((m) => matchupBucket(m) === 'coin-flip').length)
+const lockedCount   = computed(() => allMatchups.value.filter((m) => matchupBucket(m) === 'locked').length)
+
+/* ─── Hero matchup — picked by editorial ────────────────────── */
+const heroMatchupId = computed(() => {
+  const editorialId = liveEditorial.value.matchupOfWeek.matchupId
+  if (editorialId && allMatchups.value.some((m) => m.id === editorialId)) return editorialId
+  return allMatchups.value[0]?.id ?? null
+})
+const heroMatchup = computed<CategoryLeagueDataMatchup | null>(
+  () => allMatchups.value.find((m) => m.id === heroMatchupId.value) ?? null,
+)
+
 const heroEyebrow = computed(() => liveEditorial.value.matchupOfWeek.eyebrow || 'Matchup of the Week')
 const heroHeadline = computed(() => liveEditorial.value.matchupOfWeek.headline)
 const heroBody = computed(() => liveEditorial.value.matchupOfWeek.body)
 const heroSubContext = computed(() => liveEditorial.value.matchupOfWeek.subContext)
 
-/** Map quick-read pill index to the existing pill-dot color tokens.
- *  Matches the order: tightest, sweep, bubble, punt. */
+/* ─── Daily Beats ────────────────────────────────────────────
+   The "morning paper" strip: three short narrative beats above
+   the hero. Answers different daily questions — what flipped
+   overnight, who lit it up, what to watch today. Each degrades
+   independently when its data source is empty (first visit, no
+   MLB games, no overnight motion). When all three are empty the
+   whole section hides — better than a placeholder.
+─────────────────────────────────────────────────────────────── */
+
+const DAY_NAMES_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const todayLabel = computed(() => DAY_NAMES_LONG[new Date().getDay()])
+
+/** Find the editorial-grade headline storyline from a just-closed
+ *  week's matchups. Priority: upset (low seed beat high seed by 4+
+ *  rank slots) → sweep (final gap ≥ 5) → thriller (decided by ≤ 1
+ *  cat) → biggest result as fallback. Returns null when nothing rises
+ *  to the surface (rare — most weeks have at least a sweep). */
+function findLastWeekStoryline(): string | null {
+  const matchups = data.value.matchupsPreviousWeek ?? []
+  if (matchups.length === 0) return null
+  const prevWeek = data.value.currentWeek - 1
+  const standing = (id: string) => data.value.standings.find((s) => s.teamId === id)
+
+  type Result = {
+    winnerId: string
+    loserId: string
+    winnerScore: number
+    loserScore: number
+    gap: number
+    rankDiff: number   // positive = winner has worse rank (upset)
+  }
+  const results: Result[] = []
+  for (const m of matchups) {
+    if (m.homeCatWins === m.awayCatWins) continue
+    const homeWon = m.homeCatWins > m.awayCatWins
+    const winnerId = homeWon ? m.homeTeamId : m.awayTeamId
+    const loserId  = homeWon ? m.awayTeamId : m.homeTeamId
+    const winnerRank = standing(winnerId)?.rank ?? 99
+    const loserRank  = standing(loserId)?.rank ?? 99
+    results.push({
+      winnerId, loserId,
+      winnerScore: Math.max(m.homeCatWins, m.awayCatWins),
+      loserScore:  Math.min(m.homeCatWins, m.awayCatWins),
+      gap: Math.abs(m.homeCatWins - m.awayCatWins),
+      rankDiff: winnerRank - loserRank,
+    })
+  }
+  if (results.length === 0) return null
+
+  // 1. Upset — winner ranked at least 4 slots below loser.
+  const upsets = results.filter((r) => r.rankDiff >= 4)
+  if (upsets.length > 0) {
+    upsets.sort((a, b) => b.rankDiff - a.rankDiff)
+    const u = upsets[0]
+    return `${teamById(u.winnerId).name} took ${teamById(u.loserId).name} ${u.winnerScore}-${u.loserScore} — the upset of week ${prevWeek}.`
+  }
+
+  // 2. Sweep — gap of 5+ cats.
+  const sweeps = results.filter((r) => r.gap >= 5)
+  if (sweeps.length > 0) {
+    sweeps.sort((a, b) => b.gap - a.gap)
+    const s = sweeps[0]
+    return `${teamById(s.winnerId).name} closed ${teamById(s.loserId).name} ${s.winnerScore}-${s.loserScore} in week ${prevWeek}.`
+  }
+
+  // 3. Thriller — decided by 1 cat.
+  const thrillers = results.filter((r) => r.gap <= 1)
+  if (thrillers.length > 0) {
+    const t = thrillers[0]
+    return `${teamById(t.winnerId).name} edged ${teamById(t.loserId).name} ${t.winnerScore}-${t.loserScore} — week ${prevWeek}'s closest call.`
+  }
+
+  // 4. Fallback — biggest gap of the week, even if not technically a sweep.
+  results.sort((a, b) => b.gap - a.gap)
+  const r = results[0]
+  return `${teamById(r.winnerId).name} took ${teamById(r.loserId).name} ${r.winnerScore}-${r.loserScore} in week ${prevWeek}.`
+}
+
+/** Overnight-shift summary — what flipped in the current week since
+ *  the last visit. Empty on Day 1 of a new week (the snapshot diff
+ *  can only compare same-week matchups). */
+function findLastNightStoryline(): string | null {
+  const delta = data.value.snapshotDelta
+  if (!delta) return null
+  const tipped = delta.matchupShifts.filter((s) => s.tipped)
+  if (tipped.length > 0) {
+    const m = tipped[0]
+    const winner = m.leadNow === 'home' ? teamById(m.homeTeamId) : teamById(m.awayTeamId)
+    if (tipped.length === 1) {
+      return `${winner.name}'s matchup tipped in their favor overnight.`
+    }
+    return `${tipped.length} matchups tipped overnight. ${winner.name} flipped a lead.`
+  }
+  let bestTeamId: string | null = null
+  let bestGain = 0
+  for (const s of delta.matchupShifts) {
+    if (s.homeCatDelta > bestGain) { bestGain = s.homeCatDelta; bestTeamId = s.homeTeamId }
+    if (s.awayCatDelta > bestGain) { bestGain = s.awayCatDelta; bestTeamId = s.awayTeamId }
+  }
+  if (!bestTeamId || bestGain <= 0) return null
+  const gainer = teamById(bestTeamId)
+  return `${gainer.name} picked up ${bestGain} ${bestGain === 1 ? 'cat' : 'cats'} overnight.`
+}
+
+/** The "delta" beat — pivots between LAST WEEK recap (Monday only)
+ *  and LAST NIGHT overnight shifts (other days). Returns the tag
+ *  string + the editorial line, or null when neither has content. */
+const lastDeltaBeat = computed<{ tag: string; line: string } | null>(() => {
+  const dayIdx = new Date().getDay()   // 0=Sun..6=Sat
+  // Monday — pivot to last-week recap. This is the magazine's "weekend
+  // wrap" — what closed Sunday night, what's worth remembering.
+  if (dayIdx === 1) {
+    const line = findLastWeekStoryline()
+    return line ? { tag: 'Last week', line } : null
+  }
+  // Tuesday through Sunday — overnight shifts in the current week.
+  const line = findLastNightStoryline()
+  return line ? { tag: 'Last night', line } : null
+})
+
+// Backwards-compat: keep the old `lastNightBeat` name as an alias for
+// any template binding I miss. Removed once the template fully reads
+// `lastDeltaBeat` instead.
+const lastNightBeat = computed(() => lastDeltaBeat.value?.line ?? null)
+
+const bigNightBeat = computed<string | null>(() => {
+  const nights = data.value.playerNights ?? []
+  if (nights.length === 0) return null
+  // Score performances. Owned-by-someone gets a bias so the beat
+  // surfaces league-relevant lines over random monster nights.
+  const scored = nights.map((n) => {
+    let score = 0
+    if (n.hitting) {
+      score += (n.hitting.homeRuns ?? 0) * 8
+      score += (n.hitting.hits ?? 0) * 1.5
+      score += (n.hitting.rbi ?? 0) * 2
+      score += (n.hitting.stolenBases ?? 0) * 2
+    }
+    if (n.pitching) {
+      score += (n.pitching.strikeouts ?? 0) * 1.5
+      if (n.pitching.qualityStart) score += 5
+      if (n.pitching.completeGame) score += 12
+      if (n.pitching.noHitter) score += 50
+      if (n.pitching.perfectGame) score += 100
+    }
+    if (n.ownedByTeamIds.length > 0) score += 6
+    return { night: n, score }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  const top = scored[0]
+  if (!top || top.score < 8) return null
+  const n = top.night
+  const ownerName = n.ownedByTeamIds.length > 0
+    ? teamById(n.ownedByTeamIds[0]).name
+    : null
+  let line: string | null = null
+  if (n.hitting && (n.hitting.homeRuns >= 1 || n.hitting.hits >= 3)) {
+    const parts: string[] = [`${n.hitting.hits}-for-${n.hitting.atBats}`]
+    if (n.hitting.homeRuns > 0) parts.push(`${n.hitting.homeRuns} HR`)
+    if (n.hitting.rbi > 0) parts.push(`${n.hitting.rbi} RBI`)
+    line = `${n.name}: ${parts.join(', ')}.`
+  } else if (n.pitching && n.pitching.strikeouts >= 6) {
+    const parts: string[] = [`${n.pitching.inningsPitched} IP`, `${n.pitching.strikeouts} K`]
+    if (n.pitching.earnedRuns !== undefined) parts.push(`${n.pitching.earnedRuns} ER`)
+    line = `${n.name}: ${parts.join(', ')}.`
+  }
+  if (!line) return null
+  return ownerName ? `${line} Rostered by ${ownerName}.` : line
+})
+
+/** Lowest-margin contested cat across all live matchups, gated by
+ *  "could realistically flip with one game" — counting cats ≤ 2,
+ *  rate cats ≤ a small absolute. Otherwise the beat over-claims. */
+function isFlippableCatLine(line: CategoryLeagueDataCatLine): boolean {
+  if (line.status === 'punted-home' || line.status === 'punted-away') return false
+  const margin = Math.abs(line.homeCurrent - line.awayCurrent)
+  if (margin === 0) return false   // truly even — not a "watch", a "tied"
+  if (line.catId === 'AVG' || line.catId === 'OBP' || line.catId === 'SLG' || line.catId === 'OPS') {
+    return margin <= 0.012
+  }
+  if (line.catId === 'ERA' || line.catId === 'WHIP' || line.catId === 'BAA') {
+    return margin <= 0.25
+  }
+  return margin <= 2
+}
+
+const watchBeat = computed<string | null>(() => {
+  const matchups = allMatchups.value
+  if (matchups.length === 0) return null
+
+  // Primary: find the tightest flippable cat across live matchups.
+  // This is the mid/late-week "swing cat" reading.
+  const live = matchups.filter((m) => m.status === 'live')
+  let best: { matchup: CategoryLeagueDataMatchup; line: CategoryLeagueDataCatLine } | null = null
+  let bestRel = Infinity
+  for (const m of live) {
+    for (const line of m.catLines ?? []) {
+      if (!isFlippableCatLine(line)) continue
+      const margin = Math.abs(line.homeCurrent - line.awayCurrent)
+      const sum = line.homeCurrent + line.awayCurrent
+      const rel = sum > 0 ? margin / sum : 1
+      if (rel < bestRel) { bestRel = rel; best = { matchup: m, line } }
+    }
+  }
+  if (best) {
+    const home = teamById(best.matchup.homeTeamId)
+    const away = teamById(best.matchup.awayTeamId)
+    const lb = lowerBetter(best.line.catId)
+    const homeLeads = lb
+      ? best.line.homeCurrent < best.line.awayCurrent
+      : best.line.homeCurrent > best.line.awayCurrent
+    const leader = homeLeads ? home : away
+    const trailer = homeLeads ? away : home
+    return `${best.line.catId} in ${leader.name} vs ${trailer.name} is on a knife edge. One game flips it.`
+  }
+
+  // Fallback (Day 1/2 — no cat motion yet): pivot to the biggest
+  // projection mismatch on the slate. Still forward-looking, still
+  // editorial, doesn't pretend cats have been moving.
+  let mismatch: CategoryLeagueDataMatchup | null = null
+  let mismatchDelta = 0
+  for (const m of matchups) {
+    const wp = m.homeWinProb
+    if (wp === undefined) continue
+    const delta = Math.abs(wp - 0.5)
+    if (delta > mismatchDelta) {
+      mismatchDelta = delta
+      mismatch = m
+    }
+  }
+  if (!mismatch || mismatchDelta < 0.10) {
+    // Slate is too balanced to flag a mismatch — emit a generic
+    // setup-day reminder instead. Better than an empty slot.
+    return `Lineups lock at first pitch. Set yours before the slate opens.`
+  }
+  const wp = mismatch.homeWinProb!
+  const favoredHome = wp > 0.5
+  const favorite = teamById(favoredHome ? mismatch.homeTeamId : mismatch.awayTeamId)
+  const underdog = teamById(favoredHome ? mismatch.awayTeamId : mismatch.homeTeamId)
+  const favPct = Math.round((favoredHome ? wp : 1 - wp) * 100)
+  return `${favorite.name} is the projection's favorite over ${underdog.name} (${favPct}%). Biggest mismatch on the slate.`
+})
+
+const hasBeats = computed(
+  () => !!lastDeltaBeat.value || !!bigNightBeat.value || !!watchBeat.value,
+)
+
 function pillDotFor(i: number): 'primary' | 'secondary' | 'tertiary' | 'mute' {
   switch (i) {
     case 0: return 'primary'
@@ -521,111 +905,194 @@ function pillDotFor(i: number): 'primary' | 'secondary' | 'tertiary' | 'mute' {
     default: return 'mute'
   }
 }
-
-/** Pill labels render in sentence case in the template; the renderer
- *  hands us the uppercase pill identifier. */
 function formatPillLabel(label: string): string {
   return label.charAt(0) + label.slice(1).toLowerCase()
 }
-const heroHomeTeam = computed(() => getTeam(heroMatchup.value.homeTeamId))
-const heroAwayTeam = computed(() => getTeam(heroMatchup.value.awayTeamId))
-const heroHomeStanding = computed(
-  () => standings2026Week8.find((s) => s.teamId === heroMatchup.value.homeTeamId)!,
+
+const heroHomeTeam = computed(() =>
+  heroMatchup.value ? teamById(heroMatchup.value.homeTeamId) : null,
 )
-const heroAwayStanding = computed(
-  () => standings2026Week8.find((s) => s.teamId === heroMatchup.value.awayTeamId)!,
+const heroAwayTeam = computed(() =>
+  heroMatchup.value ? teamById(heroMatchup.value.awayTeamId) : null,
 )
-const heroHomeAccent = computed(() => accentFor(heroHomeTeam.value))
-const heroAwayAccent = computed(() => accentFor(heroAwayTeam.value))
-const heroHomePct = computed(() => clampWP(heroMatchup.value.homeWinProb))
-const heroAwayPct = computed(() => 100 - heroHomePct.value)
+const heroHomeStanding = computed(() =>
+  heroMatchup.value ? standingById(heroMatchup.value.homeTeamId) : null,
+)
+const heroAwayStanding = computed(() =>
+  heroMatchup.value ? standingById(heroMatchup.value.awayTeamId) : null,
+)
+const heroHomeAccent = computed(() => HOME_COLOR)
+const heroAwayAccent = computed(() => AWAY_COLOR)
+
+const heroHomePct = computed(() => {
+  const p = heroMatchup.value?.homeWinProb
+  return p === undefined ? null : clampWP(p * 100)
+})
+const heroAwayPct = computed(() =>
+  heroHomePct.value === null ? null : 100 - heroHomePct.value,
+)
 const heroHomePctColor = computed(() =>
-  heroHomePct.value >= heroAwayPct.value
+  (heroHomePct.value ?? 50) >= (heroAwayPct.value ?? 50)
     ? 'oklch(0.74 0.18 145)'
     : 'oklch(0.70 0.27 350)',
 )
 const heroAwayPctColor = computed(() =>
-  heroAwayPct.value >= heroHomePct.value
+  (heroAwayPct.value ?? 50) >= (heroHomePct.value ?? 50)
     ? 'oklch(0.74 0.18 145)'
     : 'oklch(0.70 0.27 350)',
 )
 
-const heroDecidedB = computed(
-  () => heroMatchup.value.catLines.filter((c) => c.status === 'decided-b').length,
+const heroDecidedAway = computed(() =>
+  (heroMatchup.value?.catLines ?? []).filter((c) => c.status === 'decided-away').length,
 )
-const heroContested = computed(
-  () => heroMatchup.value.catLines.filter((c) => c.status === 'contested').length,
+const heroContested = computed(() =>
+  (heroMatchup.value?.catLines ?? []).filter((c) => c.status === 'contested').length,
 )
-const heroConcededB = computed(
-  () => heroMatchup.value.catLines.filter((c) => c.status === 'punted-b').length,
+const heroConcededAway = computed(() =>
+  (heroMatchup.value?.catLines ?? []).filter((c) => c.status === 'punted-away').length,
 )
 
+/* State-of-play: a single magazine sentence describing where the
+ *  matchup actually stands. Replaces the sterile "0 decided / 11
+ *  contested / 0 conceded" line that never changed mid-week. Updates
+ *  daily as locks accumulate. */
+const heroLockSummary = computed(() => {
+  const m = heroMatchup.value
+  if (!m?.catLines?.length) return null
+  return summarizeLocks(m.catLines, daysLeftInWeek.value)
+})
+const heroStateOfPlay = computed(() => {
+  const summary = heroLockSummary.value
+  if (!summary) return null
+  const moving = summary.movingCatIds
+  const totalLocks = summary.homeLocks + summary.awayLocks
+  if (moving.length === 0) return 'Mathematically over.'
+  if (moving.length === 1) return `Down to ${moving[0]}.`
+  if (moving.length === 2) return `Down to ${moving[0]} and ${moving[1]}.`
+  if (moving.length === 3) return `Down to ${moving[0]}, ${moving[1]}, and ${moving[2]}.`
+  if (totalLocks >= 5) return `${totalLocks} cats locked. ${moving.length} still in play.`
+  return `${moving.length} cats still in play. ${totalLocks} locked.`
+})
+
 /* ─── Cat-strip helpers ─────────────────────────────────────── */
-function lowerBetter(catId: CategoryId): boolean {
-  return catId === 'ERA'
+function lowerBetter(catId: string): boolean {
+  return LOWER_BETTER_BASEBALL_CATS.has(catId)
 }
-function heroAHasLead(line: CategoryMatchupCatLine): boolean {
-  if (line.aCurrent === line.bCurrent) return false
+function heroHomeHasLead(line: CategoryLeagueDataCatLine): boolean {
+  if (line.homeCurrent === line.awayCurrent) return false
   return lowerBetter(line.catId)
-    ? line.aCurrent < line.bCurrent
-    : line.aCurrent > line.bCurrent
+    ? line.homeCurrent < line.awayCurrent
+    : line.homeCurrent > line.awayCurrent
 }
-function heroBHasLead(line: CategoryMatchupCatLine): boolean {
-  if (line.aCurrent === line.bCurrent) return false
+function heroAwayHasLead(line: CategoryLeagueDataCatLine): boolean {
+  if (line.homeCurrent === line.awayCurrent) return false
   return lowerBetter(line.catId)
-    ? line.bCurrent < line.aCurrent
-    : line.bCurrent > line.aCurrent
+    ? line.awayCurrent < line.homeCurrent
+    : line.awayCurrent > line.homeCurrent
 }
-function formatVal(catId: CategoryId, v: number): string {
-  if (catId === 'AVG') return v.toFixed(3).replace(/^0/, '')
-  if (catId === 'ERA') return v.toFixed(2)
+function formatVal(catId: string, v: number): string {
+  if (catId === 'AVG' || catId === 'OBP' || catId === 'SLG' || catId === 'OPS') {
+    return v.toFixed(3).replace(/^0/, '')
+  }
+  if (catId === 'ERA' || catId === 'WHIP' || catId === 'BAA' || catId === 'K/9') {
+    return v.toFixed(2)
+  }
   return Math.round(v).toString()
 }
-function catCellStyle(line: CategoryMatchupCatLine) {
-  if (line.status === 'decided-a') {
-    return {
-      background: `linear-gradient(90deg, ${tintFrom(heroHomeAccent.value, 0.20)} 0%, oklch(0.13 0.018 90 / 0.6) 100%)`,
-      borderColor: tintFrom(heroHomeAccent.value, 0.30),
-    }
+/* ─── Cat-tile helpers ─────────────────────────────────────── */
+
+const daysLeftInWeek = computed(() => daysLeftInCurrentWeek())
+
+function tileEffectiveStatus(line: CategoryLeagueDataCatLine) {
+  return effectiveCatStatus(line, daysLeftInWeek.value)
+}
+
+function tileBgClass(line: CategoryLeagueDataCatLine): string {
+  const s = tileEffectiveStatus(line)
+  if (s === 'punted-home' || s === 'punted-away') return 'cat-tile-punted'
+  if (s === 'locked-home') return 'cat-tile-home-leads cat-tile-locked-home'
+  if (s === 'locked-away') return 'cat-tile-away-leads cat-tile-locked-away'
+  if (s === 'tied') return 'cat-tile-even'
+  // s === 'live' — still in play, color by current direction
+  if (heroHomeHasLead(line)) return 'cat-tile-home-leads'
+  if (heroAwayHasLead(line)) return 'cat-tile-away-leads'
+  return 'cat-tile-even'
+}
+
+function tileLeaderSide(line: CategoryLeagueDataCatLine): 'home' | 'away' | null {
+  if (heroHomeHasLead(line)) return 'home'
+  if (heroAwayHasLead(line)) return 'away'
+  return null
+}
+
+function tileChipExtraClass(line: CategoryLeagueDataCatLine): string {
+  const s = tileEffectiveStatus(line)
+  return s === 'locked-home' || s === 'locked-away' ? 'cat-tile-chip-locked' : ''
+}
+
+function tileIsLocked(line: CategoryLeagueDataCatLine): boolean {
+  const s = tileEffectiveStatus(line)
+  return s === 'locked-home' || s === 'locked-away'
+}
+
+function tileChip(line: CategoryLeagueDataCatLine): string | null {
+  if (line.homeCurrent === line.awayCurrent) return null
+  const diff = Math.abs(line.homeCurrent - line.awayCurrent)
+  if (line.catId === 'AVG' || line.catId === 'OBP' || line.catId === 'SLG' || line.catId === 'OPS') {
+    return `+${diff.toFixed(3).replace(/^0/, '')}`
   }
-  if (line.status === 'decided-b') {
-    return {
-      background: `linear-gradient(270deg, ${tintFrom(heroAwayAccent.value, 0.20)} 0%, oklch(0.13 0.018 90 / 0.6) 100%)`,
-      borderColor: tintFrom(heroAwayAccent.value, 0.30),
-    }
+  if (line.catId === 'ERA' || line.catId === 'WHIP' || line.catId === 'BAA' || line.catId === 'K/9') {
+    return `-${diff.toFixed(2)}`
   }
-  if (line.status === 'contested') {
-    return {
-      background: 'oklch(0.78 0.18 92 / 0.10)',
-      borderColor: 'oklch(0.78 0.18 92 / 0.34)',
-    }
-  }
-  return {
-    background: 'transparent',
-    borderColor: 'oklch(0.22 0.015 90)',
-  }
+  return `+${Math.round(diff)}`
+}
+
+function tileHomeBarPct(line: CategoryLeagueDataCatLine): string {
+  return `${computeTileBarHomePct(line).toFixed(1)}%`
+}
+function tileAwayBarPct(line: CategoryLeagueDataCatLine): string {
+  return `${(100 - computeTileBarHomePct(line)).toFixed(1)}%`
+}
+/** Home's share of the proportional bar. Counting cats: home / total.
+ *  Lower-better cats: inverted (the team with the LOWER value gets a
+ *  bigger share). Clamped 18..82 so neither side disappears at the
+ *  extremes of a sweep. */
+function computeTileBarHomePct(line: CategoryLeagueDataCatLine): number {
+  if (line.status === 'punted-home') return 12
+  if (line.status === 'punted-away') return 88
+  const h = line.homeCurrent
+  const a = line.awayCurrent
+  if (h === a) return 50
+  const total = h + a
+  if (total <= 0) return 50
+  const homeShare = lowerBetter(line.catId) ? a / total : h / total
+  return Math.max(18, Math.min(82, homeShare * 100))
 }
 
 /* ─── Feed ──────────────────────────────────────────────────── */
 const feedMatchups = computed(() =>
-  matchupsWeek8.filter((m) => m.id !== matchupOfTheWeekId),
+  allMatchups.value.filter((m) => m.id !== heroMatchupId.value),
 )
-function homeOf(m: CategoryMatchup) { return getTeam(m.homeTeamId) }
-function awayOf(m: CategoryMatchup) { return getTeam(m.awayTeamId) }
-function standingOf(teamId: string) {
-  return standings2026Week8.find((s) => s.teamId === teamId)!
+function homeOf(m: CategoryLeagueDataMatchup) { return teamById(m.homeTeamId) }
+function awayOf(m: CategoryLeagueDataMatchup) { return teamById(m.awayTeamId) }
+function standingOf(teamId: string) { return standingById(teamId) }
+function feedAccentHome(_m: CategoryLeagueDataMatchup) { return HOME_COLOR }
+function feedAccentAway(_m: CategoryLeagueDataMatchup) { return AWAY_COLOR }
+function feedCardBg(m: CategoryLeagueDataMatchup) {
+  // Card slants toward the leader's POSITION (left = green when home
+  // leads, right = magenta when away leads). Never collides with team
+  // avatar palettes.
+  const homeLeads = m.homeCatWins > m.awayCatWins
+  const stop = homeLeads ? HOME_COLOR : AWAY_COLOR
+  const angle = homeLeads ? 135 : 225
+  return `linear-gradient(${angle}deg, ${tintFrom(stop, 0.045)}, oklch(0.10 0.015 90 / 0.4))`
 }
-function feedAccentHome(m: CategoryMatchup) { return accentFor(homeOf(m)) }
-function feedAccentAway(m: CategoryMatchup) { return accentFor(awayOf(m)) }
-function feedCardBg(m: CategoryMatchup) {
-  // The card slants toward the leader's accent.
-  const leader = m.aWins > m.bWins ? homeOf(m) : awayOf(m)
-  const stop = accentFor(leader)
-  return `linear-gradient(135deg, ${tintFrom(stop, 0.045)}, oklch(0.10 0.015 90 / 0.4))`
+function feedCardBorder(m: CategoryLeagueDataMatchup) {
+  const homeLeads = m.homeCatWins > m.awayCatWins
+  return tintFrom(homeLeads ? HOME_COLOR : AWAY_COLOR, 0.20)
 }
-function feedCardBorder(m: CategoryMatchup) {
-  const leader = m.aWins > m.bWins ? homeOf(m) : awayOf(m)
-  return tintFrom(accentFor(leader), 0.20)
+function feedHomePct(m: CategoryLeagueDataMatchup): number | null {
+  return m.homeWinProb === undefined ? null : clampWP(m.homeWinProb * 100)
 }
 
 /* ─── Helpers ──────────────────────────────────────────────── */
@@ -647,15 +1114,19 @@ const HERO_Y_BOTTOM = 6
 const N_DAYS = 7
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+// Only render the trajectory chart when the data carries a real
+// daily history. Live leagues won't, until daily-snapshot capture is
+// wired — see matchups-projection.ts and the project's snapshot path.
+const hasDailyTrend = computed(() => (heroMatchup.value?.dailyTrend?.length ?? 0) > 0)
 const heroHomeSeries = computed(() =>
-  heroMatchup.value.dailyTrend.map((d) => clampWP(d.aWinProb)),
+  (heroMatchup.value?.dailyTrend ?? []).map((d) => clampWP(d.homeWinProb * 100)),
 )
 const heroAwaySeries = computed(() =>
-  heroMatchup.value.dailyTrend.map((d) => clampWP(d.bWinProb)),
+  (heroMatchup.value?.dailyTrend ?? []).map((d) => clampWP(d.awayWinProb * 100)),
 )
 const heroCurrentDayIndex = computed(() => {
   let idx = -1
-  heroMatchup.value.dailyTrend.forEach((d, i) => {
+  ;(heroMatchup.value?.dailyTrend ?? []).forEach((d, i) => {
     if (!d.isProjection) idx = i
   })
   return idx === -1 ? null : idx
@@ -766,6 +1237,110 @@ const heroNowX = computed(() => {
 }
 @media (hover: hover) and (pointer: fine) {
   .live-banner-action:hover { background: oklch(0.26 0.015 90); }
+}
+
+/* ─── DAILY BEATS ─────────────────────────────────────────────
+   Three short narrative cards above the hero. Each card carries a
+   subtle full-border + corner-gradient accent (no side stripes per
+   the brand rules) so the three beats read as distinct without
+   looking like alert callouts.
+─────────────────────────────────────────────────────────────── */
+.beats {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid oklch(0.18 0.015 90);
+  border-radius: 14px;
+  background:
+    radial-gradient(60% 80% at 50% 0%, oklch(0.72 0.18 195 / 0.04) 0%, transparent 70%),
+    oklch(0.10 0.015 90 / 0.6);
+}
+.beats-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.beats-eyebrow {
+  margin: 0;
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-tertiary);
+}
+.beats-eyebrow-bar {
+  width: 22px; height: 2px;
+  background: var(--accent-tertiary);
+  display: inline-block;
+}
+.beats-day {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.beats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.beats-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 12px;
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 10px;
+  background: oklch(0.11 0.015 90 / 0.55);
+  min-width: 0;
+}
+.beats-item-last {
+  border-color: oklch(0.70 0.27 350 / 0.30);
+  background: linear-gradient(135deg, oklch(0.70 0.27 350 / 0.06), oklch(0.11 0.015 90 / 0.5) 80%);
+}
+.beats-item-big {
+  border-color: oklch(0.78 0.18 92 / 0.32);
+  background: linear-gradient(135deg, oklch(0.78 0.18 92 / 0.06), oklch(0.11 0.015 90 / 0.5) 80%);
+}
+.beats-item-watch {
+  border-color: oklch(0.72 0.18 195 / 0.32);
+  background: linear-gradient(135deg, oklch(0.72 0.18 195 / 0.06), oklch(0.11 0.015 90 / 0.5) 80%);
+}
+.beats-tag {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.beats-item-last  .beats-tag { color: oklch(0.74 0.22 350); }
+.beats-item-big   .beats-tag { color: oklch(0.78 0.18 92);  }
+.beats-item-watch .beats-tag { color: oklch(0.72 0.18 195); }
+.beats-line {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .beats-list {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 /* ─── PAGE HEAD ────────────────────────────────────────────── */
@@ -1073,64 +1648,153 @@ const heroNowX = computed(() => {
   text-align: center;
 }
 
-/* ─── Cat strip ──────────────────────────────────────────── */
+/* ─── Cat tiles ──────────────────────────────────────────────
+   Each cat is its own little story: label + margin chip up top,
+   both team values side-by-side (leader in their position color),
+   proportional bar underneath. Eleven uniform boxes lost the story;
+   tiles give every cat a sense of weight + direction.
+─────────────────────────────────────────────────────────────── */
 .cat-strip {
   position: relative; z-index: 1;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(11, minmax(0, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   padding: 0;
-  margin: 4px 0 6px;
+  margin: 4px 0 10px;
 }
-.cat-cell {
+.cat-tile {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 8px 4px 7px;
-  border-radius: 8px;
-  border: 1px solid;
-  min-height: 58px;
-  text-align: center;
+  gap: 8px;
+  padding: 11px 12px 10px;
+  border-radius: 10px;
+  border: 1px solid oklch(0.20 0.015 90);
+  background: oklch(0.11 0.015 90 / 0.5);
+  transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.cat-cell-label {
+.cat-tile-home-leads {
+  border-color: oklch(0.74 0.18 145 / 0.32);
+  background: linear-gradient(95deg, oklch(0.74 0.18 145 / 0.10) 0%, oklch(0.11 0.015 90 / 0.4) 75%);
+}
+.cat-tile-away-leads {
+  border-color: oklch(0.70 0.27 350 / 0.32);
+  background: linear-gradient(265deg, oklch(0.70 0.27 350 / 0.10) 0%, oklch(0.11 0.015 90 / 0.4) 75%);
+}
+/* Locked variants — same direction tint as the live versions but
+ * stronger, plus a filled chip below. Tells the reader "this cat is
+ * functionally out of reach, not just currently leading." */
+.cat-tile-locked-home {
+  border-color: oklch(0.74 0.18 145 / 0.55);
+  background: linear-gradient(95deg, oklch(0.74 0.18 145 / 0.18) 0%, oklch(0.11 0.015 90 / 0.4) 78%);
+}
+.cat-tile-locked-away {
+  border-color: oklch(0.70 0.27 350 / 0.55);
+  background: linear-gradient(265deg, oklch(0.70 0.27 350 / 0.18) 0%, oklch(0.11 0.015 90 / 0.4) 78%);
+}
+.cat-tile-even {
+  border-color: oklch(0.30 0.015 90);
+  background: oklch(0.13 0.015 90 / 0.6);
+}
+.cat-tile-punted { opacity: 0.55; }
+
+.cat-tile-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 6px;
+  min-height: 18px;
+}
+.cat-tile-label {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.66rem;
+  font-size: 0.78rem;
   font-weight: 900;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
-.cat-cell-values {
-  display: inline-flex; align-items: baseline; gap: 4px;
+.cat-tile-chip {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cat-tile-chip-home {
+  color: oklch(0.78 0.18 145);
+  background: oklch(0.74 0.18 145 / 0.14);
+  border: 1px solid oklch(0.74 0.18 145 / 0.35);
+}
+.cat-tile-chip-away {
+  color: oklch(0.74 0.22 350);
+  background: oklch(0.70 0.27 350 / 0.14);
+  border: 1px solid oklch(0.70 0.27 350 / 0.35);
+}
+/* Locked chip — filled in the team's accent, dark text. The visual
+ * weight tells the reader "this margin can't realistically close." */
+.cat-tile-chip-home.cat-tile-chip-locked {
+  color: oklch(0.10 0.012 90);
+  background: oklch(0.74 0.18 145 / 0.90);
+  border-color: oklch(0.74 0.18 145);
+}
+.cat-tile-chip-away.cat-tile-chip-locked {
+  color: oklch(0.10 0.012 90);
+  background: oklch(0.70 0.27 350 / 0.90);
+  border-color: oklch(0.70 0.27 350);
+}
+.cat-tile-evens {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--ink-4);
+}
+
+.cat-tile-values {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 6px;
   font-family: 'Barlow Condensed', sans-serif;
   font-variant-numeric: tabular-nums;
 }
-.cat-cell-val {
-  font-size: 0.84rem;
+.cat-tile-val {
+  font-size: 1.05rem;
   font-weight: 700;
-  color: var(--ink-3);
-}
-.cat-cell-val-lead {
-  font-weight: 900;
-  color: var(--ink-1);
-}
-.cat-cell-sep { color: var(--ink-5); font-weight: 500; }
-.cat-cell-tag {
-  margin-top: 1px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.60rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ink-4);
 }
-.cat-cell-punted-a .cat-cell-label,
-.cat-cell-punted-b .cat-cell-label,
-.cat-cell-punted-a .cat-cell-val,
-.cat-cell-punted-b .cat-cell-val { opacity: 0.65; }
+.cat-tile-val-home.cat-tile-val-lead {
+  color: oklch(0.78 0.18 145);
+  font-weight: 900;
+  font-size: 1.2rem;
+}
+.cat-tile-val-away.cat-tile-val-lead {
+  color: oklch(0.74 0.22 350);
+  font-weight: 900;
+  font-size: 1.2rem;
+}
+.cat-tile-vs {
+  color: var(--ink-5);
+  font-weight: 500;
+  font-size: 0.84rem;
+}
+
+.cat-tile-bar {
+  display: flex;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: oklch(0.16 0.015 90 / 0.5);
+}
+.cat-tile-bar-home {
+  background: oklch(0.74 0.18 145);
+  height: 100%;
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cat-tile-bar-away {
+  background: oklch(0.70 0.27 350);
+  height: 100%;
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 .cat-strip-context {
   position: relative; z-index: 1;
@@ -1470,12 +2134,14 @@ const heroNowX = computed(() => {
   .hero-score-label, .hero-contested { width: 100%; text-align: left; }
 
   .cat-strip {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 3px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
   }
-  .cat-cell { min-height: 50px; padding: 6px 2px; }
-  .cat-cell-label { font-size: 0.60rem; }
-  .cat-cell-val { font-size: 0.76rem; }
+  .cat-tile { padding: 9px 11px 8px; }
+  .cat-tile-label { font-size: 0.72rem; }
+  .cat-tile-val { font-size: 0.98rem; }
+  .cat-tile-val-home.cat-tile-val-lead,
+  .cat-tile-val-away.cat-tile-val-lead { font-size: 1.10rem; }
 
   .feed-card {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

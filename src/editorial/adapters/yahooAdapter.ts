@@ -33,6 +33,7 @@
 import { yahooService } from '@/services/yahoo'
 import type {
   CategoryLeagueData,
+  CategoryLeagueDataCatLine,
   CategoryLeagueDataCategory,
   CategoryLeagueDataCategoryRank,
   CategoryLeagueDataDraft,
@@ -57,9 +58,14 @@ import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
-import { hydrateSnapshotDelta } from '../snapshots'
+import { hydrateSnapshotDelta, hydrateMatchupDailyTrends } from '../snapshots'
 import { teamColorHash } from './colorHash'
 import { computeLegacyScore } from '../legacy'
+import {
+  buildProjectionFromCatLines,
+  daysInCurrentWeek,
+  seasonStrengthPrior,
+} from '../matchups-projection'
 
 /* ─────────────────────────────────────────────────────────────────
    CATEGORY MAPPING — Yahoo MLB stat_id → editorial canonical id
@@ -282,6 +288,12 @@ async function buildYahooLeagueData(
   // Playoff cutoff from settings; fall back to half the league.
   const playoffCutoff = readPlayoffCutoff(leagueSettingsRaw, teamList.length)
 
+  // Regular-season end week. Yahoo's `metadata.endWeek` is the END
+  // of the entire league (regular + playoffs); for "weeks left in
+  // the regular season" we want the week BEFORE playoffs start.
+  // `playoff_start_week` is on the settings object.
+  const regularSeasonEndWeek = readRegularSeasonEndWeek(leagueSettingsRaw, metadata.endWeek)
+
   // Walk every completed week's category matchups in parallel.
   const matchupsByWeek = await fetchAllCategoryMatchups(leagueKey, currentWeek)
 
@@ -332,7 +344,38 @@ async function buildYahooLeagueData(
         currentWeek,
         categories,
         catIdByStatId,
+        standings,
       )
+
+  // Previous-week matchups — finalized state. Drives the Monday LAST
+  // WEEK recap beat. Same builder; Yahoo's winner_team_key is set on
+  // closed matchups so status comes back as 'final'.
+  const matchupsPreviousWeek = isRoto || currentWeek <= 1
+    ? []
+    : buildCurrentWeekMatchups(
+        matchupsByWeek,
+        currentWeek - 1,
+        categories,
+        catIdByStatId,
+        standings,
+      )
+
+  // Per-week matchups — required for The Issue's reconstruction of
+  // archived weeks. Roto leagues skip (no per-week matchup concept).
+  // For everyone else, decode every week we have raw matchups for.
+  const matchupsByWeekDecoded: Record<string, CategoryLeagueDataMatchup[]> = {}
+  if (!isRoto) {
+    for (const w of matchupsByWeek.keys()) {
+      if (w < 1) continue
+      matchupsByWeekDecoded[String(w)] = buildCurrentWeekMatchups(
+        matchupsByWeek,
+        w,
+        categories,
+        catIdByStatId,
+        standings,
+      )
+    }
+  }
 
   // Weekly cats-won + league average (Home page chart).
   const { weeklyCatsWon, weeklyLeagueAverage } = buildWeeklyCatTallies(
@@ -424,13 +467,15 @@ async function buildYahooLeagueData(
     currentWeek,
     currentSeason,
     playoffCutoff,
-    regularSeasonEndWeek: metadata.endWeek,
+    regularSeasonEndWeek,
     teams: teamList,
     categories,
     standings,
     categoryRanks,
     seasonRankHistory,
     matchupsCurrentWeek,
+    matchupsPreviousWeek,
+    matchupsByWeek: matchupsByWeekDecoded,
     seasonHistory,
     teamCareerStats,
     managerLegacy,
@@ -446,6 +491,11 @@ async function buildYahooLeagueData(
   }
   // Snapshot delta — overnight cat-tips, matchup pulse, rank shifts.
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
+
+  // Matchup daily trajectory — reads this-week snapshots + current
+  // projection to populate dailyTrend on each matchup. Mutates in
+  // place. Non-fatal on any error; chart simply stays hidden.
+  await hydrateMatchupDailyTrends(opts?.leagueRowId, partialData)
 
   return {
     ...partialData,
@@ -638,6 +688,17 @@ function readPlayoffCutoff(rawSettings: any, teamCount: number): number {
   const n = parseInt(rawSettings?.num_playoff_teams ?? '', 10)
   if (Number.isFinite(n) && n > 0 && n <= teamCount) return n
   return Math.max(4, Math.floor(teamCount / 2))
+}
+
+/** Last week of the REGULAR season. Yahoo's `playoff_start_week` is
+ *  the first playoff week; one less is the last regular week. When
+ *  the setting isn't exposed, fall back to `endWeek - 3` (typical
+ *  3-week H2H playoff length) so "weeks left" doesn't claim playoff
+ *  weeks as regular ones. */
+function readRegularSeasonEndWeek(rawSettings: any, endWeek: number): number {
+  const psw = parseInt(rawSettings?.playoff_start_week ?? '', 10)
+  if (Number.isFinite(psw) && psw > 1) return psw - 1
+  return Math.max(1, endWeek - 3)
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -944,7 +1005,21 @@ function buildSeasonRankHistory(
   const history: CategoryLeagueDataWeeklyRanks[] = []
 
   for (const week of weeks) {
-    for (const m of matchupsByWeek.get(week) ?? []) {
+    const weekMatchups = matchupsByWeek.get(week) ?? []
+    // A week is "final" only when every matchup in it has a resolved
+    // outcome (winner_team_key set, or is_tied true). If even one
+    // matchup is still mid-week, we skip pushing a snapshot for it —
+    // the cumulative records are stale for that week and the chart
+    // endpoint would mis-label partial data as end-of-week ranks.
+    //
+    // This mirrors ESPN's behavior (the ESPN adapter only emits
+    // weeks where every matchup was decided) and CLAUDE.md's note
+    // about Yahoo's seasonRankHistory needing a similar filter.
+    const isFinalWeek = weekMatchups.length > 0 && weekMatchups.every(
+      (m) => m.is_tied === true || (m.winner_team_key !== undefined && m.winner_team_key !== null),
+    )
+
+    for (const m of weekMatchups) {
       if (!m.teams || m.teams.length < 2) continue
       const [a, b] = m.teams
       const aRec = cumulative.get(a.team_key)
@@ -961,6 +1036,8 @@ function buildSeasonRankHistory(
         bRec.wins++
       }
     }
+
+    if (!isFinalWeek) continue
 
     const snapshot = rawStandings
       .map((s) => {
@@ -1005,45 +1082,116 @@ function buildCurrentWeekMatchups(
   currentWeek: number,
   categories: CategoryLeagueDataCategory[],
   catIdByStatId: Map<string, YahooCatDef>,
+  standings: CategoryLeagueDataStanding[],
 ): CategoryLeagueDataMatchup[] {
   const list = matchupsByWeek.get(currentWeek) ?? []
   if (list.length === 0) return []
+
+  // Build the lower-better cat set + statId→catDef-with-canonical-id
+  // lookup once. catIdByStatId already maps stat_id → YahooCatDef.
+  const lowerBetterCatIds = new Set<string>()
+  for (const def of catIdByStatId.values()) {
+    if (!def.higherIsBetter) lowerBetterCatIds.add(def.id)
+  }
+
+  // For each canonical cat, pick a representative stat_id (the first
+  // one Yahoo defined for it). Used to read the per-team current value.
+  const primaryStatIdByCatId = new Map<string, string>()
+  for (const def of catIdByStatId.values()) {
+    if (!primaryStatIdByCatId.has(def.id) && def.statIds.length > 0) {
+      primaryStatIdByCatId.set(def.id, def.statIds[0])
+    }
+  }
+
+  const daysIn = daysInCurrentWeek()
   const out: CategoryLeagueDataMatchup[] = []
   for (let i = 0; i < list.length; i++) {
     const m = list[i]
     if (!m.teams || m.teams.length < 2) continue
     const [home, away] = m.teams
 
+    // Mid-week leader tally — what the UI displays as "5-2 cats".
     let homeCatWins = 0
     let awayCatWins = 0
     let ties = 0
     let decidedCount = 0
+    const winnerByCatId = new Map<string, 'home' | 'away' | 'tied'>()
     for (const sw of m.stat_winners ?? []) {
-      if (!catIdByStatId.has(String(sw.stat_id))) continue
+      const def = catIdByStatId.get(String(sw.stat_id))
+      if (!def) continue
       if (sw.is_tied) {
         ties++
         decidedCount++
+        winnerByCatId.set(def.id, 'tied')
       } else if (sw.winner_team_key === home.team_key) {
         homeCatWins++
         decidedCount++
+        winnerByCatId.set(def.id, 'home')
       } else if (sw.winner_team_key === away.team_key) {
         awayCatWins++
         decidedCount++
+        winnerByCatId.set(def.id, 'away')
       }
     }
 
-    const contested = Math.max(0, categories.length - decidedCount)
-    // Yahoo's `stat_winners` reflects the CURRENT mid-week leader per
-    // cat, not the end-of-week winner. So a mid-week matchup can have
-    // every cat "decided" (= someone is leading) without the matchup
-    // itself being final. Use `winner_team_key` (set only after the
-    // matchup closes) plus `is_tied` as the final signal.
     const isFinal = Boolean(m.winner_team_key) || m.is_tied === true
     const status: CategoryLeagueDataMatchup['status'] = isFinal
       ? 'final'
       : decidedCount > 0
       ? 'live'
       : 'upcoming'
+
+    // Per-cat lines — current values from each team's stats, status
+    // reflects LOCK state (decided-X only after finalization).
+    const catLines: CategoryLeagueDataMatchup['catLines'] = []
+    for (const cat of categories) {
+      const statId = primaryStatIdByCatId.get(cat.id)
+      const homeRaw = statId ? home.stats?.[statId] : undefined
+      const awayRaw = statId ? away.stats?.[statId] : undefined
+      const homeCurrent = homeRaw != null && homeRaw !== '' ? parseFloat(homeRaw) : 0
+      const awayCurrent = awayRaw != null && awayRaw !== '' ? parseFloat(awayRaw) : 0
+      const direction = winnerByCatId.get(cat.id)
+      let lineStatus: CategoryLeagueDataCatLine['status'] = 'contested'
+      if (isFinal) {
+        if (direction === 'home') lineStatus = 'decided-home'
+        else if (direction === 'away') lineStatus = 'decided-away'
+        // (tied at final → still contested in the data; rare and benign)
+      }
+      catLines.push({
+        catId: cat.id,
+        homeCurrent: Number.isFinite(homeCurrent) ? homeCurrent : 0,
+        awayCurrent: Number.isFinite(awayCurrent) ? awayCurrent : 0,
+        status: lineStatus,
+      })
+    }
+
+    // Contested cats during a live week ≈ all non-locked, non-punted
+    // cats. Yahoo's mid-week "decided" cats are still in play, so the
+    // count is categories.length minus actually-locked cats only.
+    const lockedHomeOrAway = catLines.filter(
+      (l) => l.status === 'decided-home' || l.status === 'decided-away',
+    ).length
+    const contested = Math.max(0, categories.length - lockedHomeOrAway)
+
+    // Season-strength prior — Bradley-Terry from the standings'
+    // winPcts. Without this every Monday matchup reads 50/50 because
+    // no cats have moved yet; with it, the #1 team is the favorite
+    // over the #12 team even before the week's first pitch.
+    const homeStanding = standings.find((s) => s.teamId === home.team_key)
+    const awayStanding = standings.find((s) => s.teamId === away.team_key)
+    const homePrior = seasonStrengthPrior(homeStanding?.winPct, awayStanding?.winPct)
+
+    // Honest projection: per-cat probabilities weighted by current
+    // direction + days into the scoring week, blended with the
+    // season-strength prior so early-week reads carry real signal.
+    const projection = buildProjectionFromCatLines({
+      catLines,
+      lowerBetterCats: lowerBetterCatIds,
+      daysInWeek: daysIn,
+      weekLength: 7,
+      isFinal,
+      homePrior,
+    })
 
     out.push({
       id: `wk${currentWeek}-${i}`,
@@ -1054,10 +1202,11 @@ function buildCurrentWeekMatchups(
       awayCatWins,
       ties,
       contestedCount: contested,
-      // catLines intentionally undefined — Yahoo's per-stat current
-      // values are in `m.teams[i].stats[statId]` but the editorial
-      // pipeline doesn't yet require the per-cat line breakout from
-      // Yahoo. Follow-up: wire when consumers need it.
+      catLines,
+      homeWinProb: projection.homeWinProb,
+      awayWinProb: projection.awayWinProb,
+      homeProj: projection.homeProj,
+      awayProj: projection.awayProj,
     })
   }
   return out
@@ -1187,13 +1336,19 @@ function seasonRecordFromStandings(
   const basement = sorted[sorted.length - 1]
   if (!champion || !basement) return null
 
-  const year =
-    parseInt(meta.season || '', 10) ||
-    parseInt(currentMetadata.season || '', 10) ||
-    new Date().getFullYear()
+  // The fallback chain previously included `currentMetadata.season`,
+  // which silently re-tagged a missing prior-year metadata record as
+  // the CURRENT year — inflating Vol because the masthead's "Vol N"
+  // math treats every history entry as a prior season. The current
+  // year is never a "prior season" by definition, so we now drop
+  // the record when we can't resolve a real prior year.
+  const parsedYear = parseInt(meta.season || '', 10)
+  if (!Number.isFinite(parsedYear) || parsedYear <= 0) return null
+  const currentYear = parseInt(currentMetadata.season || '', 10)
+  if (Number.isFinite(currentYear) && parsedYear >= currentYear) return null
 
   return {
-    year,
+    year: parsedYear,
     championTeamId: champion.team_key,
     championRecord: recordString(champion),
     runnerUpTeamId: runnerUp.team_key,

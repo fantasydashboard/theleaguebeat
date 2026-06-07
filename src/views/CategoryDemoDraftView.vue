@@ -53,7 +53,7 @@
     </header>
 
     <!-- ─── 2. AWARDS ─────────────────────────────────────────── -->
-    <section class="awards" aria-labelledby="awards-heading">
+    <section v-if="showAwardsSection" class="awards" aria-labelledby="awards-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="awards-heading">The awards</p>
         <h2 class="section-headline">Three things you need to know.</h2>
@@ -61,7 +61,7 @@
 
       <div class="awards-grid">
         <!-- Best draft (full-width hero) -->
-        <article class="award-best">
+        <article v-if="bestTeam" class="award-best">
           <span class="award-best-chrome-top" aria-hidden="true"></span>
           <span class="award-best-chrome-bottom" aria-hidden="true"></span>
           <span class="award-best-glow" aria-hidden="true"></span>
@@ -118,6 +118,7 @@
 
         <!-- Steal of the draft -->
         <article
+          v-if="stealPick && stealTeam"
           class="award-steal"
           tabindex="0"
           role="button"
@@ -161,6 +162,7 @@
 
         <!-- Bust of the draft -->
         <article
+          v-if="bustPick && bustTeam"
           class="award-bust"
           tabindex="0"
           role="button"
@@ -773,30 +775,46 @@ function collectUserIdentity() {
   }
 }
 
-/* ─── Awards ─────────────────────────────────────────────── */
+/* ─── Awards ───────────────────────────────────────────────
+   Same gating discipline as the Power Rankings MOVEMENT section:
+   when there's no live award (best draft / steal / bust) AND we
+   have a live league, return null so the card can hide rather than
+   leak the fixture's pick into the user's real league view. Pure
+   fixture mode (no liveData) keeps the fixture fallback so the
+   demo page reads as before. */
 const bestTeam = computed(() => {
   const id = liveDraftEditorial.value.awards.bestDraft?.teamId
-    ?? categoryDraftAwards.bestDraft.teamId
-  return getTeam(id)
+    ?? (liveData.value ? null : categoryDraftAwards.bestDraft.teamId)
+  return id ? getTeam(id) : null
 })
 const stealPick = computed(() => {
   const live = liveDraftEditorial.value.awards.steal
+  if (!live && liveData.value) return null
   const pid = live?.playerId ?? categoryDraftAwards.steal.playerId
   return draftPicks2026.find((p) => p.playerId === pid)
-    // When the live pick isn't in the fixture (real league), synthesize.
     ?? synthesizePickFromLive(live)
-    // Final fixture fallback so the template never crashes.
-    ?? draftPicks2026.find((p) => p.playerId === categoryDraftAwards.steal.playerId)!
+    ?? draftPicks2026.find((p) => p.playerId === categoryDraftAwards.steal.playerId)
+    ?? null
 })
-const stealTeam = computed(() => getTeam(stealPick.value.draftedByTeamId))
+const stealTeam = computed(() => stealPick.value ? getTeam(stealPick.value.draftedByTeamId) : null)
 const bustPick  = computed(() => {
   const live = liveDraftEditorial.value.awards.bust
+  if (!live && liveData.value) return null
   const pid = live?.playerId ?? categoryDraftAwards.bust.playerId
   return draftPicks2026.find((p) => p.playerId === pid)
     ?? synthesizePickFromLive(live)
-    ?? draftPicks2026.find((p) => p.playerId === categoryDraftAwards.bust.playerId)!
+    ?? draftPicks2026.find((p) => p.playerId === categoryDraftAwards.bust.playerId)
+    ?? null
 })
-const bustTeam  = computed(() => getTeam(bustPick.value.draftedByTeamId))
+const bustTeam  = computed(() => bustPick.value ? getTeam(bustPick.value.draftedByTeamId) : null)
+
+/** Hide the entire awards header when no award has data — prevents
+ *  the "Three things you need to know." headline from sitting above
+ *  an empty grid in a live league where the editorial layer didn't
+ *  surface any awards. */
+const showAwardsSection = computed(
+  () => !!bestTeam.value || !!stealPick.value || !!bustPick.value,
+)
 
 /* Cross-source fallback: when the live editorial points at a pick
    we don't have in the fixture, build a minimal draft-pick shape

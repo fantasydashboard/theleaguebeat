@@ -21,11 +21,11 @@
         <span class="issue-masthead-sep" aria-hidden="true">·</span>
         <span>{{ meta.year }}</span>
         <span
-          v-if="updatedLabel"
+          v-if="freshnessLabel"
           class="issue-masthead-meta-dim"
         >
           <span class="issue-masthead-sep" aria-hidden="true">·</span>
-          <span>UPDATED {{ updatedLabel }}</span>
+          <span>{{ freshnessLabel }}</span>
         </span>
       </div>
 
@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useIssueStore } from '@/stores/issueState'
 
 /** First-paint fallback — passed by the layout from the cached league
@@ -96,15 +97,42 @@ const props = defineProps<{
    *  page-level share URL. When omitted (demo route, unauthenticated
    *  visitor) the share button is hidden. */
   leagueId?: string
+  /** When true, the masthead displays the most-recently-PUBLISHED
+   *  issue (the in-progress week minus 1) rather than the in-progress
+   *  week itself. The new Issue page sets this so the masthead and
+   *  the page title agree. Other routes leave it false. */
+  showPublishedIssue?: boolean
 }>()
 
 const issueStore = useIssueStore()
+const route = useRoute()
 
 const meta = computed(() => {
-  // Prefer live store values; fall back to props from the layout's
-  // cached league row when the view hasn't published yet.
-  const week =
+  // Prefer live store; fall back to props from the layout's cached
+  // league row when the view hasn't published yet. When
+  // `showPublishedIssue` is set, subtract 1 — the new Issue page
+  // displays the just-published issue (currentWeek - 1), not the
+  // in-progress week. When the URL specifies an explicit archived
+  // issue (`/the-issue/:weekNumber`), trust that over the computed
+  // latest so the masthead agrees with the page being read.
+  const rawWeek =
     issueStore.currentWeek ?? props.fallbackWeek ?? null
+  let week: number | null
+  if (rawWeek == null) {
+    week = null
+  } else if (props.showPublishedIssue) {
+    const archived = route.params.weekNumber
+    if (typeof archived === 'string' && archived.length > 0) {
+      const parsed = parseInt(archived, 10)
+      week = Number.isFinite(parsed) && parsed >= 1
+        ? parsed
+        : Math.max(1, rawWeek - 1)
+    } else {
+      week = Math.max(1, rawWeek - 1)
+    }
+  } else {
+    week = rawWeek
+  }
   const season =
     issueStore.currentSeason ??
     props.fallbackSeason ??
@@ -131,6 +159,34 @@ const updatedLabel = computed(() => {
   const ts = issueStore.lastUpdated ?? props.fallbackUpdated
   if (!ts) return null
   return formatRelativeUpdated(ts)
+})
+
+/** The freshness label respects the surface's metabolism. The Issue
+ *  is a frozen, weekly artifact — "PUBLISHED MON, MMM D" is honest
+ *  *and* specific. The Beat and other live surfaces use the relative
+ *  "UPDATED X AGO" timestamp.
+ *
+ *  Publish day for the most-recently-published issue is "the Monday
+ *  on or before now". Derived rather than stored, since V0 doesn't
+ *  yet persist real publish timestamps. */
+const PUBLISHED_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function mostRecentMonday(now: Date): Date {
+  const d = new Date(now)
+  const day = d.getDay()
+  const back = day === 0 ? 6 : day - 1
+  d.setDate(d.getDate() - back)
+  d.setHours(11, 0, 0, 0)
+  return d
+}
+const freshnessLabel = computed<string | null>(() => {
+  if (props.showPublishedIssue) {
+    const publishDate = mostRecentMonday(new Date())
+    const m = PUBLISHED_MONTHS[publishDate.getMonth()]
+    const d = publishDate.getDate()
+    return `PUBLISHED MON, ${m.toUpperCase()} ${d}`
+  }
+  if (!updatedLabel.value) return null
+  return `UPDATED ${updatedLabel.value}`
 })
 
 /* ─────────────────────────────────────────────────────────────────

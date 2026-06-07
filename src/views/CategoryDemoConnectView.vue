@@ -23,7 +23,7 @@
           :key="league.id"
           class="saved-leagues-row"
         >
-          <router-link :to="`/leagues/${league.id}/home`" class="saved-leagues-link">
+          <router-link :to="`/leagues/${league.id}/the-beat`" class="saved-leagues-link">
             <span class="saved-leagues-name">{{ league.league_name }}</span>
             <span class="saved-leagues-meta">
               {{ platformLabel(league.platform) }} · {{ league.sport }}
@@ -240,21 +240,24 @@
           >
             <option value="" disabled>Select a league…</option>
             <option
-              v-for="league in yahooLeagues"
+              v-for="league in yahooLeaguesClassified"
               :key="league.league_key"
               :value="league.league_key"
+              :disabled="!league.supported"
             >
-              {{ league.name }} ({{ league.season }})
+              {{ league.name }} ({{ league.season }}){{ league.suffix }}
             </option>
           </select>
           <p class="form-help">
-            Only H2H category baseball leagues are fully supported right
-            now. Other formats may render with limited data.
+            The League Beat covers <strong>H2H Categories baseball</strong>
+            today. Other formats are tagged in the list — they'll unlock
+            on the roadmap (football H2H Points in September, then H2H
+            Points baseball, then rotisserie if demand argues for it).
           </p>
           <button
             type="button"
             class="form-submit"
-            :disabled="!selectedYahooLeagueKey"
+            :disabled="!selectedYahooLeagueKey || !selectedYahooLeagueSupported"
             @click="onYahooSubmit"
           >
             Use this league
@@ -522,6 +525,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { yahooService } from '@/services/yahoo'
+import { classifyLeagueSupport, type UnsupportedKind } from '@/utils/leagueSupport'
 import {
   isExtensionInstalled,
   getEspnCookiesFromExtension,
@@ -583,6 +587,48 @@ const yahooLoading = ref(false)
 const yahooError = ref<string | null>(null)
 const yahooLeagues = ref<YahooLeagueOption[]>([])
 const selectedYahooLeagueKey = ref('')
+
+/** Yahoo leagues with their support classification attached. Drives the
+ *  picker UI: supported leagues are selectable, unsupported are listed
+ *  with a "coming soon" tag and disabled — so the user can see what
+ *  TLB covers without going through OAuth + connect only to hit the
+ *  notice page. */
+const yahooLeaguesClassified = computed(() =>
+  yahooLeagues.value.map((l) => {
+    const support = classifyLeagueSupport({ sport: 'baseball', scoring_type: l.scoring_type })
+    const unsupportedKind = support.ok ? null : support.kind
+    const suffix = unsupportedKindSuffix(unsupportedKind)
+    return {
+      ...l,
+      supported: support.ok,
+      unsupportedKind,
+      suffix,
+    }
+  }),
+)
+
+/** Short suffix appended to unsupported league names in the dropdown
+ *  so the user knows why a league is disabled at a glance. */
+function unsupportedKindSuffix(kind: UnsupportedKind | null): string {
+  if (!kind) return ''
+  switch (kind) {
+    case 'roto':        return ' — Rotisserie, not covered yet'
+    case 'points':      return ' — H2H Points, not covered yet'
+    case 'football':    return ' — Football coverage lands in September'
+    case 'other-sport': return ' — not covered yet'
+    case 'unknown':     return ' — format not recognized yet'
+  }
+}
+
+/** True when the currently-selected Yahoo league is supported, so the
+ *  "Use this league" button stays enabled. Belt-and-suspenders — the
+ *  unsupported options are disabled too. */
+const selectedYahooLeagueSupported = computed(() => {
+  const sel = yahooLeaguesClassified.value.find(
+    (l) => l.league_key === selectedYahooLeagueKey.value,
+  )
+  return sel?.supported ?? false
+})
 
 // ─── ESPN state ─────────────────────────────────────────────────
 // We track the two prerequisites independently so the UI can show
@@ -710,7 +756,7 @@ async function onSubmit(): Promise<void> {
     }
   }
   if (leagueRowId) {
-    router.push(`/leagues/${leagueRowId}/home`)
+    router.push(`/leagues/${leagueRowId}/the-beat`)
   } else {
     // Anonymous user or save failed — fall back to legacy query-param
     // route so the demo still works without the persisted record.
@@ -815,7 +861,7 @@ async function onYahooSubmit(): Promise<void> {
     }
   }
   if (leagueRowId) {
-    router.push(`/leagues/${leagueRowId}/home`)
+    router.push(`/leagues/${leagueRowId}/the-beat`)
   } else {
     router.push({
       path: '/demo-categories/home',
@@ -866,7 +912,7 @@ async function onEspnSubmit(): Promise<void> {
       }
     }
     if (leagueRowId) {
-      router.push(`/leagues/${leagueRowId}/home`)
+      router.push(`/leagues/${leagueRowId}/the-beat`)
     } else {
       router.push({
         path: '/demo-categories/home',

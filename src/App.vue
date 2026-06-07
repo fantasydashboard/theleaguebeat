@@ -18,6 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import AuthModal from '@/components/AuthModal.vue'
+import { supabase } from '@/lib/supabase'
 
 const authStore = useAuthStore()
 const platformsStore = usePlatformsStore()
@@ -40,6 +41,50 @@ async function onSignedIn() {
     ])
   } catch (err) {
     console.warn('[App] post-signin hydration failed:', err)
+  }
+  // Drain any pending format-interest signal the user dropped before
+  // signing in (e.g. they hit the "not yet supported" notice for a
+  // roto league and clicked Email me). Real demand data feeds the
+  // roadmap; failures are silent (table missing in dev, RLS misfit).
+  void drainPendingFormatInterest()
+}
+
+async function drainPendingFormatInterest() {
+  try {
+    const raw = window.localStorage.getItem('tlb_pending_format_interest')
+    if (!raw) return
+    const payload = JSON.parse(raw) as {
+      requested_kind?: string
+      sport?: string | null
+      scoring_type?: string | null
+      source?: string
+    }
+    if (!payload.requested_kind) {
+      window.localStorage.removeItem('tlb_pending_format_interest')
+      return
+    }
+    if (!supabase) {
+      window.localStorage.removeItem('tlb_pending_format_interest')
+      return
+    }
+    const userId = authStore.user?.id
+    if (!userId) return    // sign-in didn't yield a user; keep the signal for next try
+    const { error } = await supabase
+      .from('format_interest')
+      .insert({
+        user_id: userId,
+        requested_kind: payload.requested_kind,
+        sport: payload.sport ?? null,
+        scoring_type: payload.scoring_type ?? null,
+        source: payload.source ?? 'unsupported-league-notice',
+      })
+    // 23505 = duplicate key (already recorded their interest) — happy path
+    if (error && error.code !== '23505') {
+      console.warn('[App] format_interest insert failed:', error)
+    }
+    window.localStorage.removeItem('tlb_pending_format_interest')
+  } catch (err) {
+    console.warn('[App] drainPendingFormatInterest threw:', err)
   }
 }
 

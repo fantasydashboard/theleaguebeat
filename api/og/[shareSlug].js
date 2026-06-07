@@ -66,6 +66,34 @@ async function fetchLeague(shareSlug) {
   }
 }
 
+/** Most-recently-archived issue number for this league, if any.
+ *  Reads from `league_issues` (the new archive table). Returns null
+ *  when no snapshots exist yet — caller renders the generic eyebrow
+ *  ("This week's issue") instead of an issue number. */
+async function fetchLatestIssueNumber(shareSlug) {
+  const SUPABASE_URL = process.env.VITE_SUPABASE_URL
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null
+
+  const url = `${SUPABASE_URL}/rest/v1/league_issues?league_id=eq.${encodeURIComponent(shareSlug)}&select=week_number,year&order=year.desc,week_number.desc&limit=1`
+
+  try {
+    const r = await fetch(url, {
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        Accept: 'application/json',
+      },
+    })
+    if (!r.ok) return null
+    const rows = await r.json()
+    if (!Array.isArray(rows) || rows.length === 0) return null
+    return rows[0].week_number ?? null
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req) {
   const url = new URL(req.url)
   const segments = url.pathname.split('/').filter(Boolean)
@@ -73,12 +101,15 @@ export default async function handler(req) {
 
   const isUuid = shareSlug && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shareSlug)
 
-  const league = isUuid ? await fetchLeague(shareSlug) : null
+  const [league, latestIssue] = isUuid
+    ? await Promise.all([fetchLeague(shareSlug), fetchLatestIssueNumber(shareSlug)])
+    : [null, null]
 
   const leagueName = league?.league_name || 'A league in The League Beat'
   const metaLine = league
     ? `${platformLabel(league.platform)} · ${titleizeSport(league.sport)} · ${league.season}`
     : 'The online magazine your league deserves'
+  const eyebrowText = latestIssue != null ? `Issue ${latestIssue}` : "This week's issue"
 
   // Brand tokens — mirror the league shell. Plain JS to avoid JSX in api.
   const INK_1 = 'oklch(0.97 0.005 90)'
@@ -172,7 +203,7 @@ export default async function handler(req) {
           textTransform: 'uppercase',
           color: ACCENT_PRIMARY,
         },
-      }, 'This week\'s issue'),
+      }, eyebrowText),
       h('div', {
         style: {
           fontFamily: '"Barlow Condensed", "Barlow", sans-serif',

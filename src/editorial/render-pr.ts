@@ -36,6 +36,7 @@ import {
   type PRTeamIdentity,
   type PRQuickReadKind,
 } from './pr.ts'
+import { stripEmojiForEditorial } from './detect-lede.ts'
 
 /* ─────────────────────────────────────────────────────────────────
    PUBLIC OUTPUT TYPES
@@ -142,14 +143,22 @@ function runPipeline(data: CategoryLeagueData): {
   const subHeadlineCandidates = detectPRSubHeadline(data)
   const quickReadCandidates = detectPRQuickReads(data)
 
-  /* 2. Select */
-  const heroWinner = selectHighest(heroCandidates)
-  const heaterWinner = selectHighestOfKind(pulseCandidates, 'pulse-heater')
-  const longFallWinner = selectHighestOfKind(pulseCandidates, 'pulse-long-fall')
-  const steadyWinner = selectHighestOfKind(pulseCandidates, 'pulse-steady-hand')
-  const hittingWinner = selectHighestOfKind(dynastyCandidates, 'dynasty-hitting-king')
-  const pitchingWinner = selectHighestOfKind(dynastyCandidates, 'dynasty-pitching-king')
-  const puntWinner = selectHighestOfKind(dynastyCandidates, 'dynasty-punt-kings')
+  /* 2. Select — with cross-slot de-duplication so no single team
+     headlines two beats. Claim teams in priority order: the cover first,
+     then the pulse beats, then the category dynasties. Each slot takes
+     the highest-weight candidate whose team has not already been used. */
+  const used = new Set<string>()
+  const claim = <T extends { context: { teamId?: string } }>(w: T | null): T | null => {
+    if (w?.context.teamId) used.add(w.context.teamId)
+    return w
+  }
+  const heroWinner = claim(selectHighest(heroCandidates))
+  const heaterWinner = claim(selectHighestOfKind(pulseCandidates, 'pulse-heater', used))
+  const longFallWinner = claim(selectHighestOfKind(pulseCandidates, 'pulse-long-fall', used))
+  const steadyWinner = claim(selectHighestOfKind(pulseCandidates, 'pulse-steady-hand', used))
+  const hittingWinner = claim(selectHighestOfKind(dynastyCandidates, 'dynasty-hitting-king', used))
+  const pitchingWinner = claim(selectHighestOfKind(dynastyCandidates, 'dynasty-pitching-king', used))
+  const puntWinner = claim(selectHighestOfKind(dynastyCandidates, 'dynasty-punt-kings', used))
   const subHeadlineWinner = selectHighest(subHeadlineCandidates)
   const quickReadWinners = selectQuickReadPills(quickReadCandidates)
 
@@ -217,11 +226,16 @@ function selectHighest<TKind extends string, TCtx>(
   return candidates.reduce((best, c) => (c.weight > best.weight ? c : best))
 }
 
-function selectHighestOfKind<TKind extends string, TCtx>(
+function selectHighestOfKind<TKind extends string, TCtx extends { teamId?: string }>(
   candidates: Array<StoryCandidate<TKind, TCtx>>,
   kind: TKind,
+  used?: Set<string>,
 ): StoryCandidate<TKind, TCtx> | null {
-  return selectHighest(candidates.filter((c) => c.kind === kind))
+  return selectHighest(
+    candidates.filter(
+      (c) => c.kind === kind && (!used || !c.context.teamId || !used.has(c.context.teamId)),
+    ),
+  )
 }
 
 /** One winning quick-read per PRQuickReadKind pill. */
@@ -248,7 +262,14 @@ function selectQuickReadPills(
 ───────────────────────────────────────────────────────────────── */
 
 function teamToPRTeam(t: CategoryLeagueDataTeam): PRTeamIdentity {
-  return { name: t.name, owner: t.ownerName }
+  // Strip emojis from team names in editorial copy. The avatar IS
+  // the visual identity; emojis like 🔥 baked into the name read as
+  // unedited when they end up inside a column ("🔥 Jazz on my
+  // TittyWittys holds the line"). Falls back to the raw name when
+  // stripping leaves nothing (rare — happens if the team name is
+  // entirely emoji). Same discipline as the LEDE detector.
+  const cleaned = stripEmojiForEditorial(t.name)
+  return { name: cleaned || t.name, owner: t.ownerName }
 }
 
 const REGULAR_SEASON_WEEKS = 12
@@ -267,6 +288,11 @@ function basePRContext(data: CategoryLeagueData, teamId: string): PRContext {
     : []
 
   const wk = data.currentWeek
+  // Use the league's real regular-season end when available; the 12-week
+  // default is only a fallback for fixtures / leagues that don't report it.
+  const seasonEnd = data.regularSeasonEndWeek && data.regularSeasonEndWeek > 0
+    ? data.regularSeasonEndWeek
+    : REGULAR_SEASON_WEEKS
   const week1Rank = prDetectionHelpers.rankAtWeek(data, teamId, 1) ?? standing.rank
   const prevRank = prDetectionHelpers.rankAtWeek(data, teamId, wk - 1) ?? standing.rank
   const seasonBest = prDetectionHelpers.seasonBestRank(data, teamId)
@@ -293,8 +319,9 @@ function basePRContext(data: CategoryLeagueData, teamId: string): PRContext {
     bleedingCats,
     magnitude: 'solid',
     currentWeek: wk,
-    totalWeeks: REGULAR_SEASON_WEEKS,
-    weeksUntilPlayoffs: Math.max(0, REGULAR_SEASON_WEEKS - wk),
+    totalWeeks: seasonEnd,
+    weeksUntilPlayoffs: Math.max(0, seasonEnd - wk),
+    totalCategories: data.categories.length,
   }
 }
 
@@ -334,6 +361,32 @@ function renderHero(
     protagonist: base.team,
     antagonist: antagonist ? teamToPRTeam(antagonist) : undefined,
     framing: hc.framing,
+  }
+
+  // 'the-race' context — the leader being chased + the open seats.
+  if (kind === 'hero-the-race') {
+    const leader = hc.raceLeaderId ? data.teams.find((t) => t.id === hc.raceLeaderId) : undefined
+    const cutlineTeam = hc.raceCutlineId ? data.teams.find((t) => t.id === hc.raceCutlineId) : undefined
+    const leaderClean = leader ? stripEmojiForEditorial(leader.name) || leader.name : undefined
+    const cutlineClean = cutlineTeam ? stripEmojiForEditorial(cutlineTeam.name) || cutlineTeam.name : undefined
+    base.race = {
+      leaderName: leaderClean ?? 'The leader',
+      leaderWeeksAtTop: hc.raceLeaderWeeks ?? 0,
+      contenderCount: hc.raceContenderCount ?? 0,
+      seatsOpen: hc.raceSeatsOpen ?? 0,
+      cutlineName: cutlineClean,
+    }
+  }
+
+  // 'your-team' context — the reader's angle + nearest rival.
+  if (kind === 'hero-your-team') {
+    const rival = hc.rivalTeamId ? data.teams.find((t) => t.id === hc.rivalTeamId) : undefined
+    const rivalClean = rival ? stripEmojiForEditorial(rival.name) || rival.name : undefined
+    base.yourTeam = {
+      angle: hc.yourTeamAngle ?? 'steady',
+      rivalName: rivalClean,
+      rivalGap: hc.rivalGap,
+    }
   }
 
   // Magnitude bumps for hero kinds with obvious "huge moment" signals.
@@ -382,22 +435,105 @@ function renderHero(
 
 function emptyHero(data: CategoryLeagueData): RenderedPRHeroCopy {
   // Safety net for the case where the hero slot has zero candidates
-  // (no movement at all). Defaults to current #1 in a flat tone.
-  const top = data.standings.find((s) => s.rank === 1)
+  // (no movement at all). Branches by lead margin so two leagues with
+  // a locked-in #1 don't read identically — a 20+ cat-win lead is a
+  // different story from a 3-cat lead, and a 6-week W-streak reads
+  // differently from a 10-week one.
+  const sorted = [...data.standings].sort((a, b) => a.rank - b.rank)
+  const top = sorted[0]
+  const second = sorted[1]
   const topTeam = top ? data.teams.find((t) => t.id === top.teamId) : undefined
-  const name = topTeam?.name ?? 'The leader'
+  const rawName = topTeam?.name ?? 'The leader'
+  const name = stripEmojiForEditorial(rawName) || rawName
+  const streakLabel = top && top.streak.type !== 'T' && top.streak.length > 0
+    ? `${top.streak.type}${top.streak.length}`
+    : '—'
+
+  const catGap = top && second ? top.catWins - second.catWins : 0
+  const winStreak = top?.streak.type === 'W' ? top.streak.length : 0
+  // Tier bands tuned to typical category H2H spreads: ~20+ is a
+  // genuine blowout (the chase pack has run out of weeks), 8-19 is a
+  // real but workable lead, <8 is competitive.
+  const tier: 'blowout' | 'comfortable' | 'tight' =
+    catGap >= 20 ? 'blowout' : catGap >= 8 ? 'comfortable' : 'tight'
+
+  const headline = pickEmptyHeroHeadline(name, tier, winStreak)
+  const body = pickEmptyHeroBody(data.currentWeek, tier, winStreak, catGap, second, data)
+  const eyebrow = pickEmptyHeroEyebrow(tier, winStreak)
+
+  // First chip — for a stationary #1 the "0 SPOTS" reading is
+  // tautological (the leader can't move up). Swap in the lead margin
+  // when one exists; otherwise keep the spots count for non-leader
+  // heroes. Promoted from CategoryDemoPowerRankingsView so the same
+  // logic applies on the new Issue page.
+  const leaderChip =
+    top && second && catGap > 0
+      ? { label: 'cats over #2', value: `+${catGap}` }
+      : { label: 'spots', value: '0' }
+
   return {
-    eyebrow: 'THE LADDER',
-    headline: `${name} holds the line.`,
-    body: `Week ${data.currentWeek}. Nobody is climbing fast enough to flip the top.`,
+    eyebrow,
+    headline,
+    body,
     statChips: [
-      { label: 'spots', value: '0' },
-      { label: 'streak', value: '—' },
+      leaderChip,
+      { label: 'streak', value: streakLabel },
       { label: 'this season', value: top ? `${top.catWins}-${top.catLosses}${top.catTies > 0 ? `-${top.catTies}` : ''}` : '—' },
     ],
     kicker: `WEEK ${data.currentWeek}`,
     teamId: top?.teamId,
   }
+}
+
+function pickEmptyHeroEyebrow(
+  tier: 'blowout' | 'comfortable' | 'tight',
+  winStreak: number,
+): string {
+  if (tier === 'blowout') return winStreak >= 5 ? 'NOBODY CLOSE' : 'LAPPING THE FIELD'
+  if (tier === 'comfortable') return winStreak >= 5 ? 'THE STREAK CONTINUES' : 'THE LADDER'
+  return 'ONE SWING AWAY'
+}
+
+function pickEmptyHeroHeadline(
+  name: string,
+  tier: 'blowout' | 'comfortable' | 'tight',
+  winStreak: number,
+): string {
+  if (tier === 'blowout') {
+    if (winStreak >= 7) return `${name} is the season.`
+    return `${name} laps the field.`
+  }
+  if (tier === 'comfortable') {
+    if (winStreak >= 5) return `${name} keeps extending.`
+    return `${name} stays on top.`
+  }
+  return `${name} clings to it.`
+}
+
+function pickEmptyHeroBody(
+  week: number,
+  tier: 'blowout' | 'comfortable' | 'tight',
+  winStreak: number,
+  catGap: number,
+  second: CategoryLeagueData['standings'][number] | undefined,
+  data: CategoryLeagueData,
+): string {
+  if (tier === 'blowout') {
+    if (winStreak >= 7) {
+      return `Week ${week}. ${winStreak} straight matchup wins. The chase pack has run out of weeks.`
+    }
+    return `Week ${week}. ${catGap}-cat margin on #2. The gap is no longer a race.`
+  }
+  if (tier === 'comfortable') {
+    if (winStreak >= 5) {
+      return `Week ${week}. ${winStreak} straight wins and a ${catGap}-cat cushion. The chasers stay close, not closer.`
+    }
+    const secondTeam = second ? data.teams.find((t) => t.id === second.teamId) : undefined
+    const secondName = secondTeam ? stripEmojiForEditorial(secondTeam.name) || secondTeam.name : '#2'
+    return `Week ${week}. ${secondName} is the only team in the same conversation. They are still chasing.`
+  }
+  // tight
+  return `Week ${week}. ${catGap}-cat lead on #2. The top is one swing away from flipping.`
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -442,6 +578,15 @@ function renderPulseBeat(
   if (pc.streakType && pc.streakLength) {
     base.streak = { type: pc.streakType, length: pc.streakLength }
   }
+
+  // Quiet backfill — this team is just the relative best/worst/steadiest
+  // in a week with no headline-grade signal. Build a matter-of-fact line
+  // directly (per EDITORIAL.md "when a story has no drama") rather than
+  // draw from the streak-heavy variant pool, which would overstate.
+  if (pc.quiet) {
+    return renderQuietPulse(kind, base, pc)
+  }
+
   // Magnitude bumps so the louder variants surface.
   if (kind === 'pulse-heater' && (pc.streakLength ?? 0) >= 5) base.magnitude = 'huge'
   if (kind === 'pulse-long-fall' && Math.abs(pc.rankDeltaSinceWeek1) >= 5) base.magnitude = 'huge'
@@ -453,6 +598,35 @@ function renderPulseBeat(
     body: rendered.body,
     teamId: pc.teamId,
   }
+}
+
+/** Matter-of-fact copy for a backfilled pulse beat (no strong signal).
+ *  Accurate to the team's real season movement; never overstates. */
+function renderQuietPulse(
+  kind: PRKind,
+  base: PRContext,
+  pc: PRPulseDetectionContext,
+): RenderedPRBeat {
+  const name = base.team.name
+  const rec = `${base.catWins}-${base.catLosses}${base.catTies > 0 ? `-${base.catTies}` : ''}`
+  const up = pc.rankDeltaSinceWeek1
+  let eyebrow = ''
+  let headline = ''
+  let body = ''
+  if (kind === 'pulse-heater') {
+    eyebrow = 'TOP OF THE MOVEMENT'
+    headline = up > 0 ? `${name} has climbed ${up} since week 1.` : `${name} holds the steadiest momentum in the league.`
+    body = `${name}: ${rec}. The closest thing to a hot hand on a quiet week.`
+  } else if (kind === 'pulse-long-fall') {
+    eyebrow = 'COOLING OFF'
+    headline = up < 0 ? `${name} has slipped ${Math.abs(up)} since week 1.` : `${name} has cooled the most lately.`
+    body = `${name}: ${rec}. The board is trending the wrong way, quietly.`
+  } else {
+    eyebrow = 'STEADY HAND'
+    headline = `${name} sits at #${base.currentRank} and rarely moves.`
+    body = `${name}: ${rec}. The most predictable seed on the board.`
+  }
+  return { eyebrow, headline, body, teamId: pc.teamId }
 }
 
 function renderLongFallBeat(

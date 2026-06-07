@@ -1,9 +1,14 @@
 <template>
   <div class="archive">
+    <router-link
+      v-if="chroniclesBackLink"
+      :to="chroniclesBackLink"
+      class="chronicles-back"
+    >← Chronicles</router-link>
     <header class="archive-head">
       <p class="archive-eyebrow">
         <span class="archive-eyebrow-dot" aria-hidden="true"></span>
-        The collection
+        Chronicles · Records
       </p>
       <h1 class="archive-headline">Every issue you've held.</h1>
       <p class="archive-deck">
@@ -104,6 +109,15 @@ import { leagueFoundedSeason } from '@/utils/leagueAge'
 const route = useRoute()
 const leaguesStore = useLeaguesStore()
 const issueStore = useIssueStore()
+
+/** Breadcrumb back to the Chronicles landing page when this view was
+ *  opened from /chronicles. Anchors /archive as a deeper view inside
+ *  Chronicles rather than a standalone surface. */
+const chroniclesBackLink = computed<string | null>(() => {
+  const leagueId = route.params.leagueId
+  if (typeof leagueId !== 'string' || leagueId.length === 0) return null
+  return `/leagues/${leagueId}/chronicles`
+})
 
 /** The league whose page we're on (the one the user is "in"). Null on
  *  the demo route. Drives ordering (active first) + "Live now". */
@@ -258,6 +272,21 @@ function platformLabel(p?: string): string {
   padding: 40px 24px 80px;
   color: oklch(0.97 0.005 90);
 }
+
+.chronicles-back {
+  display: inline-block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-tertiary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  margin: -8px 0 16px;
+  transition: border-color 200ms ease;
+}
+.chronicles-back:hover { border-bottom-color: currentColor; }
 
 .archive-head {
   display: flex;

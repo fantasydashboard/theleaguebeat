@@ -14,7 +14,7 @@
     <header class="wire-head">
       <div class="wire-head-eyebrow">
         <span class="wire-head-eyebrow-bar" aria-hidden="true"></span>
-        <span class="wire-head-eyebrow-text">The Wire</span>
+        <span class="wire-head-eyebrow-text">Today's beats</span>
         <span class="wire-head-cadence" aria-label="Updates daily">DAILY</span>
       </div>
       <div class="wire-head-row">
@@ -53,6 +53,7 @@
       role="region"
       aria-roledescription="carousel"
       aria-label="Today's stories"
+      :data-at-end="atEnd ? 'true' : 'false'"
       @scroll="onTrackScroll"
     >
       <article
@@ -297,10 +298,54 @@ const cards = computed<WireCard[]>(() => {
  *  don't show "Today's filings" with an empty carousel underneath. */
 const hasCards = computed(() => cards.value.length > 0)
 
+/** Story types whose copy is team-arc narrative — same headline
+ *  pattern + same body across teams. Multiple cards of these types
+ *  in the same Wire read as boilerplate ("Team A keeps climbing"
+ *  followed by "Team B keeps climbing" with identical body). For
+ *  these we keep only the highest-weighted instance.
+ *
+ *  Types NOT in this set keep every instance — multiple player
+ *  nights, multiple trades, multiple matchup shifts all carry
+ *  unique information per card and the reader benefits from seeing
+ *  all of them. */
+const DEDUPE_BY_TYPE = new Set<StoryType>([
+  'hot-climber',
+  'comeback-team',
+  'three-week-comeback',
+  'three-week-collapse',
+  'streak-built',
+  'streak-broken',
+])
+
+/** Team-level narrative buckets. A team appears in at most ONE card
+ *  per bucket per Wire feed — prevents the "Jazz keeps climbing" +
+ *  "Jazz is heating up" adjacency where both cards say roughly the
+ *  same thing about the same team in different framings.
+ *
+ *  Types not in any bucket pass through unchanged (player nights,
+ *  trades, matchup shifts — each carries unique info even when the
+ *  same team is named twice). */
+const POSITIVE_ARC_TYPES = new Set<StoryType>([
+  'hot-climber',
+  'comeback-team',
+  'three-week-comeback',
+  'streak-built',
+])
+const NEGATIVE_ARC_TYPES = new Set<StoryType>([
+  'three-week-collapse',
+  'streak-broken',
+])
+
+function narrativeBucket(type: StoryType): 'positive' | 'negative' | null {
+  if (POSITIVE_ARC_TYPES.has(type)) return 'positive'
+  if (NEGATIVE_ARC_TYPES.has(type)) return 'negative'
+  return null
+}
+
 const wireStories = computed(() => {
   const wireTypes = new Set<StoryType>(WIRE_STORY_TYPES)
   const heroSig = props.heroSignature
-  return props.stories
+  const sorted = props.stories
     .filter((s) => wireTypes.has(s.type) && s.signature !== heroSig)
     .sort((a, b) => {
       // My-team-first ordering: stories about MY roster outrank
@@ -313,7 +358,36 @@ const wireStories = computed(() => {
       // Within the same my-vs-not bucket, sort by score (weight × freshness).
       return b.score - a.score
     })
-    // No artificial cap — show all real cards. Carousel handles overflow.
+
+  // Dedupe arc-narrative types — keep first occurrence (already
+  // sorted to highest-weight + my-team-first). Non-narrative types
+  // pass through unchanged.
+  const seenType = new Set<StoryType>()
+  // Team-bucket dedupe — one positive + one negative card per team.
+  // Key shape: `${teamId}:${bucket}`.
+  const seenTeamBucket = new Set<string>()
+
+  return sorted.filter((s) => {
+    // Type-level dedupe first (the broader filter)
+    if (DEDUPE_BY_TYPE.has(s.type)) {
+      if (seenType.has(s.type)) return false
+      seenType.add(s.type)
+    }
+    // Team-bucket dedupe — only applies to arc types. A team can
+    // appear in multiple non-arc cards (player nights, trades, etc.)
+    // without being filtered here.
+    const bucket = narrativeBucket(s.type)
+    if (bucket) {
+      const primaryTeam = s.teamIds?.[0]
+      if (primaryTeam) {
+        const key = `${primaryTeam}:${bucket}`
+        if (seenTeamBucket.has(key)) return false
+        seenTeamBucket.add(key)
+      }
+    }
+    return true
+  })
+  // No artificial cap on the remaining cards — carousel handles overflow.
 })
 
 /**
@@ -538,6 +612,8 @@ function bodyForStoryType(type: StoryType, _teamName?: string): string | undefin
     case 'streak-broken':        return 'The run ends. What was inevitable now feels mortal.'
     case 'hot-climber':          return 'A real move up the table. The middle is reshuffling.'
     case 'comeback-team':        return 'Out of the basement, back into the conversation.'
+    case 'three-week-comeback':  return 'A real climb. Three weeks ago this conversation was different.'
+    case 'three-week-collapse':  return 'Three weeks of losses. The standings already noticed; the room is starting to.'
     case 'monday-recap':         return 'The slate is in. Here is the read.'
     case 'midweek-trade-talk':   return 'Half the week is gone. The desperate offers are coming.'
     case 'friday-preview':       return 'Whatever happens this weekend likely decides it.'
@@ -548,8 +624,8 @@ function bodyForStoryType(type: StoryType, _teamName?: string): string | undefin
     case 'faab-blowout':         return 'Outbid the room. The wire just thinned.'
     case 'waiver-winner':        return 'A top-priority claim, spent with intent.'
     case 'matchup-tipped':       return 'Enough cats moved overnight to flip the lead.'
-    case 'matchup-pulse-up':     return 'You gained without flipping the lead.'
-    case 'matchup-pulse-down':   return 'You lost ground without losing the lead. Yet.'
+    case 'matchup-pulse-up':     return 'Ground gained; the lead held.'
+    case 'matchup-pulse-down':   return 'Ground lost; the lead survived. For now.'
     case 'rank-shift-up':        return 'A real climb since yesterday. Not noise.'
     case 'rank-shift-down':      return 'A real drop since yesterday. Not noise.'
     default:                     return undefined
@@ -830,7 +906,11 @@ onMounted(() => onTrackScroll())
 .wire-control:disabled { opacity: 0.4; cursor: not-allowed; }
 .wire-control:active:not(:disabled) { transform: scale(0.95); }
 
-/* Track */
+/* Track — horizontally scrolling carousel of cards. Right-edge mask
+   produces a soft fade-out so partially-visible cards don't read as
+   broken text (the "1 attention" effect when "The room is paying"
+   gets clipped at the viewport edge). The fade signals "more to
+   scroll" rather than "the text is cut." */
 .wire-track {
   display: flex;
   gap: 18px;
@@ -840,6 +920,27 @@ onMounted(() => onTrackScroll())
   scrollbar-width: none;
   padding: 4px 0 16px;
   -webkit-overflow-scrolling: touch;
+  /* Mask fades the trailing 96px to transparent. Browsers ignore
+     the standard property when -webkit- is needed (Safari), so
+     declare both. */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 96px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 96px),
+    transparent 100%
+  );
+}
+/* At end of scroll, drop the fade — no more cards behind it, so
+   the last card should read at full opacity. */
+.wire-track[data-at-end='true'] {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 .wire-track::-webkit-scrollbar { display: none; }
 

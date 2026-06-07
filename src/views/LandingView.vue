@@ -358,7 +358,7 @@ onMounted(async () => {
   if (leaguesStore.leagues.length === 0) return
   const primary =
     leaguesStore.leagues.find((l) => l.is_primary) ?? leaguesStore.leagues[0]
-  router.replace(`/leagues/${primary.id}/home`)
+  router.replace(`/leagues/${primary.id}/the-beat`)
 })
 </script>
 

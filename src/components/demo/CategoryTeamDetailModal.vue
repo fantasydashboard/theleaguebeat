@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="td-root" role="presentation">
+    <div class="td-root" :class="{ 'td-closing': closing }" role="presentation">
       <div class="td-backdrop" @click="onClose" aria-hidden="true"></div>
       <div
         ref="dialogRef"
@@ -252,8 +252,13 @@ function synthCatResults(catId: CategoryId): ('W' | 'L' | 'T')[] {
 const dialogRef = ref<HTMLElement | null>(null)
 const closeBtnRef = ref<HTMLElement | null>(null)
 
+// Play the exit animation before unmounting (the parent removes us with
+// v-if, so without this the modal would vanish instantly).
+const closing = ref(false)
 function onClose() {
-  emit('close')
+  if (closing.value) return
+  closing.value = true
+  window.setTimeout(() => emit('close'), 140)
 }
 
 useDemoModal({ dialogRef, closeBtnRef, onClose })
@@ -310,8 +315,19 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
   animation-delay: 30ms;
 }
 
+/* Exit — a quick reverse of the enter so the modal does not vanish
+   abruptly. Faster than the enter (130ms vs 180ms). */
+.td-closing .td-backdrop {
+  animation: td-fade-out 120ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.td-closing .td-dialog {
+  animation: td-dialog-out 130ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .td-backdrop, .td-dialog {
+  .td-backdrop, .td-dialog,
+  .td-closing .td-backdrop, .td-closing .td-dialog {
     animation: none;
     opacity: 1;
     transform: none;
@@ -320,6 +336,8 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
 
 @keyframes td-fade-in { to { opacity: 1; } }
 @keyframes td-dialog-in { to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes td-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes td-dialog-out { from { opacity: 1; transform: scale(1) translateY(0); } to { opacity: 0; transform: scale(0.97) translateY(4px); } }
 
 /* Header */
 .td-head {
@@ -392,7 +410,8 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
   border-radius: 8px;
   color: var(--ink-2);
   cursor: pointer;
-  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 160ms cubic-bezier(0.22, 1, 0.36, 1),
               border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
   flex-shrink: 0;
 }
@@ -659,10 +678,13 @@ useDemoModal({ dialogRef, closeBtnRef, onClose })
   padding: 8px 14px;
   border-radius: 999px;
   cursor: pointer;
-  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 160ms cubic-bezier(0.22, 1, 0.36, 1),
               border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.td-share:hover { color: var(--ink-1); border-color: oklch(0.44 0.015 90); }
+@media (hover: hover) and (pointer: fine) {
+  .td-share:hover { color: var(--ink-1); border-color: oklch(0.44 0.015 90); }
+}
 .td-share:active { transform: scale(0.97); transition-duration: 100ms; }
 .td-share:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 

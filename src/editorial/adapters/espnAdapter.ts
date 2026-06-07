@@ -56,6 +56,11 @@ import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
+import {
+  computeProjectionFromPerCat,
+  seasonStrengthPrior,
+  daysInCurrentWeek,
+} from '../matchups-projection'
 
 /* ─────────────────────────────────────────────────────────────────
    ESPN MLB STAT-ID → CANONICAL CAT MAPPING
@@ -371,7 +376,31 @@ export async function espnLeagueToCategoryData(
     matchupsByWeek,
     categories,
     currentWeek,
+    standings,
   )
+
+  // 10b. Previous week's matchups in their finalized state. Reuses the
+  // same builder against currentWeek - 1 so the Issue page's Game of
+  // the Week feature has data — previously absent on ESPN, which made
+  // Section 02 silently disappear from the Issue. Returns [] when no
+  // prior week exists (Week 1) or the week wasn't found in the map.
+  const matchupsPreviousWeek = currentWeek > 1
+    ? buildCurrentWeekMatchups(matchupsByWeek, categories, currentWeek - 1, standings)
+    : []
+
+  // 10c. Per-week matchups — drives The Issue's reconstruction of
+  // archived weeks. Decoded once here so the editorial pipeline
+  // can replay weeks 1..N when synthesizing past issues.
+  const matchupsByWeekDecoded: Record<string, CategoryLeagueDataMatchup[]> = {}
+  for (const w of matchupsByWeek.keys()) {
+    if (w < 1) continue
+    matchupsByWeekDecoded[String(w)] = buildCurrentWeekMatchups(
+      matchupsByWeek,
+      categories,
+      w,
+      standings,
+    )
+  }
 
   // 11. Weekly cats-won tallies (Home page chart).
   const { weeklyCatsWon, weeklyLeagueAverage } = buildWeeklyCatTallies(
@@ -434,6 +463,8 @@ export async function espnLeagueToCategoryData(
     categoryRanks,
     seasonRankHistory,
     matchupsCurrentWeek,
+    matchupsPreviousWeek,
+    matchupsByWeek: matchupsByWeekDecoded,
     seasonHistory,
     teamCareerStats,
     h2hMatrix,
@@ -615,9 +646,14 @@ function buildTeams(
   return teams.map((t) => {
     const ownerId = t.primaryOwner || t.owners?.[0] || ''
     const member = ownerId ? memberById.get(ownerId) : undefined
+    // ESPN often won't expose real owner names (private leagues,
+    // missing member records). Return an empty string when that's
+    // the case rather than fabricating "Manager N" — the magazine
+    // would rather print nothing than fake a name. Consumers must
+    // tolerate empty ownerName / empty ownerInitials.
     const ownerName = t.ownerName
       || (member ? `${member.firstName} ${member.lastName}`.trim() || member.displayName : '')
-      || `Manager ${t.id}`
+      || ''
     const teamName = t.name?.trim() || `Team ${t.id}`
     const isMyTeam = mySwid
       ? (t.owners || []).some((o) => normalizeSwid(o) === mySwid)
@@ -627,7 +663,10 @@ function buildTeams(
       id: String(t.id),
       name: teamName,
       ownerName,
-      ownerInitials: initialsOf(ownerName),
+      // Fall back to team-name initials when ownerName is empty —
+      // the avatar still needs SOMETHING when ESPN doesn't expose
+      // a real owner, and team initials are more honest than "??".
+      ownerInitials: initialsOf(ownerName || teamName),
       // ESPN logo URLs go through our image proxy so that the
       // auth-gated mystique-api.fantasy.espn.com custom uploads
       // actually load. See proxyEspnAvatarUrl below for the rewrite
@@ -988,9 +1027,17 @@ function buildCurrentWeekMatchups(
   matchupsByWeek: Map<number, EspnMatchup[]>,
   categories: CategoryLeagueDataCategory[],
   currentWeek: number,
+  standings: CategoryLeagueDataStanding[],
 ): CategoryLeagueDataMatchup[] {
   const list = matchupsByWeek.get(currentWeek) ?? []
   if (list.length === 0) return []
+
+  // Day index for the projection's day-factor curve (Mon = 0, Sun = 6).
+  // ESPN doesn't expose per-cat lines, so each contested cat is treated
+  // as a coin flip blended with the season-strength prior — same
+  // approach the Yahoo adapter takes when cat-line data is incomplete.
+  const daysIn = daysInCurrentWeek()
+  const dayFactor = Math.max(0, Math.min(1, Math.pow(daysIn / 7, 0.7)))
 
   const out: CategoryLeagueDataMatchup[] = []
   for (const m of list) {
@@ -1006,6 +1053,33 @@ function buildCurrentWeekMatchups(
     else if (hasData) status = 'live'
     else status = 'upcoming'
 
+    // Honest projection. With no per-cat lines, we use:
+    //   - locked home / away cats verbatim (the lead is real)
+    //   - one coin-flip-like probability per contested cat, blended
+    //     toward the season-strength prior so a 15-2 lock reads as
+    //     ~100% instead of falling back to 50%.
+    //
+    // The prior blend is heavier early-week, lighter late-week —
+    // matching the Yahoo adapter's behavior so ESPN matchups read
+    // consistently with Yahoo matchups in OYL + LEDE.
+    const homeStanding = standings.find((s) => s.teamId === String(m.homeTeamId))
+    const awayStanding = standings.find((s) => s.teamId === String(m.awayTeamId))
+    const homePrior = seasonStrengthPrior(homeStanding?.winPct, awayStanding?.winPct)
+    // Per-cat home win prob: blend the 0.5 baseline with the season
+    // prior. Early-week (low dayFactor) leans on the prior; late-week
+    // leans on the baseline because cat outcomes are about to settle.
+    const perCatHomeWinProb = homePrior !== undefined
+      ? Array(contestedCount).fill(0.5 + (homePrior - 0.5) * (1 - dayFactor))
+      : Array(contestedCount).fill(0.5)
+    const projection = status === 'final'
+      ? {
+          homeWinProb: homeCatWins > awayCatWins ? 1 : homeCatWins < awayCatWins ? 0 : 0.5,
+          awayWinProb: homeCatWins < awayCatWins ? 1 : homeCatWins > awayCatWins ? 0 : 0.5,
+          homeProj: homeCatWins,
+          awayProj: awayCatWins,
+        }
+      : computeProjectionFromPerCat(perCatHomeWinProb, homeCatWins, awayCatWins)
+
     out.push({
       id: `wk${currentWeek}-${m.id}`,
       homeTeamId: String(m.homeTeamId),
@@ -1015,6 +1089,10 @@ function buildCurrentWeekMatchups(
       awayCatWins,
       ties,
       contestedCount,
+      homeWinProb: projection.homeWinProb,
+      awayWinProb: projection.awayWinProb,
+      homeProj: projection.homeProj,
+      awayProj: projection.awayProj,
       // catLines intentionally undefined for now — needs raw stat values
       // mapped per-canonical-cat with "decided" detection per ESPN.
     })
@@ -1075,6 +1153,8 @@ async function buildSeasonHistory(
 
   for (let i = 1; i <= MAX_HISTORY_DEPTH; i++) {
     const year = currentSeason - i
+    // Defensive — guard against malformed currentSeason inputs.
+    if (!Number.isFinite(year) || year <= 0 || year >= currentSeason) break
     let prevTeams: EspnTeam[] = []
     try {
       prevTeams = await withCache(cacheKey(leagueId, 'hist-teams', year), () =>
@@ -1100,9 +1180,30 @@ async function buildSeasonHistory(
       championRecord: recordString(champion),
       runnerUpTeamId: String(runnerUp.id),
       basementTeamId: String(basement.id),
+      // Denormalize display fields — past-season team IDs don't
+      // resolve against the current league's team list, so the
+      // record carries its own labels. Without these the Issue's
+      // history tease falls back to a tautological "Last season's
+      // champion won it all in 2025." and Chronicles' Hall of Fame
+      // reads thin.
+      championName: teamDisplayName(champion),
+      championLogo: champion.logo || undefined,
+      runnerUpName: teamDisplayName(runnerUp),
+      basementName: teamDisplayName(basement),
     })
   }
   return out
+}
+
+/** Resolve an ESPN team's display name. Newer leagues use `name`
+ *  directly; older / migrated leagues split into `location` +
+ *  `nickname`. Fall back to abbrev, then a generic ID label. */
+function teamDisplayName(t: EspnTeam): string {
+  const direct = (t.name ?? '').trim()
+  if (direct) return direct
+  const composed = `${t.location ?? ''} ${t.nickname ?? ''}`.trim()
+  if (composed) return composed
+  return t.abbrev?.trim() || `Team ${t.id}`
 }
 
 function recordString(t: EspnTeam): string {

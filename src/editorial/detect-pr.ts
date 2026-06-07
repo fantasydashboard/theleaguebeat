@@ -35,6 +35,16 @@ export interface PRHeroDetectionContext {
   weeksHeldByOpponent?: number       // for new-throne: how long antagonist held #1
   framing: 'overtake' | 'collapse' | 'extend' | 'jump' | 'surprise'
   signal: string
+  // hero-the-race — the field chasing a locked leader
+  raceLeaderId?: string
+  raceLeaderWeeks?: number
+  raceContenderCount?: number
+  raceSeatsOpen?: number
+  raceCutlineId?: string
+  // hero-your-team — the reader's own angle
+  yourTeamAngle?: 'climb' | 'streak' | 'bubble-in' | 'bubble-out' | 'lurking' | 'steady'
+  rivalTeamId?: string
+  rivalGap?: number
 }
 
 export interface PRPulseDetectionContext {
@@ -48,6 +58,7 @@ export interface PRPulseDetectionContext {
   trajectory?: number[]              // full-season rank series for sparkline
   meanRank?: number                  // pulse-steady-hand
   rankVariance?: number              // pulse-steady-hand
+  quiet?: boolean                    // backfill candidate: keep copy matter-of-fact
   signal: string
 }
 
@@ -198,7 +209,11 @@ function topCatsOnSide(
 }
 
 function seasonStageFor(data: CategoryLeagueData): PRSeasonStage {
-  const remaining = Math.max(0, REGULAR_SEASON_WEEKS - data.currentWeek)
+  const seasonEnd = data.regularSeasonEndWeek && data.regularSeasonEndWeek > 0
+    ? data.regularSeasonEndWeek
+    : REGULAR_SEASON_WEEKS
+  if (data.currentWeek > seasonEnd) return 'playoffs'
+  const remaining = Math.max(0, seasonEnd - data.currentWeek)
   if (remaining <= 1) return 'final-stretch'
   if (remaining <= 3) return 'late'
   if (data.currentWeek <= 3) return 'early'
@@ -239,13 +254,17 @@ export function detectPRHero(
   }
 
   /* hero-dynasty-rising
-     Same rank-1 team for 3+ consecutive weeks. */
+     Same rank-1 team for 3+ consecutive weeks. Freshness decay: a
+     dynasty FORMING (3-4 weeks) is the story; a long, settled reign is
+     wallpaper. Peak the weight early and fade it as the reign drags on,
+     so once a leader is entrenched the cover can pivot to the race or a
+     fresher story instead of "still #1" winning by default forever. */
   if (currentTop) {
     const runAtTop = consecutiveWeeksAtRank(data, currentTop, 1, wk)
     if (runAtTop >= 3) {
       out.push({
         kind: 'hero-dynasty-rising',
-        weight: 70 + Math.min(15, runAtTop * 2),
+        weight: Math.max(58, 84 - Math.max(0, runAtTop - 3) * 5),
         context: {
           teamId: currentTop,
           currentRank: 1,
@@ -349,7 +368,146 @@ export function detectPRHero(
     })
   }
 
-  return out
+  /* hero-the-race
+     The #1 seat is locked (leader held it 4+ weeks). The cover pivots
+     from "still #1" to the scrum for the remaining playoff seats. Focal
+     team = the reader's team when they sit in the contested band, else
+     the club exactly on the playoff line, so the card has a face and
+     real stakes. Weight rises modestly with how settled the top is, so
+     it overtakes a stale dynasty but yields to a fresh throne change,
+     collapse, or a dynasty that is still forming. */
+  if (currentTop) {
+    const leaderRun = consecutiveWeeksAtRank(data, currentTop, 1, wk)
+    if (leaderRun >= 4) {
+      const byRank = [...data.standings].sort((a, b) => a.rank - b.rank)
+      // Focal = the club sitting exactly on the playoff line (the most
+      // contested seat). Anchoring here keeps the "on the cutline" copy
+      // accurate; the reader's own angle is carried by hero-your-team.
+      const cutlineStanding = byRank.find((s) => s.rank === cutoff)
+      // The live scrum: teams ranked below the leader, around the line.
+      const contenders = byRank.filter((s) => s.rank >= 2 && s.rank <= cutoff + 2)
+      const focal = cutlineStanding
+      if (focal && contenders.length >= 2) {
+        out.push({
+          kind: 'hero-the-race',
+          weight: 72 + Math.min(8, leaderRun),
+          context: {
+            teamId: focal.teamId,
+            currentRank: focal.rank,
+            previousRank: rankAtWeek(data, focal.teamId, wk - 1) ?? focal.rank,
+            rankSinceWeek1: rankAtWeek(data, focal.teamId, 1) ?? focal.rank,
+            weeksAtTop: 0,
+            framing: 'surprise',
+            raceLeaderId: currentTop,
+            raceLeaderWeeks: leaderRun,
+            raceContenderCount: contenders.length,
+            raceSeatsOpen: Math.max(1, cutoff - 1),
+            raceCutlineId: cutlineStanding?.teamId,
+            signal: `the race: ${currentTop} locked ${leaderRun}w, ${contenders.length} chasing ${Math.max(1, cutoff - 1)} seats (focal ${focal.teamId})`,
+          },
+        })
+      }
+    }
+  }
+
+  /* hero-your-team
+     The reader's own team has a real angle worth the cover (a season
+     climb, a hot streak, a bubble fight, or a quiet contender sitting
+     top-3). Weighted by how strong the angle is so it competes on merit
+     and does not always win — a true rotation, not a forced personal
+     cover. */
+  const myTeam = data.teams.find((t) => t.isMyTeam)
+  if (myTeam) {
+    const cur = rankAtWeek(data, myTeam.id, wk)
+    const standing = standingFor(data, myTeam.id)
+    if (cur != null && standing) {
+      const w1 = rankAtWeek(data, myTeam.id, 1) ?? cur
+      const climbed = w1 - cur
+      let angle: 'climb' | 'streak' | 'bubble-in' | 'bubble-out' | 'lurking' | 'steady' = 'steady'
+      let strength = 0
+      if (standing.streak.type === 'W' && standing.streak.length >= 3) {
+        angle = 'streak'
+        strength = Math.max(strength, 10 + standing.streak.length * 2)
+      }
+      if (climbed >= 3) {
+        angle = 'climb'
+        strength = Math.max(strength, 10 + climbed * 2)
+      }
+      if (cur <= 3) {
+        angle = 'lurking'
+        strength = Math.max(strength, 14)
+      }
+      if (Math.abs(cur - cutoff) <= 1) {
+        angle = cur <= cutoff ? 'bubble-in' : 'bubble-out'
+        strength = Math.max(strength, 16)
+      }
+      if (strength > 0) {
+        const byRank = [...data.standings].sort((a, b) => a.rank - b.rank)
+        const idx = byRank.findIndex((s) => s.teamId === myTeam.id)
+        const rival = byRank[idx - 1] ?? byRank[idx + 1]
+        out.push({
+          kind: 'hero-your-team',
+          weight: 58 + Math.min(22, strength),
+          context: {
+            teamId: myTeam.id,
+            currentRank: cur,
+            previousRank: rankAtWeek(data, myTeam.id, wk - 1) ?? cur,
+            rankSinceWeek1: w1,
+            weeksAtTop: cur === 1 ? consecutiveWeeksAtRank(data, myTeam.id, 1, wk) : 0,
+            framing: 'jump',
+            yourTeamAngle: angle,
+            rivalTeamId: rival?.teamId,
+            rivalGap: rival ? Math.abs(standing.catWins - rival.catWins) : undefined,
+            signal: `your team: ${myTeam.id} angle=${angle} strength=${strength} rank ${cur}`,
+          },
+        })
+      }
+    }
+  }
+
+  // Phase weighting — the cover leans into where the season is. Early
+  // favors who is rising and the reader's own start; the playoff push
+  // favors the cutline race and collapses; once the regular season is
+  // over the one-seed entering the bracket leads. Modest multipliers so
+  // a genuinely huge story (a fresh throne change) still wins any week.
+  const stage = seasonStageFor(data)
+  return out.map((c) => ({
+    ...c,
+    weight: Math.round(c.weight * heroPhaseBoost(c.kind, stage)),
+  }))
+}
+
+/** Per-phase multiplier on hero candidate weights. */
+function heroPhaseBoost(kind: PRKind, stage: PRSeasonStage): number {
+  switch (stage) {
+    case 'early':
+      if (kind === 'hero-biggest-climber') return 1.25
+      if (kind === 'hero-your-team') return 1.2
+      if (kind === 'hero-the-race') return 0.65
+      if (kind === 'hero-dynasty-rising') return 0.8
+      return 1
+    case 'late':
+      if (kind === 'hero-the-race') return 1.3
+      if (kind === 'hero-defending-champ-falling') return 1.2
+      if (kind === 'hero-your-team') return 1.1
+      if (kind === 'hero-dynasty-rising') return 0.85
+      return 1
+    case 'final-stretch':
+      if (kind === 'hero-the-race') return 1.4
+      if (kind === 'hero-your-team') return 1.2
+      if (kind === 'hero-defending-champ-falling') return 1.15
+      if (kind === 'hero-dynasty-rising') return 0.8
+      return 1
+    case 'playoffs':
+      if (kind === 'hero-dynasty-rising') return 1.3
+      if (kind === 'hero-new-throne') return 1.2
+      if (kind === 'hero-the-race') return 0.6
+      if (kind === 'hero-your-team') return 0.9
+      return 1
+    case 'mid':
+    default:
+      return 1
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -433,6 +591,84 @@ export function detectPRPulse(
     }
   }
 
+  /* ── Backfill ────────────────────────────────────────────────────
+     Every real league always has a hottest team, a coldest team, and a
+     steadiest team, even in a week where none clear the headline
+     thresholds above. These guaranteed candidates fill the three pulse
+     slots from LIVE data so the view never has to fall back to a demo
+     beat. They carry `quiet: true` so the copy stays matter-of-fact
+     when the signal is mild. Low weight so a real headline beat always
+     wins its slot. */
+  const ranked = data.teams
+    .map((t) => {
+      const cur = rankAtWeek(data, t.id, wk)
+      if (cur == null) return null
+      const prev = rankAtWeek(data, t.id, wk - 1) ?? cur
+      const w1 = rankAtWeek(data, t.id, 1) ?? cur
+      const standing = standingFor(data, t.id)
+      return { id: t.id, cur, dWeek: prev - cur, dSeason: w1 - cur, standing, variance: rankVariance(data, t.id), mean: meanRank(data, t.id) }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
+  // Provide a RANKED backfill candidate for every team in each pulse
+  // slot (low weight, quiet copy) so that after cross-slot de-dup a slot
+  // can always fall through to the next-best available team rather than
+  // going empty when its top team is claimed elsewhere. Real threshold
+  // beats above (weight 40+) still win their slot; the best backfill team
+  // gets the highest backfill weight so de-dup prefers it.
+  const byRiser = [...ranked].sort((a, b) => b.dSeason - a.dSeason || b.dWeek - a.dWeek)
+  const byFaller = [...ranked].sort((a, b) => a.dSeason - b.dSeason || a.dWeek - b.dWeek)
+  const bySteady = [...ranked].sort((a, b) => a.variance - b.variance || a.mean - b.mean)
+  byRiser.forEach((t, i) => {
+    out.push({
+      kind: 'pulse-heater',
+      weight: Math.max(5, 25 - i),
+      context: {
+        teamId: t.id,
+        streakType: t.standing?.streak.type === 'W' ? 'W' : undefined,
+        streakLength: t.standing?.streak.type === 'W' ? t.standing.streak.length : undefined,
+        rankDeltaThisWeek: t.dWeek,
+        rankDeltaSinceWeek1: t.dSeason,
+        quiet: true,
+        signal: `heater backfill: ${t.id} season ${t.dSeason >= 0 ? '+' : ''}${t.dSeason}`,
+      },
+    })
+  })
+  byFaller.forEach((t, i) => {
+    const trajectory = data.seasonRankHistory.filter((w) => w.week <= wk).map((w) => w.ranks[t.id] ?? t.cur)
+    out.push({
+      kind: 'pulse-long-fall',
+      weight: Math.max(5, 25 - i),
+      context: {
+        teamId: t.id,
+        streakType: t.standing?.streak.type === 'L' ? 'L' : undefined,
+        streakLength: t.standing?.streak.type === 'L' ? t.standing.streak.length : undefined,
+        rankDeltaThisWeek: t.dWeek,
+        rankDeltaSinceWeek1: t.dSeason,
+        fromRank: rollingPeakRank(data, t.id, wk, 3),
+        toRank: t.cur,
+        trajectory,
+        quiet: true,
+        signal: `long-fall backfill: ${t.id} season ${t.dSeason}`,
+      },
+    })
+  })
+  bySteady.forEach((t, i) => {
+    out.push({
+      kind: 'pulse-steady-hand',
+      weight: Math.max(5, 25 - i),
+      context: {
+        teamId: t.id,
+        rankDeltaThisWeek: t.dWeek,
+        rankDeltaSinceWeek1: t.dSeason,
+        meanRank: t.mean,
+        rankVariance: t.variance,
+        quiet: true,
+        signal: `steady backfill: ${t.id} var=${t.variance.toFixed(2)}`,
+      },
+    })
+  })
+
   return out
 }
 
@@ -494,45 +730,44 @@ export function detectPRDynasty(
   }
 
   /* dynasty-punt-kings
-     Team currently bottom-3 in same cat for 3+ consecutive weeks. We
-     proxy "consecutive bottom-3" with current rank + the team's
-     bleeding-count signal — the data shape only exposes current
-     per-cat ranks, not per-cat-per-week history. */
-  let bestPunter: { teamId: string; cat: string; bleedingTotal: number } | null = null
+     A GENUINE strategic punt: a team that bleeds only one or two
+     categories (a focused punt, not a leaky roster) AND is still
+     winning (>= .500). That is what makes "the punt pays / still top
+     half" true. The old logic picked the team that bled the MOST cats
+     — i.e. the worst team — and then falsely called them a successful
+     punter. If no qualifying punter exists, emit nothing: better no
+     beat than a false one. */
+  const teamCount = data.teams.length
+  let bestPunter: { teamId: string; cat: string; winPct: number } | null = null
   for (const ranks of data.categoryRanks) {
-    // Find a cat where this team is currently dead last in the league.
-    let dominantPunt: string | undefined
-    for (const cat of data.categories) {
-      if (ranks.catRanks[cat.id] === 10) { dominantPunt = cat.id; break }
-    }
-    // Fall back: any cat where they're 9 or worse and standing.bleedingCount >= 1
-    if (!dominantPunt) {
-      const standing = standingFor(data, ranks.teamId)
-      if (!standing || standing.bleedingCount < 1) continue
-      for (const cat of data.categories) {
-        if ((ranks.catRanks[cat.id] ?? 0) >= 9) { dominantPunt = cat.id; break }
-      }
-    }
-    if (!dominantPunt) continue
     const standing = standingFor(data, ranks.teamId)
-    const bleedingTotal = standing?.bleedingCount ?? 0
-    if (!bestPunter || bleedingTotal > bestPunter.bleedingTotal) {
-      bestPunter = { teamId: ranks.teamId, cat: dominantPunt, bleedingTotal }
+    if (!standing) continue
+    if (standing.bleedingCount < 1 || standing.bleedingCount > 2) continue
+    if (standing.winPct < 0.5) continue
+    // The punted cat = the category they rank worst in; it must be a
+    // genuine bottom-of-the-league finish to count as a punt.
+    let worstCat: string | undefined
+    let worstRank = -1
+    for (const cat of data.categories) {
+      const r = ranks.catRanks[cat.id] ?? 0
+      if (r > worstRank) { worstRank = r; worstCat = cat.id }
+    }
+    if (!worstCat || worstRank < teamCount - 2) continue
+    if (!bestPunter || standing.winPct > bestPunter.winPct) {
+      bestPunter = { teamId: ranks.teamId, cat: worstCat, winPct: standing.winPct }
     }
   }
   if (bestPunter) {
-    // Use season weeks as a proxy for puntedWeeks; the data shape does
-    // not track per-cat-per-week history yet.
     out.push({
       kind: 'dynasty-punt-kings',
-      weight: 45 + bestPunter.bleedingTotal * 3,
+      weight: 50 + Math.round(bestPunter.winPct * 20),
       context: {
         teamId: bestPunter.teamId,
         cats: [],
         weeksOwning: 0,
         puntedCat: bestPunter.cat,
         puntedWeeks: wk,
-        signal: `punt kings: ${bestPunter.teamId} bottom in ${bestPunter.cat}, ${bestPunter.bleedingTotal} bleeding cats`,
+        signal: `punt kings: ${bestPunter.teamId} punts ${bestPunter.cat}, winPct ${bestPunter.winPct.toFixed(2)}`,
       },
     })
   }
@@ -586,16 +821,40 @@ export function detectPRQuickReads(
 
   /* tightest-race
      The two adjacent teams in the standings with the smallest cat-win
-     gap — typically the playoff cutoff seam. */
+     gap, weighted by stakes. A 1-cat gap between #11 and #9 is not the
+     race the reader cares about — the gaps that matter sit on or near
+     the playoff cutoff. We score each adjacent seam by gap AND distance
+     from the cutoff, and pick the most editorially-relevant one. */
+  const cutoff = data.playoffCutoff || Math.max(1, Math.floor(data.teams.length / 2))
   let tightest: { a: CategoryLeagueDataStanding; b: CategoryLeagueDataStanding; gap: number } | null = null
+  let bestScore = Infinity
   const byRank = [...data.standings].sort((a, b) => a.rank - b.rank)
   for (let i = 0; i < byRank.length - 1; i++) {
     const a = byRank[i]
     const b = byRank[i + 1]
     const gap = Math.abs(a.catWins - b.catWins)
-    if (!tightest || gap < tightest.gap) tightest = { a, b, gap }
+    // Distance from the cutline seam. The seam between rank=cutoff and
+    // rank=cutoff+1 is the playoff line itself (distance 0); each step
+    // away gets a heavier penalty so cellar-deep races don't win.
+    const seamMidpoint = a.rank + 0.5
+    const distanceFromCutline = Math.abs(seamMidpoint - (cutoff + 0.5))
+    // Composite score: lower is better. Gap dominates when the seam is
+    // close to the cutoff; distance starts to bite as you move into the
+    // cellar. Weights tuned so a 1-cat gap at the cutline beats a
+    // 0-cat gap five seats away.
+    const score = gap + distanceFromCutline * 0.8
+    if (score < bestScore) {
+      bestScore = score
+      tightest = { a, b, gap }
+    }
   }
   if (tightest) {
+    // When the two teams are tied on cats (gap === 0), omit
+    // statLabel so the variant pool falls through to the cleaner
+    // "vs: too close to call" framing instead of producing the
+    // awkward "0-cat gap" string. For real gaps, emit the gap so
+    // variant 1 can carry it.
+    const tightestStatLabel = tightest.gap === 0 ? undefined : `${tightest.gap}-cat gap`
     out.push({
       kind: 'quick-read',
       weight: 40,
@@ -604,10 +863,22 @@ export function detectPRQuickReads(
         teamId: tightest.a.teamId,
         opponentTeamId: tightest.b.teamId,
         statValue: tightest.gap,
-        statLabel: `${tightest.gap}-cat gap`,
-        signal: `tightest race: ${tightest.a.teamId} vs ${tightest.b.teamId} (${tightest.gap})`,
+        statLabel: tightestStatLabel,
+        signal: `tightest race: ${tightest.a.teamId} vs ${tightest.b.teamId} (${tightest.gap}, cutline-dist ${Math.abs(tightest.a.rank + 0.5 - (cutoff + 0.5)).toFixed(1)})`,
       },
     })
+  }
+
+  // Per-team standings rank — used as the fallback when
+  // seasonRankHistory doesn't include the current week. The history
+  // only carries weeks where every matchup is decided (Yahoo/ESPN
+  // behavior); without the fallback, biggest-jump and longest-fall
+  // silently produce no candidates and the Quick Reads row reads as
+  // an undertuned 2-card strip instead of the intended 4.
+  const liveRankById: Record<string, number> = {}
+  for (const s of data.standings) liveRankById[s.teamId] = s.rank
+  const liveRankAtWk = (teamId: string): number | undefined => {
+    return rankAtWeek(data, teamId, wk) ?? liveRankById[teamId]
   }
 
   /* biggest-jump
@@ -615,7 +886,7 @@ export function detectPRQuickReads(
   let topJump: { teamId: string; spots: number } | null = null
   for (const team of data.teams) {
     const w1 = rankAtWeek(data, team.id, 1)
-    const cur = rankAtWeek(data, team.id, wk)
+    const cur = liveRankAtWk(team.id)
     if (w1 == null || cur == null) continue
     const climbed = w1 - cur
     if (!topJump || climbed > topJump.spots) topJump = { teamId: team.id, spots: climbed }
@@ -639,7 +910,7 @@ export function detectPRQuickReads(
   let topFall: { teamId: string; spots: number } | null = null
   for (const team of data.teams) {
     const w1 = rankAtWeek(data, team.id, 1)
-    const cur = rankAtWeek(data, team.id, wk)
+    const cur = liveRankAtWk(team.id)
     if (w1 == null || cur == null) continue
     const dropped = cur - w1
     if (!topFall || dropped > topFall.spots) topFall = { teamId: team.id, spots: dropped }

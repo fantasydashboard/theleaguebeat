@@ -23,7 +23,7 @@ const router = createRouter({
         if (authStore.isAuthenticated && leaguesStore.leagues.length > 0) {
           const primary = leaguesStore.leagues.find((l) => l.is_primary)
           const target = primary ?? leaguesStore.leagues[0]
-          next(`/leagues/${target.id}/home`)
+          next(`/leagues/${target.id}/the-beat`)
           return
         }
         next()
@@ -96,11 +96,38 @@ const router = createRouter({
       component: () => import('@/views/MyLeagueLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', redirect: (to) => `/leagues/${to.params.leagueId}/home` },
+        { path: '', redirect: (to) => `/leagues/${to.params.leagueId}/the-beat` },
         {
+          path: 'the-beat',
+          name: 'my-league-the-beat',
+          component: () => import('@/views/BeatFeedView.vue'),
+        },
+        {
+          // New single-page Issue view — magazine spread. Lives
+          // alongside the existing power-rankings/matchups/draft
+          // pages during the transition; once the feature work
+          // lands here, those legacy pages get demoted.
+          path: 'the-issue',
+          name: 'my-league-the-issue',
+          component: () => import('@/views/IssueView.vue'),
+        },
+        {
+          // Specific issue by week number. V0 renders current data
+          // for any week — past-issue persistence is a V1 task —
+          // but the route structure ships now so prev/next nav and
+          // sharing past issues works architecturally.
+          path: 'the-issue/:weekNumber(\\d+)',
+          name: 'my-league-the-issue-week',
+          component: () => import('@/views/IssueView.vue'),
+        },
+        {
+          // Legacy /home path — orphaned now that THE BEAT is the
+          // daily home. Redirect rather than render so old bookmarks
+          // and deep links land on the current surface. The original
+          // CategoryDemoHomeView remains in the codebase for
+          // reference but is no longer reachable via the nav.
           path: 'home',
-          name: 'my-league-home',
-          component: () => import('@/views/CategoryDemoHomeView.vue'),
+          redirect: (to) => `/leagues/${to.params.leagueId}/the-beat`,
         },
         {
           path: 'power-rankings',
@@ -116,6 +143,14 @@ const router = createRouter({
           path: 'draft',
           name: 'my-league-draft',
           component: () => import('@/views/CategoryDemoDraftView.vue'),
+        },
+        {
+          // New Chronicles landing page — magazine spread for the
+          // multi-season archive. Sub-tabs (history, archive) remain
+          // as the deeper views beneath this index.
+          path: 'chronicles',
+          name: 'my-league-chronicles',
+          component: () => import('@/views/ChroniclesView.vue'),
         },
         {
           path: 'history',

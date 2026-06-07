@@ -114,6 +114,24 @@ export function categoriesFixtureToLeagueData(): CategoryLeagueData {
         awayCurrent: line.bCurrent,
         status: mapFixtureCatLineStatus(line.status),
       })),
+      // Pass through the fixture's hand-authored projection. The demo
+      // writes specific narrative numbers (e.g. 32/68 for "Strength
+      // against strength"); preserving them lets the demo experience
+      // stay editorial-grade while live leagues compute their own from
+      // matchups-projection.ts.
+      homeWinProb: m.homeWinProb / 100,
+      awayWinProb: 1 - m.homeWinProb / 100,
+      homeProj: m.aProj,
+      awayProj: m.bProj,
+      // The demo's hand-authored MON-SUN trajectory. Live adapters
+      // leave this undefined until daily snapshot capture exists; the
+      // view hides the trajectory chart accordingly.
+      dailyTrend: m.dailyTrend.map((d, i) => ({
+        day: i,
+        homeWinProb: d.aWinProb / 100,
+        awayWinProb: d.bWinProb / 100,
+        isProjection: d.isProjection,
+      })),
     })),
 
     seasonHistory: fxSeasonHistory.map<CategoryLeagueDataSeasonHistory>((s) => ({

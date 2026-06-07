@@ -289,15 +289,19 @@ function topAndBleedingCats(
   return { topCats, bleedingCats }
 }
 
-/** Estimate a per-team win probability from the live matchup record.
- *  No projection model exists at the universal-data layer yet, so we
- *  use a simple ratio of cat-record-to-cat-record-plus-contested.
- *  This is intentionally rough — the templates only ask for "is it
- *  inside the margin" / "is it lopsided", not precision. */
+/** Per-team win probability for the editorial layer. Prefers the
+ *  honest projection populated by adapters (`matchup.homeWinProb`),
+ *  falling back to a naive cat-record ratio when the field is absent
+ *  (older adapter outputs, partial test fixtures). The templates only
+ *  ask for "is it inside the margin" / "is it lopsided", not precision. */
 function teamWinProbForMatchup(
   matchup: CategoryLeagueDataMatchup,
   side: 'home' | 'away',
 ): number {
+  if (matchup.homeWinProb !== undefined && matchup.awayWinProb !== undefined) {
+    const p = side === 'home' ? matchup.homeWinProb : matchup.awayWinProb
+    return Math.max(0.01, Math.min(0.99, p))
+  }
   const homeWins = matchup.homeCatWins
   const awayWins = matchup.awayCatWins
   const total = homeWins + awayWins + Math.max(0, matchup.contestedCount)
@@ -333,10 +337,15 @@ function teamProfileFor(
   }
 }
 
-const REGULAR_SEASON_WEEKS = 12
+/** Fallback for adapters that don't yet populate `regularSeasonEndWeek`
+ *  (legacy fixtures). The demo league is 12 weeks, the real Yahoo
+ *  Triple Crown league is 24. The contract carries the right number
+ *  when known; this is only used as last-resort. */
+const REGULAR_SEASON_WEEKS_FALLBACK = 12
 
 function weeksLeft(data: CategoryLeagueData): number {
-  return Math.max(0, REGULAR_SEASON_WEEKS - data.currentWeek)
+  const endWeek = data.regularSeasonEndWeek ?? REGULAR_SEASON_WEEKS_FALLBACK
+  return Math.max(0, endWeek - data.currentWeek)
 }
 
 /** Universal MatchupStatus → library MatchupStatus. The library only

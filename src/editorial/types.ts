@@ -101,6 +101,18 @@ export interface CategoryLeagueDataCatLine {
   status: CategoryCatLineStatus
 }
 
+/** One day in a matchup's win-probability history. Mon=0..Sun=6. The
+ *  pipeline is honest about whether the point came from a real captured
+ *  snapshot or is a forward projection — adapters must set
+ *  `isProjection` true for days that haven't elapsed yet. */
+export interface CategoryLeagueDataMatchupDailyPoint {
+  /** Day of the scoring week, 0 = Monday ... 6 = Sunday. */
+  day: number
+  homeWinProb: number   // 0..1
+  awayWinProb: number   // 0..1
+  isProjection: boolean
+}
+
 /** Current week's matchups — for the Matchups page. */
 export interface CategoryLeagueDataMatchup {
   id: string
@@ -113,6 +125,52 @@ export interface CategoryLeagueDataMatchup {
   contestedCount: number    // cats still in play
   // Per-cat current state. `undefined` when stats not yet available.
   catLines?: CategoryLeagueDataCatLine[]
+  /** Projected probability home wins the matchup, 0..1. Honest
+   *  heuristic: each contested cat is treated as a coin flip and the
+   *  binomial is summed for "home final cat total > away final cat
+   *  total" (see matchups-projection.ts). Undefined when contestedCount
+   *  is unknown or the matchup hasn't started. */
+  homeWinProb?: number
+  awayWinProb?: number
+  /** Projected end-of-week cat totals. Best-effort: current cats won
+   *  plus half of contested. Undefined when no projection is computed. */
+  homeProj?: number
+  awayProj?: number
+  /** Day-by-day win-probability history (Mon-Sun) for this matchup.
+   *  Populated by adapters that capture daily snapshots; absent on
+   *  adapters that don't store history (yet). When absent the UI must
+   *  hide the trajectory chart rather than fabricate one. */
+  dailyTrend?: CategoryLeagueDataMatchupDailyPoint[]
+}
+
+/** Player metadata — names, positions, mlbam id when available.
+ *  Optional fields because not every platform/sport surfaces every
+ *  field consistently. Adapters populate what they can. */
+export interface CategoryLeaguePlayer {
+  /** Stable cross-source identifier. Prefer MLBAM id when available;
+   *  fall back to a platform-specific id. */
+  id: string
+  name: string                  // "Shohei Ohtani"
+  position?: string             // "DH/SP" / "OF" / "RP"
+  mlbTeam?: string              // "LAA" / "NYY" — three-letter code
+  photoUrl?: string             // MLB Stats API or platform-supplied
+}
+
+/** One player's stat line on a single day, as accumulated for one
+ *  fantasy team. Drives HUGE_GAME (the player's day) and
+ *  BENCH_BLUNDER (the bench player's day vs the starter's). */
+export interface CategoryLeaguePlayerPerformance {
+  playerId: string
+  fantasyTeamId: string
+  /** Was the player in the starting lineup for the eligible scoring
+   *  period on this day? Required for bench blunder detection. */
+  started: boolean
+  /** YYYY-MM-DD. The implicit scoring week is the league's current
+   *  or just-finished week, depending on which the adapter pulled. */
+  day: string
+  /** Per-cat stat line keyed by the league's category ids
+   *  (R, H, HR, RBI, SB, AVG, W, SV, K, ERA, WHIP, etc.). */
+  stats: Record<string, number>
 }
 
 /** Per-season summary — for the History page season list. */
@@ -230,6 +288,13 @@ export interface CategoryLeagueData {
   currentWeek: number
   currentSeason: number
   playoffCutoff: number       // top N make playoffs
+  /** When true, this data was reconstructed from per-week
+   *  history rather than snapshotted live. Consumers (currently
+   *  IssueView) use it to gracefully degrade fields that aren't
+   *  recoverable from match history alone — per-cat ownership,
+   *  for instance — and to surface a "Reconstructed from platform
+   *  data" disclaimer so readers know what they're looking at. */
+  synthesized?: boolean
   /**
    * Last week of the regular season (the bubble closes after this).
    * Adapters populate from the platform's schedule (Yahoo
@@ -267,10 +332,35 @@ export interface CategoryLeagueData {
   /* ───── Extended fields (Wave 2 detection consumers) ───────── */
 
   /** Current week's matchups — populated when adapter can group them. */
+  /** Per-week matchup results, keyed by stringified week number
+   *  ("1", "2", ...). Populated by adapters that retain full
+   *  weekly matchup history (Yahoo, ESPN). Drives The Issue's
+   *  on-demand reconstruction of past archived weeks — without
+   *  it, an unarchived past issue can't be synthesized. */
+  matchupsByWeek?: Record<string, CategoryLeagueDataMatchup[]>
   matchupsCurrentWeek?: CategoryLeagueDataMatchup[]
+
+  /** Previous week's matchups in their finalized state. Drives the
+   *  Monday-morning "LAST WEEK" recap beat — what happened in the just-
+   *  closed week (upsets, sweeps, thrillers) so the page leads with
+   *  recap content instead of an empty Day 1 strip. Empty/undefined
+   *  when current week is 1 or the adapter can't fetch prior. */
+  matchupsPreviousWeek?: CategoryLeagueDataMatchup[]
 
   /** Per-season summary across prior years. Empty for brand-new leagues. */
   seasonHistory?: CategoryLeagueDataSeasonHistory[]
+
+  /** Player metadata for the league's rostered players. Populated by
+   *  adapters that surface per-player data; undefined for leagues
+   *  where the adapter hasn't been extended yet. Drives player-level
+   *  beats (HUGE_GAME, BENCH_BLUNDER). */
+  players?: CategoryLeaguePlayer[]
+
+  /** Per-day stat lines for rostered players over the just-finished
+   *  week (and optionally the current week). Drives HUGE_GAME and
+   *  BENCH_BLUNDER detection. Empty/undefined when the adapter
+   *  hasn't been extended to fetch daily stat history. */
+  playerPerformances?: CategoryLeaguePlayerPerformance[]
 
   /** Career-level stats keyed by teamId. */
   teamCareerStats?: Record<string, CategoryLeagueDataTeamCareerStats>

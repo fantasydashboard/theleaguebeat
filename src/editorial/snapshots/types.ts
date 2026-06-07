@@ -23,6 +23,11 @@ export interface SnapshotMatchup {
   homeCatWins: number
   awayCatWins: number
   ties: number
+  /** Projected win probabilities at the time of the snapshot (0..1).
+   *  Optional because older rows pre-date the field — the trend
+   *  builder skips snapshots without it. */
+  homeWinProb?: number
+  awayWinProb?: number
 }
 
 export interface LeagueSnapshot {

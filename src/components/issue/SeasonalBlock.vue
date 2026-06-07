@@ -132,13 +132,20 @@ const stage = computed<Stage>(() => {
   return 'midseason'
 })
 
-/** Stages we have something to render for. Returns null for stages
- *  where the block should silently disappear. */
+/** Stages we have something to render for. Only 'stretch' is fully
+ *  implemented today (the playoff picture three-bucket layout). The
+ *  other stages — opening, final, playoffs, offseason — render
+ *  placeholder "lands here" copy inside dotted-border stubs, which
+ *  reads as mid-build content shipped to production. Hide them all
+ *  until they have real implementations.
+ *
+ *  When a stage gets built, remove it from the hide-list. The detector
+ *  + headline + eyebrow infrastructure already supports them; the
+ *  only thing missing is the body content. */
 const visibleStage = computed<Stage | null>(() => {
   const s = stage.value
-  if (s === 'settling' || s === 'midseason') return null
-  if (s === 'preseason' || s === 'final') return null  // not yet implemented; hide rather than show a stub
-  return s
+  if (s === 'stretch') return s
+  return null
 })
 
 function eyebrowFor(s: Stage): string {

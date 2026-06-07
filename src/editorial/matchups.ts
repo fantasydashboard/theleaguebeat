@@ -46,6 +46,7 @@ export type MatchupsKind =
   | 'hero-champ-collapsing'       // defending champ in trouble
   | 'hero-sweep-in-progress'      // one team dominating most cats
   | 'hero-closest-race'           // tight contested all 11 cats
+  | 'hero-week-preview'           // Day 1/2 setup hero — picks by prior alone
   | 'sub-headline'                // day-of-week-anchored 3-fragment
   | 'what-to-watch-flip'          // a cat could flip with X games left
   | 'what-to-watch-lock'          // a cat could lock with Y outcome
@@ -196,6 +197,19 @@ function pick<T>(pool: readonly T[]): T {
 /* Pluralize helper */
 const plural = (n: number, one: string, many: string = one + 's') => `${n} ${n === 1 ? one : many}`
 
+/* Mascots are auto-derived as the last word of a team name. That
+   produces "Team" for names like "The EH! Team" and "Threat" for
+   "Jonathan's Triple Threat" — generic last-words that read as
+   placeholders in headlines. This gate filters them out. */
+const GENERIC_MASCOT_WORDS = new Set([
+  'team', 'squad', 'crew', 'club', 'company', 'family',
+  'guys', 'boys', 'bros', 'gang', 'union',
+])
+function isUsableMascot(mascot: string): boolean {
+  if (!mascot || mascot.length < 4) return false
+  return !GENERIC_MASCOT_WORDS.has(mascot.toLowerCase())
+}
+
 /* Helper — leader of the live cat record (pre-formatted "6-4-1" from A's view). */
 function leaderName(ctx: MatchupsContext): string {
   const [a, b] = ctx.catRecord.split('-').map((s) => parseInt(s, 10))
@@ -224,7 +238,7 @@ const HERO_TOP_CLASH: MatchupsTemplate = {
     () => 'HEAVYWEIGHT',
     () => 'THE BIG ONE',
     () => 'STANDINGS COLLISION',
-    () => 'CHAMPIONSHIP TONE',
+    () => 'HEADLINER',
     () => 'TOP-SEED SHOWDOWN',
     (ctx) => ctx.teamA.seedRank === 1 && ctx.teamB.seedRank === 2 ? 'ONE VERSUS TWO' : 'TOP OF THE STANDINGS',
   ],
@@ -395,16 +409,20 @@ const HERO_TOP_CLASH: MatchupsTemplate = {
 const HERO_BUBBLE: MatchupsTemplate = {
   kind: 'hero-bubble-vs-bubble',
   eyebrows: [
+    // Type-of-matchup descriptors — accurate any time the bubble
+    // detector fires, regardless of how many weeks remain.
     () => 'PLAYOFF LINE',
     () => 'BUBBLE WATCH',
     () => 'CUT LINE',
-    () => 'MUST-WIN',
-    () => 'ELIMINATION TONE',
     () => 'BUBBLE COLLISION',
     () => 'THE CUTOFF',
-    () => 'SEASON-DEFINING',
     () => 'PLAYOFF MATH',
-    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 2) ? 'MUST-WIN' : 'BUBBLE WATCH',
+    // Urgency-claiming eyebrows — gated to late-season only. A "MUST-WIN"
+    // 14 weeks out from playoffs is editorial fiction; let the descriptor
+    // variants carry the slot until the math actually demands urgency.
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 4) ? 'MUST-WIN' : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 2) ? 'DO OR DIE' : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 6) ? 'SEASON-DEFINING' : null,
   ],
   headlines: [
     // Tight collision
@@ -430,11 +448,22 @@ const HERO_BUBBLE: MatchupsTemplate = {
       ? `Two weeks left. A loss here closes the door.`
       : null,
 
-    // Stakes-led
-    (ctx) => `The playoff seat is on the table.`,
-    (ctx) => `Whoever loses this is on the outside.`,
-    (ctx) => `${ctx.teamA.name} or ${ctx.teamB.name}. One of them gets the last invite.`,
-    (ctx) => `One of these teams is out by Monday.`,
+    // Stakes-led — gated to late-season. "The playoff seat is on the
+    // table" 14 weeks out is the same false-credibility trap as the
+    // Monte Carlo claim. Let the matchup-type descriptors carry the
+    // slot when the math isn't actually urgent yet.
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 6)
+      ? `The playoff seat is on the table.`
+      : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 3)
+      ? `Whoever loses this is on the outside.`
+      : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 4)
+      ? `${ctx.teamA.name} or ${ctx.teamB.name}. One of them gets the last invite.`
+      : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 1)
+      ? `One of these teams is out by Monday.`
+      : null,
 
     // Verb-led
     (ctx) => `${ctx.teamA.mascot} and ${ctx.teamB.mascot} both need this. Neither has won three in a row all year.`,
@@ -447,7 +476,9 @@ const HERO_BUBBLE: MatchupsTemplate = {
     (ctx) => `${ctx.teamA.name}. ${ctx.teamB.name}. The bubble breaks here.`,
 
     // Voice flavor
-    (ctx) => `The kind of matchup where the loser starts shopping for next year.`,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 2)
+      ? `The kind of matchup where the loser starts shopping for next year.`
+      : null,
     (ctx) => `Bubble teams play this game differently. Every cat is a season.`,
     (ctx) => `Nobody on the bubble is comfortable. ${ctx.teamA.name} and ${ctx.teamB.name} just got the worst draw.`,
 
@@ -473,8 +504,14 @@ const HERO_BUBBLE: MatchupsTemplate = {
   bodies: [
     // Standings reality
     (ctx) => `${ctx.teamA.name} sits at ${ctx.teamA.catRecord}. ${ctx.teamB.name} sits at ${ctx.teamB.catRecord}. Both teams are inside two games of the cut line.`,
-    (ctx) => `Both teams have been within a game of the playoff seat for a month. This is the head-to-head that breaks the tie.`,
-    (ctx) => `${ctx.teamA.name} and ${ctx.teamB.name} have the same record and the same schedule strength. The math gives them this one game to settle it.`,
+    // "for a month" / "settle it" claim history + urgency we can't
+    // back early-season — gate to late-season.
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 5)
+      ? `Both teams have been within a game of the playoff seat for a month. This is the head-to-head that breaks the tie.`
+      : null,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 3)
+      ? `${ctx.teamA.name} and ${ctx.teamB.name} have the same record and the same schedule strength. The math gives them this one game to settle it.`
+      : null,
 
     // Weeks-left
     (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 3)
@@ -510,9 +547,13 @@ const HERO_BUBBLE: MatchupsTemplate = {
       : null,
 
     // Honest, quieter
-    (ctx) => `Two teams that have been hanging on for weeks. One of them lets go on Sunday.`,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 5)
+      ? `Two teams that have been hanging on for weeks. One of them lets go on Sunday.`
+      : null,
     (ctx) => `Nothing about either roster says lock. Everything about the standings says this is the game.`,
-    (ctx) => `${ctx.teamA.name} versus ${ctx.teamB.name} is the matchup the rest of the league is rooting against. A loss for either of them clears a seat.`,
+    (ctx) => (ctx.weeksLeftInRegularSeason !== undefined && ctx.weeksLeftInRegularSeason <= 4)
+      ? `${ctx.teamA.name} versus ${ctx.teamB.name} is the matchup the rest of the league is rooting against. A loss for either of them clears a seat.`
+      : null,
 
     // Win-prob
     (ctx) => Math.abs(ctx.teamA.winProb - 0.5) < 0.06 ? `The projection has it inside two points. The model agrees with the eye test.` : null,
@@ -726,7 +767,9 @@ const HERO_SWEEP: MatchupsTemplate = {
     (ctx) => `${leaderName(ctx)}: ${ctx.catRecord}. Lopsided.`,
 
     // Opponent collapse
-    (ctx) => `${trailerName(ctx)} has not contested a cat since Tuesday.`,
+    (ctx) => ['Wed', 'Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
+      ? `${trailerName(ctx)} has not contested a cat since Tuesday.`
+      : null,
     (ctx) => `${trailerName(ctx)} cannot find a category.`,
     (ctx) => `${leaderName(ctx)} has the box score. ${trailerName(ctx)} has none of it.`,
 
@@ -752,8 +795,8 @@ const HERO_SWEEP: MatchupsTemplate = {
     (ctx) => (ctx.teamA.seedRank === 1 || ctx.teamB.seedRank === 1)
       ? `${leaderName(ctx)} is reminding the league why it is the #1 seed.`
       : null,
-    (ctx) => leaderName(ctx) === ctx.teamA.name && (ctx.teamA.seedRank ?? 0) >= 7
-      ? `${ctx.teamA.name} just put up the loudest week of its season. Eight cats and counting.`
+    (ctx) => leaderName(ctx) === ctx.teamA.name && (ctx.teamA.seedRank ?? 0) >= 7 && Math.max(0, ctx.teamA.winProb) >= 0.85
+      ? `${ctx.teamA.name} just put up the loudest week of its season. ${plural(Math.round((ctx.contestedCats.length + ctx.decidedCats.length) * 0.7), 'cat')} and counting.`
       : null,
 
     // Contested-cat aware (only a couple still live)
@@ -774,7 +817,9 @@ const HERO_SWEEP: MatchupsTemplate = {
 
     // Honest-honest
     (ctx) => `${leaderName(ctx)} did not need a hero. The whole roster showed up.`,
-    (ctx) => `${trailerName(ctx)} did not pitch. ${trailerName(ctx)} did not hit. The week was over by Friday.`,
+    (ctx) => ['Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
+      ? `${trailerName(ctx)} did not pitch. ${trailerName(ctx)} did not hit. The week was over by Friday.`
+      : null,
 
     // Voice flavor
     (ctx) => `The kind of week that pads the seeding tiebreakers.`,
@@ -783,13 +828,17 @@ const HERO_SWEEP: MatchupsTemplate = {
   bodies: [
     // Score / state framing
     (ctx) => `${ctx.catRecord} in favor of ${leaderName(ctx)} with ${plural(ctx.daysLeftInWeek, 'day')} left. ${trailerName(ctx)} would need a sweep of every remaining cat to flip the matchup.`,
-    (ctx) => `${leaderName(ctx)} has ${ctx.decidedCats.length} cats locked. ${trailerName(ctx)} has been chasing since Tuesday.`,
-    (ctx) => `${leaderName(ctx)} took the early-week lineup, padded it in the middle, and never let ${trailerName(ctx)} pick a cat.`,
+    (ctx) => ['Wed', 'Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
+      ? `${leaderName(ctx)} leads ${ctx.catRecord}. ${trailerName(ctx)} has been chasing since Tuesday.`
+      : null,
+    (ctx) => ['Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
+      ? `${leaderName(ctx)} took the early-week lineup, padded it in the middle, and never let ${trailerName(ctx)} pick a cat.`
+      : null,
 
     // Days-left
     (ctx) => ctx.daysLeftInWeek === 1 ? `One day left. The math will not bend.` : null,
     (ctx) => ctx.daysLeftInWeek === 2 ? `Two days left. ${trailerName(ctx)} needs both of them and a sweep.` : null,
-    (ctx) => ctx.daysLeftInWeek >= 3 ? `${plural(ctx.daysLeftInWeek, 'day')} left. The math went out the window on Wednesday.` : null,
+    (ctx) => ctx.daysLeftInWeek >= 3 && ['Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay) ? `${plural(ctx.daysLeftInWeek, 'day')} left. The math went out the window on Wednesday.` : null,
 
     // Status-aware
     (ctx) => ctx.status === 'locked' ? `Already over. The matchup locked sometime before the late games.` : null,
@@ -800,11 +849,12 @@ const HERO_SWEEP: MatchupsTemplate = {
       ? `${trailerName(ctx)} has conceded ${ctx.puntedCats.slice(0, 2).join(' and ')}. The week's plan was already smaller than the matchup.`
       : null,
 
-    // Specialty padding
-    (ctx) => leaderName(ctx) === ctx.teamA.name && ctx.teamA.topCats.length >= 2
+    // Specialty padding — these claim Wednesday/midweek lock timing
+    // we can't actually verify, so gate to currentDay >= Thursday.
+    (ctx) => leaderName(ctx) === ctx.teamA.name && ctx.teamA.topCats.length >= 2 && ['Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
       ? `${ctx.teamA.name} swept its top two cats by Wednesday. The rest of the board came along for the ride.`
       : null,
-    (ctx) => leaderName(ctx) === ctx.teamB.name && ctx.teamB.topCats.length >= 2
+    (ctx) => leaderName(ctx) === ctx.teamB.name && ctx.teamB.topCats.length >= 2 && ['Thu', 'Fri', 'Sat', 'Sun'].includes(ctx.currentDay)
       ? `${ctx.teamB.name} owned ${ctx.teamB.topCats.slice(0, 2).join(' and ')} by midweek. The supporting cast filled in the rest.`
       : null,
 
@@ -825,7 +875,7 @@ const HERO_SWEEP: MatchupsTemplate = {
     (ctx) => (leaderName(ctx) === ctx.teamA.name && (ctx.teamA.seedRank ?? 99) <= 2)
       ? `${ctx.teamA.name} reminded the league why it sits at #${ctx.teamA.seedRank}. The supporting cast was the difference.`
       : null,
-    (ctx) => (leaderName(ctx) === ctx.teamB.name && (ctx.teamB.seedRank ?? 99) <= 2)
+    (ctx) => (leaderName(ctx) === ctx.teamB.name && (ctx.teamB.seedRank ?? 99) <= 2 && ['Fri', 'Sat', 'Sun'].includes(ctx.currentDay))
       ? `${ctx.teamB.name} is playing top-seed baseball. The matchup ran out of fight by Friday.`
       : null,
 
@@ -983,6 +1033,111 @@ const HERO_CLOSEST_RACE: MatchupsTemplate = {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   KIND: HERO WEEK-PREVIEW (Day 1/2 — picks by season-strength prior)
+
+   Setup-only copy. Never claims cats have been moving; never
+   references mid-week days; never says "trading," "since," or "live."
+   Reads like a magazine's Sunday-night preview — names, records,
+   seedings, projected odds. By Wednesday, hero-closest-race or
+   hero-sweep should take over.
+───────────────────────────────────────────────────────────────── */
+
+const HERO_WEEK_PREVIEW: MatchupsTemplate = {
+  kind: 'hero-week-preview',
+  eyebrows: [
+    () => 'MATCHUP PREVIEW',
+    () => 'PICK \'EM',
+    () => 'TOSS-UP',
+    () => 'OPENING MATCHUP',
+    () => 'WEEK PREVIEW',
+    () => 'INSIDE THE MARGIN',
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) <= 0.05 ? 'TRUE COIN FLIP' : null,
+    (ctx) => (Math.abs(ctx.teamA.winProb - 0.5) >= 0.15) ? 'HEAVYWEIGHT' : null,
+  ],
+  headlines: [
+    // Setup-led: name both teams, name the projection
+    (ctx) => `${ctx.teamA.name} versus ${ctx.teamB.name}. The week opens here.`,
+    (ctx) => `${ctx.teamA.name} and ${ctx.teamB.name} draw each other to open the week.`,
+    (ctx) => (ctx.teamA.seedRank && ctx.teamB.seedRank)
+      ? `#${ctx.teamA.seedRank} ${ctx.teamA.name}. #${ctx.teamB.seedRank} ${ctx.teamB.name}. Week opens.`
+      : null,
+
+    // Shorter two-fragment variants — keep the slot from feeling
+    // bloated when team names are long.
+    (ctx) => `${ctx.teamA.name} draws ${ctx.teamB.name}. Inside the margin.`,
+    // Mascot-versus only when both mascots are real words (≥ 4 chars
+    // and not the generic "Team" / "Squad"). The last-word heuristic
+    // gives "Team" for names like "The EH! Team" — a bad mascot that
+    // makes the headline read as a generic placeholder.
+    (ctx) => isUsableMascot(ctx.teamA.mascot) && isUsableMascot(ctx.teamB.mascot)
+      ? `${ctx.teamA.mascot} versus ${ctx.teamB.mascot}. Pick 'em.`
+      : null,
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) <= 0.05
+      ? `${ctx.teamA.name} vs ${ctx.teamB.name}. True coin flip.`
+      : null,
+    (ctx) => (ctx.teamA.seedRank && ctx.teamB.seedRank && Math.abs(ctx.teamA.seedRank - ctx.teamB.seedRank) >= 4)
+      ? `#${ctx.teamA.seedRank} hosts #${ctx.teamB.seedRank}.`
+      : null,
+
+    // Coin-flip framing — the matchup is projected close
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) <= 0.06
+      ? `${ctx.teamA.name} versus ${ctx.teamB.name}. The projection has it inside the margin.`
+      : null,
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) <= 0.06
+      ? `${ctx.teamA.name} and ${ctx.teamB.name} open at a coin flip.`
+      : null,
+
+    // Lopsided framing — one team projects as a clear favorite
+    (ctx) => ctx.teamA.winProb >= 0.62
+      ? `${ctx.teamA.name} is the projected favorite over ${ctx.teamB.name}.`
+      : null,
+    (ctx) => ctx.teamB.winProb >= 0.62
+      ? `${ctx.teamB.name} is the projected favorite over ${ctx.teamA.name}.`
+      : null,
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) >= 0.18
+      ? `${ctx.teamA.name} draws ${ctx.teamB.name}. The math has its favorite.`
+      : null,
+
+    // Record-led — what the teams are coming in at
+    (ctx) => `${ctx.teamA.name}: ${ctx.teamA.catRecord}. ${ctx.teamB.name}: ${ctx.teamB.catRecord}. Week opens.`,
+
+    // Generic setup — safe fallback
+    (ctx) => `${ctx.teamA.name} draws ${ctx.teamB.name} to open the week.`,
+    (ctx) => `${ctx.teamA.mascot} and ${ctx.teamB.mascot}. First lineups go up Monday.`,
+  ],
+  bodies: [
+    // Setup body: records, prior, lineup framing — no motion claims
+    (ctx) => `${ctx.teamA.name} enters at ${ctx.teamA.catRecord}. ${ctx.teamB.name} at ${ctx.teamB.catRecord}. The projection has it ${ctx.teamA.winProb >= 0.55 ? `tilted ${ctx.teamA.name}'s way` : ctx.teamB.winProb >= 0.55 ? `tilted ${ctx.teamB.name}'s way` : 'inside a coin flip'}.`,
+    (ctx) => Math.abs(ctx.teamA.winProb - 0.5) <= 0.06
+      ? `Two teams with records inside a game of each other. The opening lineup might be the whole matchup.`
+      : null,
+    (ctx) => ctx.teamA.winProb >= 0.62
+      ? `${ctx.teamA.name} is the projected favorite. ${ctx.teamB.name} needs the early starts to push back.`
+      : null,
+    (ctx) => ctx.teamB.winProb >= 0.62
+      ? `${ctx.teamB.name} is the projected favorite. ${ctx.teamA.name} needs the early lineups to come through.`
+      : null,
+    // Series-aware (if context carries it)
+    (ctx) => ctx.series && ctx.series.totalMeetings >= 2
+      ? `${ctx.series.allTimeRecord} ${ctx.series.totalMeetings >= 4 ? 'historically' : 'in the season series'}. This is meeting ${ctx.series.totalMeetings + 1}.`
+      : null,
+    // Seed-aware
+    (ctx) => (ctx.teamA.seedRank && ctx.teamB.seedRank && Math.abs(ctx.teamA.seedRank - ctx.teamB.seedRank) >= 4)
+      ? `#${ctx.teamA.seedRank} drawing #${ctx.teamB.seedRank}. The records tell one story; the matchup might tell another.`
+      : null,
+    // Honest closes
+    (ctx) => `Both rosters set. Both lineups in. The week starts.`,
+    (ctx) => `One week to add to either record. The math is the math; the games will move it.`,
+  ],
+  subContext: [
+    (ctx) => `${ctx.teamA.catRecord} and ${ctx.teamB.catRecord}.`,
+    (ctx) => `Projection: ${Math.round(ctx.teamA.winProb * 100)}-${Math.round(ctx.teamB.winProb * 100)}.`,
+    (ctx) => `Lineups lock tonight.`,
+    (ctx) => `Setting up to open the week.`,
+  ],
+}
+
+/* ─────────────────────────────────────────────────────────────────
    KIND: SUB-HEADLINE (day-anchored, 3-fragment, under page title)
 ───────────────────────────────────────────────────────────────── */
 
@@ -1031,7 +1186,7 @@ const SUB_HEADLINE: MatchupsTemplate = {
     (ctx) => `${ctx.currentDay} board. Daily scores, live records, cat math.`,
     (ctx) => `${ctx.currentDay} matchups. Live cats. Open margins.`,
     (ctx) => `${ctx.currentDay}. Live. Loud. Open.`,
-    (ctx) => `${ctx.currentDay}, by the board.`,
+    (ctx) => `${ctx.currentDay} push. Cat math, live.`,
   ],
   bodies: [
     // Sub-headline doesn't use bodies — fallback only.
@@ -1814,6 +1969,7 @@ export const matchupsTemplates: Record<MatchupsKind, MatchupsTemplate> = {
   'hero-champ-collapsing': HERO_CHAMP_COLLAPSING,
   'hero-sweep-in-progress': HERO_SWEEP,
   'hero-closest-race': HERO_CLOSEST_RACE,
+  'hero-week-preview': HERO_WEEK_PREVIEW,
   'sub-headline': SUB_HEADLINE,
   'what-to-watch-flip': WATCH_FLIP,
   'what-to-watch-lock': WATCH_LOCK,

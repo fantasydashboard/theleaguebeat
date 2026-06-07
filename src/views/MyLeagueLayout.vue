@@ -83,56 +83,77 @@
       </div>
     </header>
 
-    <!-- Secondary nav: page tabs scoped to the active league's UUID. -->
-    <nav class="league-nav" aria-label="League pages">
+    <!-- Magazine masthead nav. Three top-level sections — THE BEAT
+         (daily home), THE ISSUE (weekly analysis: power rankings,
+         matchups, draft), CHRONICLES (history + archive). A second
+         row appears underneath when the user is inside ISSUE or
+         CHRONICLES, surfacing the sub-page tabs.
+
+         Underlying routes are unchanged — the 6 leaf pages still
+         live at /power-rankings, /matchups, etc. The nav restructure
+         is presentation-only so deep links keep working. -->
+    <nav class="league-nav" aria-label="League sections">
       <div class="league-nav-inner">
         <router-link
           class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/home`"
-          active-class="league-nav-tab-active"
-        >Home</router-link>
+          :to="`/leagues/${routeLeagueId}/the-beat`"
+          :class="{ 'league-nav-tab-active': activeSection === 'beat' }"
+        >The Beat</router-link>
         <router-link
           class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/power-rankings`"
-          active-class="league-nav-tab-active"
-        >Power Rankings</router-link>
+          :to="`/leagues/${routeLeagueId}/the-issue`"
+          :class="{ 'league-nav-tab-active': activeSection === 'issue' }"
+        >The Issue</router-link>
         <router-link
           class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/matchups`"
-          active-class="league-nav-tab-active"
-        >Matchups</router-link>
+          :to="`/leagues/${routeLeagueId}/chronicles`"
+          :class="{ 'league-nav-tab-active': activeSection === 'chronicles' }"
+        >Chronicles</router-link>
+      </div>
+    </nav>
+
+    <nav
+      v-if="subNav.length > 0"
+      class="league-subnav"
+      :aria-label="`${activeSection === 'issue' ? 'The Issue' : 'Chronicles'} pages`"
+    >
+      <div class="league-subnav-inner">
         <router-link
-          class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/draft`"
-          active-class="league-nav-tab-active"
-        >Draft</router-link>
-        <router-link
-          class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/history`"
-          active-class="league-nav-tab-active"
-        >History</router-link>
-        <router-link
-          class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/archive`"
-          active-class="league-nav-tab-active"
-        >Archive</router-link>
+          v-for="tab in subNav"
+          :key="tab.path"
+          class="league-subnav-tab"
+          :to="`/leagues/${routeLeagueId}/${tab.path}`"
+          active-class="league-subnav-tab-active"
+        >{{ tab.label }}</router-link>
       </div>
     </nav>
 
     <!-- Magazine masthead — reads live issue context from the
          useIssueStore (set by whichever view loaded the league).
          Falls back to cached league-row data for first-paint state
-         before the view's adapter populates the store. -->
+         before the view's adapter populates the store.
+         On the new Issue route, we override the display week to
+         currentWeek - 1 so the masthead reflects the most-recently
+         published issue (not the in-progress week). -->
     <IssueMasthead
+      v-if="showMasthead"
       :fallback-week="mastheadFallback?.week"
       :fallback-season="mastheadFallback?.season"
       :fallback-founded-season="mastheadFoundedSeason"
       :fallback-updated="mastheadUpdatedAt"
       :league-id="routeLeagueId || undefined"
+      :show-published-issue="onIssuePage"
     />
 
     <main class="league-main">
-      <router-view @open-signup="$emit('open-signup')" />
+      <UnsupportedLeagueNotice
+        v-if="isUnsupportedLeague && supportStatus.ok === false"
+        :kind="supportStatus.kind"
+        :sport="supportStatus.sport"
+        :scoring-type="supportStatus.scoringType"
+        @open-signup="$emit('open-signup')"
+      />
+      <router-view v-else @open-signup="$emit('open-signup')" />
     </main>
 
     <TLBFooter />
@@ -146,7 +167,10 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
 import IssueMasthead from '@/components/issue/IssueMasthead.vue'
 import TLBFooter from '@/components/TLBFooter.vue'
+import { useIssueStore } from '@/stores/issueState'
 import { leagueFoundedSeason } from '@/utils/leagueAge'
+import { classifyLeagueSupport } from '@/utils/leagueSupport'
+import UnsupportedLeagueNotice from '@/components/league/UnsupportedLeagueNotice.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -166,6 +190,59 @@ const routeLeagueId = computed(
 const activeLeague = computed(() =>
   leaguesStore.leagues.find((l) => l.id === routeLeagueId.value) ?? null,
 )
+
+/* ─────────────────────────────────────────────────────────────────
+   3-section nav model.
+
+   Top-level tabs map to 3 buckets, each of which contains one or
+   more underlying routes. Active section is derived from the current
+   route path; the sub-nav row is the bucket's contents (empty for
+   THE BEAT since it's a single view).
+───────────────────────────────────────────────────────────────── */
+
+type SectionKey = 'beat' | 'issue' | 'chronicles'
+
+const ISSUE_PATHS = ['the-issue', 'power-rankings', 'matchups', 'draft'] as const
+const CHRONICLES_PATHS = ['chronicles', 'history', 'archive'] as const
+
+const activeSection = computed<SectionKey>(() => {
+  // Match path SEGMENTS so deep routes (e.g. /the-issue/:weekNumber)
+  // still resolve to their section. The previous endsWith check
+  // missed those and fell through to 'beat'.
+  const segments = route.path.split('/').filter(Boolean)
+  if (ISSUE_PATHS.some((slug) => segments.includes(slug))) return 'issue'
+  if (CHRONICLES_PATHS.some((slug) => segments.includes(slug))) return 'chronicles'
+  return 'beat'
+})
+
+const subNav = computed<Array<{ path: string; label: string }>>(() => {
+  if (activeSection.value === 'issue') {
+    // The Issue is one cohesive magazine spread. PR / Matchups /
+    // Draft live AS SECTIONS within it (not as sub-tabs). Direct
+    // URLs to the legacy dashboard views still resolve — they're
+    // "deeper-view" cross-links from within the Issue.
+    return []
+  }
+  if (activeSection.value === 'chronicles') {
+    return [
+      { path: 'chronicles', label: 'Chronicles' },
+      { path: 'history',    label: 'Seasons'    },
+      { path: 'archive',    label: 'Records'    },
+    ]
+  }
+  return []
+})
+
+/* ─────────────────────────────────────────────────────────────────
+   Coverage gate — TLB renders the full editorial pipeline ONLY for
+   H2H Categories baseball today. For any other league type (roto,
+   points, football, other sports) we surface a magazine-voiced
+   "not yet" notice in place of the view content. This protects
+   readers from broken cat-shaped editorial and gives us a clean
+   waitlist signal for the formats we haven't built yet.
+───────────────────────────────────────────────────────────────── */
+const supportStatus = computed(() => classifyLeagueSupport(activeLeague.value))
+const isUnsupportedLeague = computed(() => supportStatus.value.ok === false)
 
 /* ─────────────────────────────────────────────────────────────────
    Masthead fallback — feeds the masthead its first-paint state from
@@ -203,6 +280,28 @@ const mastheadFoundedSeason = computed<number | undefined>(() => {
   const league = activeLeague.value
   if (!league) return undefined
   return leagueFoundedSeason(league, leaguesStore.leagues)
+})
+
+/** True when the active route is the new Issue page (latest or an
+ *  archived week). The masthead flips into "show most-recently-
+ *  published issue" mode (currentWeek − 1) so it agrees with the
+ *  page's title. Other routes leave it in default mode (in-progress
+ *  week). */
+const onIssuePage = computed(() => {
+  const segments = route.path.split('/').filter(Boolean)
+  return segments.includes('the-issue')
+})
+
+const issueStore = useIssueStore()
+/** True when the masthead should render. On the issue page we hide
+ *  it until the IssueView publishes live data — otherwise the
+ *  cached `leagues.settings.current_week` row drives `VOL. 3 ·
+ *  ISSUE 8` flashes that turn into `VOL. 6 · ISSUE 10` half a
+ *  second later, building reader distrust. On every other route
+ *  the masthead always shows (fallback or live). */
+const showMasthead = computed(() => {
+  if (!onIssuePage.value) return true
+  return issueStore.currentWeek != null
 })
 
 function parseSeasonYear(season: unknown): number {
@@ -279,7 +378,7 @@ onMounted(() => {
   --ink-1: oklch(0.97 0.005 90);
   --ink-2: oklch(0.78 0.008 90);
   --ink-3: oklch(0.55 0.010 90);
-  --ink-4: oklch(0.32 0.012 90);
+  --ink-4: oklch(0.48 0.012 90);   /* tertiary text (captions, deck, owner names, week labels) — ~5:1 contrast on L=0.08 bg, distinct from --ink-3 */
   --ink-5: oklch(0.20 0.015 90);
   --ink-6: oklch(0.14 0.018 90);
   --ink-7: oklch(0.10 0.015 90);
@@ -487,7 +586,11 @@ onMounted(() => {
 .league-main {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 36px 24px 80px;
+  /* Reduced top padding from 36px → 20px. The IssueMasthead strip
+     already provides its own 12px bottom padding, and individual
+     views handle their own internal top spacing — the extra 36px
+     was pushing the cover hero well below the fold. */
+  padding: 20px 24px 80px;
 }
 
 /* Secondary nav: page tabs */
@@ -542,14 +645,69 @@ onMounted(() => {
   border-radius: 4px;
 }
 
+/* Sub-nav row — quieter than the primary nav so it reads as a
+   department-level breadcrumb, not a competing tab strip. */
+.league-subnav {
+  position: sticky;
+  top: 96px;
+  z-index: 89;
+  background: oklch(0.06 0.012 90 / 0.96);
+  border-bottom: 1px solid oklch(0.16 0.013 90);
+  backdrop-filter: blur(6px);
+}
+.league-subnav-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.league-subnav-inner::-webkit-scrollbar { display: none; }
+.league-subnav-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 2px 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: oklch(0.50 0.010 90);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .league-subnav-tab:hover:not(.league-subnav-tab-active) {
+    color: var(--ink-2);
+  }
+}
+.league-subnav-tab-active {
+  color: var(--ink-1);
+  border-bottom-color: var(--accent-secondary);
+}
+.league-subnav-tab:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 @media (max-width: 720px) {
   .league-bar-inner { padding: 10px 16px; gap: 10px; }
   .league-bar-back { display: none; }
   .league-switch-meta { display: none; }
-  .league-main { padding: 24px 16px 60px; }
+  .league-main { padding: 16px 16px 60px; }
   .league-nav-inner { padding: 0 16px; gap: 18px; }
   .league-nav-tab { font-size: 0.76rem; padding: 10px 2px 9px; }
   .league-nav { top: 45px; }
+  .league-subnav { top: 86px; }
+  .league-subnav-inner { padding: 0 16px; gap: 14px; }
+  .league-subnav-tab { font-size: 0.68rem; padding: 7px 2px 6px; }
   .league-switch-menu { left: 16px; right: 16px; min-width: 0; }
 }
 </style>

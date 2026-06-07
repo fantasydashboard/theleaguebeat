@@ -35,6 +35,8 @@ export type PRKind =
   | 'hero-biggest-climber'
   | 'hero-defending-champ-falling'
   | 'hero-bubble-surprise'
+  | 'hero-the-race'
+  | 'hero-your-team'
   | 'pulse-heater'
   | 'pulse-long-fall'
   | 'pulse-steady-hand'
@@ -44,7 +46,7 @@ export type PRKind =
   | 'sub-headline'
   | 'quick-read'
 
-export type PRSeasonStage = 'early' | 'mid' | 'late' | 'final-stretch'
+export type PRSeasonStage = 'early' | 'mid' | 'late' | 'final-stretch' | 'playoffs'
 
 export type PRQuickReadKind =
   | 'tightest-race'
@@ -95,6 +97,7 @@ export interface PRContext {
   currentWeek: number
   totalWeeks: number
   weeksUntilPlayoffs: number     // 0 if playoffs already
+  totalCategories: number        // number of scoring categories in the league
 
   // HERO-only — protagonist + antagonist framing
   hero?: {
@@ -129,6 +132,26 @@ export interface PRContext {
     puntedCat?: string           // for punt-kings: the cat they are punting
     puntedWeeks?: number         // weeks punting this season
     puntedSeasons?: number       // multi-season punt count
+  }
+
+  // HERO 'the-race' — the field chasing a locked-in leader. ctx.team is
+  // the focal team (the club on the playoff line, or the reader's team
+  // when they sit in the contested band).
+  race?: {
+    leaderName: string           // the entrenched #1 everyone is chasing
+    leaderWeeksAtTop: number
+    contenderCount: number       // teams still alive for a seat
+    seatsOpen: number            // playoff seats below the locked leader
+    cutlineName?: string         // team sitting exactly on the playoff line
+  }
+
+  // HERO 'your-team' — the reader's own team angle. ctx.team is the
+  // reader's team. Copy stays third-person (the yellow row cue carries
+  // the "you"); never address the reader as "you" here.
+  yourTeam?: {
+    angle: 'climb' | 'streak' | 'bubble-in' | 'bubble-out' | 'lurking' | 'steady'
+    rivalName?: string           // nearest team in the reader's race
+    rivalGap?: number            // cat-win gap to that rival (absolute)
   }
 }
 
@@ -944,6 +967,123 @@ const HERO_BUBBLE_SURPRISE: PRTemplate = {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   KIND: hero-the-race
+   When the #1 seat is locked, the story is the scrum for the rest.
+   ctx.team is the focal club (on the cutline, or the reader's team).
+   All copy reads off race{} + the focal team's rank, never a weekly
+   delta, so it stays accurate for a settled week.
+───────────────────────────────────────────────────────────────── */
+
+const HERO_THE_RACE: PRTemplate = {
+  kind: 'hero-the-race',
+  eyebrows: [
+    () => 'THE REAL RACE',
+    () => 'BELOW THE THRONE',
+    () => 'THE SCRUM',
+    () => 'SEATS UP FOR GRABS',
+    () => 'THE CUTLINE',
+    () => 'THE OTHER RACE',
+    () => 'WHERE IT GETS DECIDED',
+    () => 'THE FIELD',
+  ],
+  headlines: [
+    // The focal team (ctx.team) is the club shown on the card (logo +
+    // stats), so every headline names it; the leader is context only.
+    (ctx) => `${ctx.team.name} sits on the cutline. One game decides the bracket.`,
+    (ctx) => `${ctx.team.name} holds a seat by a game. The chase is real.`,
+    (ctx) => ctx.race ? `${ctx.race.leaderName} is gone. ${ctx.team.name} is fighting for what's left.` : null,
+    (ctx) => ctx.race ? `${ctx.team.name} is in the scrum. ${ctx.race.contenderCount} teams, ${plural(ctx.race.seatsOpen, 'seat')}.` : null,
+    (ctx) => ctx.race ? `${ctx.race.leaderName} owns #1. ${ctx.team.name} owns the line that decides the rest.` : null,
+    (ctx) => `${ctx.team.name}: the most contested seat in the league.`,
+    (ctx) => ctx.race && ctx.race.seatsOpen >= 4 ? `One seed is settled. ${ctx.team.name} sits where the other ${ctx.race.seatsOpen} get decided.` : null,
+    (ctx) => ctx.race ? `${ctx.team.name} is right on the line. ${ctx.race.contenderCount} teams want the same ${plural(ctx.race.seatsOpen, 'seat')}.` : null,
+    (ctx) => `${ctx.team.name} is exactly where the season gets interesting.`,
+    (ctx) => ctx.weeksUntilPlayoffs <= 4 && ctx.race ? `${plural(ctx.weeksUntilPlayoffs, 'week')} of jockeying left, and ${ctx.team.name} is on the bubble.` : null,
+    (ctx) => ctx.race ? `${ctx.race.leaderName} locked the top. ${ctx.team.name} is on the seam that decides everyone else.` : null,
+  ],
+  bodies: [
+    (ctx) => ctx.race ? `${ctx.race.leaderName} has the top line. Everything worth watching is happening below it.` : null,
+    (ctx) => ctx.race ? `${ctx.race.contenderCount} teams are in range of the ${plural(ctx.race.seatsOpen, 'open seat')}. ${ctx.team.name} is one of them.` : null,
+    (ctx) => `The cutline runs through ${ctx.team.name}. ${plural(ctx.weeksUntilPlayoffs, 'week')} to settle which side they finish on.`,
+    (ctx) => ctx.race ? `${ctx.race.leaderName} clinched the conversation weeks ago. The rest of the field is playing for the ${plural(ctx.race.seatsOpen, 'seat')} that are still open.` : null,
+    (ctx) => `${ctx.team.name}: ${fmtRecord(ctx.catWins, ctx.catLosses, ctx.catTies)}, and right on the seam that decides the bracket.`,
+    (ctx) => ctx.race ? `The one-seed is set. ${ctx.race.contenderCount} teams are separated by a handful of category wins for the rest.` : null,
+    (ctx) => `${ctx.team.name} is exactly where the season gets interesting. The line does not move itself.`,
+  ],
+  kickers: [
+    () => 'The cutline is where the season lives now.',
+    (ctx) => ctx.weeksUntilPlayoffs > 0 ? `${plural(ctx.weeksUntilPlayoffs, 'week')} to sort the seats.` : 'The seats get sorted now.',
+    () => 'The leader is set. The drama is not.',
+    (ctx) => ctx.race ? `${ctx.race.contenderCount} teams, ${plural(ctx.race.seatsOpen, 'seat')}.` : null,
+    () => 'This is the race that matters.',
+  ],
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   KIND: hero-your-team
+   The reader's own team has a real angle worth the cover. ctx.team is
+   the reader's team. Third-person only: the yellow row cue carries the
+   "you", so this copy never says "you" or "your". Reads off the team's
+   rank, season delta, streak, and cutline proximity, never a raw
+   weekly delta, so it stays accurate.
+───────────────────────────────────────────────────────────────── */
+
+const HERO_YOUR_TEAM: PRTemplate = {
+  kind: 'hero-your-team',
+  eyebrows: [
+    (ctx) => ctx.yourTeam?.angle === 'climb' ? 'ON THE RISE' : null,
+    (ctx) => ctx.yourTeam?.angle === 'streak' ? 'HEATING UP' : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-in' ? 'HOLDING A SEAT' : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-out' ? 'ON THE BUBBLE' : null,
+    (ctx) => ctx.yourTeam?.angle === 'lurking' ? 'QUIETLY DANGEROUS' : null,
+    () => 'IN THE MIX',
+    () => 'WORTH WATCHING',
+    () => 'THE CHASE',
+  ],
+  headlines: [
+    // Climb angle
+    (ctx) => ctx.yourTeam?.angle === 'climb' ? `${ctx.team.name} is up ${ctx.rankDeltaSinceWeek1} since week 1. The climb is real.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'climb' ? `${ctx.team.name}: #${ctx.rankDeltaSinceWeek1 + ctx.currentRank} in week 1, #${ctx.currentRank} now.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'climb' ? `${ctx.team.name} ${pick(SYN.CLIMBED)} into #${ctx.currentRank}. The board is catching up.` : null,
+    // Streak angle
+    (ctx) => ctx.yourTeam?.angle === 'streak' && ctx.streak ? `${ctx.team.name} has won ${ctx.streak.length} straight. The seed is moving.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'streak' && ctx.streak ? `${ctx.streak.length} in a row. ${ctx.team.name} picked the right month.` : null,
+    // Bubble angles
+    (ctx) => ctx.yourTeam?.angle === 'bubble-in' ? `${ctx.team.name} holds the last seat. ${ctx.yourTeam.rivalName ?? 'The field'} is right behind.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-in' ? `${ctx.team.name} is inside the line at #${ctx.currentRank}. The cushion is thin.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-out' ? `${ctx.team.name} sits one spot out. ${plural(ctx.weeksUntilPlayoffs, 'week')} to fix it.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-out' && ctx.yourTeam.rivalName ? `${ctx.team.name} is chasing ${ctx.yourTeam.rivalName} for the last seat.` : null,
+    // Lurking angle
+    (ctx) => ctx.yourTeam?.angle === 'lurking' ? `${ctx.team.name} is #${ctx.currentRank} and nobody is talking about them yet.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'lurking' ? `${ctx.team.name} sits at #${ctx.currentRank}. The quiet contender.` : null,
+    // Cat-fingerprint led (any angle)
+    (ctx) => ctx.topCats.length >= 2 ? `${ctx.team.name} ${pick(SYN.OWNS)} ${ctx.topCats[0]} and ${ctx.topCats[1]}. The seed is following.` : null,
+    (ctx) => ctx.topCats.length >= 1 && ctx.bleedingCats.length === 0 ? `${ctx.team.name} owns ${ctx.topCats[0]} and bleeds nothing. That plays in October.` : null,
+    // Record / general
+    (ctx) => `${ctx.team.name}: ${fmtRecord(ctx.catWins, ctx.catLosses, ctx.catTies)} and right in the bracket math.`,
+    (ctx) => ctx.rankDeltaSinceWeek1 >= 1 ? `${ctx.team.name} has climbed to #${ctx.currentRank}. The schedule says keep going.` : null,
+    (ctx) => `${ctx.team.name} is #${ctx.currentRank} with ${plural(ctx.weeksUntilPlayoffs, 'week')} to make it count.`,
+  ],
+  bodies: [
+    (ctx) => ctx.yourTeam?.angle === 'climb' ? `${ctx.team.name} is ${fmtSpots(ctx.rankDeltaSinceWeek1)} on the season. The trajectory is the story, not the snapshot.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'streak' && ctx.streak ? `${ctx.streak.length} straight matchup wins. ${ctx.team.name} turned a quiet start into a seed push.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-in' ? `${ctx.team.name} is inside the line at #${ctx.currentRank}. ${ctx.yourTeam.rivalName ? `${ctx.yourTeam.rivalName} is the team to hold off.` : 'The cushion is one bad week.'}` : null,
+    (ctx) => ctx.yourTeam?.angle === 'bubble-out' ? `${ctx.team.name} sits a game out of the bracket at #${ctx.currentRank}. ${plural(ctx.weeksUntilPlayoffs, 'week')} to close it.` : null,
+    (ctx) => ctx.yourTeam?.angle === 'lurking' ? `${ctx.team.name} has quietly held #${ctx.currentRank}. ${ctx.topCats.length >= 1 ? `${ctx.topCats[0]} is theirs and nobody noticed.` : 'No drama, just position.'}` : null,
+    (ctx) => `${ctx.team.name}: ${ctx.catWins} category wins, #${ctx.currentRank} on the board, ${plural(ctx.weeksUntilPlayoffs, 'week')} to play.`,
+    (ctx) => ctx.topCats.length >= 1 ? `${ctx.team.name} ${pick(SYN.OWNS)} ${ctx.topCats[0]}. Build the rest around that and the seed takes care of itself.` : null,
+    (ctx) => `${ctx.team.name} is in the part of the table where one week swings the whole bracket.`,
+  ],
+  kickers: [
+    (ctx) => ctx.weeksUntilPlayoffs > 0 ? `${plural(ctx.weeksUntilPlayoffs, 'week')} to lock a seed.` : 'Playoffs settle it.',
+    () => 'The bracket is within reach.',
+    () => 'Next week is a tone-setter.',
+    (ctx) => ctx.yourTeam?.rivalName ? `${ctx.yourTeam.rivalName} is the measuring stick.` : null,
+    () => 'The window is open.',
+  ],
+}
+
+/* ─────────────────────────────────────────────────────────────────
    KIND: pulse-heater (3+ game current win streak)
 ───────────────────────────────────────────────────────────────── */
 
@@ -1219,14 +1359,17 @@ const PULSE_STEADY_HAND: PRTemplate = {
 const DYNASTY_HITTING_KING: PRTemplate = {
   kind: 'dynasty-hitting-king',
   eyebrows: [
+    // Magazine-register department labels only. "BAT DEPARTMENT" read
+    // too SaaS-feature-y and was the outlier voice across the pool.
     () => 'HITTING KING',
     () => 'OWNS THE BATS',
     () => 'OFFENSIVE THRONE',
     () => 'LINEUP ROYALTY',
-    () => 'BAT DEPARTMENT',
     () => 'OFFENSE LOCKED',
     () => 'HITTING CATS',
     () => 'KING OF THE BOX',
+    () => 'AT THE PLATE',
+    () => 'THE OFFENSE',
     (ctx) => (ctx.dynasty?.weeksOwning ?? 0) >= 8 ? 'SEASON-LONG REIGN' : 'HITTING KING',
   ],
   headlines: [
@@ -1317,7 +1460,7 @@ const DYNASTY_PITCHING_KING: PRTemplate = {
     (ctx) => ctx.dynasty?.cats && ctx.dynasty.cats.length >= 2 ? `${ctx.team.name} ${pick(SYN.OWNS)} ${ctx.dynasty.cats[0]} and ${ctx.dynasty.cats[1]}.` : null,
     (ctx) => ctx.dynasty?.cats && ctx.dynasty.cats.length >= 3 ? `${ctx.team.name}: ${ctx.dynasty.cats[0]}, ${ctx.dynasty.cats[1]}, ${ctx.dynasty.cats[2]}. All arms.` : null,
     (ctx) => ctx.dynasty?.cats && ctx.dynasty.cats.length >= 1 ? `${ctx.team.name} ${pick(SYN.OWNS)} ${ctx.dynasty.cats[0]}. Since draft day.` : null,
-    (ctx) => `${ctx.team.name}: the staff.`,
+    (ctx) => `${ctx.team.name} runs the pitching side.`,
     (ctx) => `${ctx.team.name} owns the mound.`,
 
     // Time-anchored
@@ -1328,7 +1471,7 @@ const DYNASTY_PITCHING_KING: PRTemplate = {
     // Cat-specific flavor
     (ctx) => ctx.dynasty?.cats?.includes('K') ? `${ctx.team.name}: K department. Year after year.` : null,
     (ctx) => ctx.dynasty?.cats?.includes('SV') ? `${ctx.team.name} ${pick(SYN.OWNS)} saves. The closer fund pays out.` : null,
-    (ctx) => ctx.dynasty?.cats?.includes('ERA') ? `${ctx.team.name}: cleanest ERA in the league. Has been all year.` : null,
+    (ctx) => ctx.dynasty?.cats?.includes('ERA') ? `${ctx.team.name} leads the league in ERA. Has all year.` : null,
     (ctx) => ctx.dynasty?.cats?.includes('W') ? `${ctx.team.name} ${pick(SYN.OWNS)} W. Has all year.` : null,
 
     // Two-fragment
@@ -1357,7 +1500,7 @@ const DYNASTY_PITCHING_KING: PRTemplate = {
     // Cat-specific
     (ctx) => ctx.dynasty?.cats?.includes('K') ? `${ctx.team.name}: K lead since week 1. The rotation is the strategy.` : null,
     (ctx) => ctx.dynasty?.cats?.includes('SV') ? `${ctx.team.name} owns SV. Has owned SV. Will own SV.` : null,
-    (ctx) => ctx.dynasty?.cats?.includes('ERA') && ctx.dynasty?.cats?.includes('WHIP') ? `${ctx.team.name}: ERA and WHIP both locked. The cleanest staff in the league.` : null,
+    (ctx) => ctx.dynasty?.cats?.includes('ERA') && ctx.dynasty?.cats?.includes('WHIP') ? `${ctx.team.name} leads the league in ERA and WHIP. The only staff that owns both.` : null,
 
     // Record-anchored
     (ctx) => `${ctx.team.name}: ${fmtRecord(ctx.catWins, ctx.catLosses, ctx.catTies)}. The arms do the work.`,
@@ -1445,7 +1588,7 @@ const DYNASTY_PUNT_KINGS: PRTemplate = {
     (ctx) => `${ctx.team.name} is ${(ctx.winPct * 100).toFixed(0)}% across the categories they actually play.`,
 
     // Strategy commentary
-    (ctx) => ctx.dynasty?.puntedCat ? `${ctx.team.name} drafts without ${ctx.dynasty.puntedCat} in mind. The other ${plural(7, 'category')} get the attention.` : null,
+    (ctx) => ctx.dynasty?.puntedCat ? `${ctx.team.name} drafts without ${ctx.dynasty.puntedCat} in mind. The other ${plural(Math.max(1, ctx.totalCategories - 1), 'category', 'categories')} get the attention.` : null,
     (ctx) => `${ctx.team.name}: commitment to the punt is the strategy. Half-punting is the losing move.`,
 
     // Magnitude
@@ -1491,14 +1634,25 @@ const SUB_HEADLINE: PRTemplate = {
     (ctx) => ctx.subHeadline?.stage === 'final-stretch' ? `Final stretch. Top seeds locked, bubble open. Who plays in.` : null,
     (ctx) => ctx.subHeadline?.stage === 'final-stretch' ? `${plural(ctx.weeksUntilPlayoffs, 'week')} left. Seeding is the story.` : null,
 
+    // Playoffs variants (regular season is over)
+    (ctx) => ctx.subHeadline?.stage === 'playoffs' ? `The regular season is in the books. This is the final ladder.` : null,
+    (ctx) => ctx.subHeadline?.stage === 'playoffs' ? `Playoff time. Seeds are set; now it is win or wait till next year.` : null,
+    (ctx) => ctx.subHeadline?.stage === 'playoffs' ? `Bracket season. The board says who earned the right to be here.` : null,
+
     // Stat-anchored (when subHeadline has counts)
     (ctx) => ctx.subHeadline?.climberCount && ctx.subHeadline?.bleedingCount ? `${plural(ctx.currentWeek, 'week')} in. ${ctx.subHeadline.climberCount} climbing, ${ctx.subHeadline.bleedingCount} bleeding.` : null,
     (ctx) => ctx.subHeadline?.bubbleCount ? `${plural(ctx.subHeadline.bubbleCount, 'team')} on the bubble. The seeds are not safe.` : null,
 
-    // Generic fallback (always-applicable)
-    (ctx) => `${plural(ctx.currentWeek, 'week')} in. Here is the ladder.`,
-    (ctx) => `${plural(ctx.currentWeek, 'week')} down. Who is climbing. Who is falling.`,
-    (ctx) => `Where the ladder stands at week ${ctx.currentWeek}.`,
+    // Generic fallback — only fires when stage isn't detected. With
+    // a real season stage in hand (early/mid/late/final-stretch/
+    // playoffs), the variants above carry editorial color the
+    // fallback lacks. Gating these on stage absence prevents the
+    // random-picker from rolling the generic "Where the ladder
+    // stands" variant when a more colorful mid-season line is
+    // available.
+    (ctx) => !ctx.subHeadline?.stage ? `${plural(ctx.currentWeek, 'week')} in. Here is the ladder.` : null,
+    (ctx) => !ctx.subHeadline?.stage ? `${plural(ctx.currentWeek, 'week')} down. Who is climbing. Who is falling.` : null,
+    (ctx) => !ctx.subHeadline?.stage ? `Where the ladder stands at week ${ctx.currentWeek}.` : null,
   ],
   bodies: [], // sub-headline only renders a headline
 }
@@ -1522,38 +1676,68 @@ const QUICK_READ: PRTemplate = {
     },
   ],
   headlines: [
-    // Tightest-race variants
-    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statLabel ? `${ctx.quickRead.teamA.name} over ${ctx.quickRead.teamB.name} · ${ctx.quickRead.statLabel}` : null,
-    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB ? `${ctx.quickRead.teamA.name} vs ${ctx.quickRead.teamB.name}: too close to call.` : null,
-    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB ? `${ctx.quickRead.teamA.name} and ${ctx.quickRead.teamB.name}: one game apart.` : null,
+    // Tightest-race variants. The race is thin by definition — copy
+    // should match that. "over" implies decisive dominance and is wrong
+    // for a 1-cat seam; "edges" / "by N" / "neck and neck" keep the tone
+    // accurate.
+    // gap === 1: only "edges by a cat" fires for tight races. The
+    // generic variants below ("too close to call", "one game apart",
+    // "neck and neck") are gated against gap=1 so this specific
+    // framing wins every time. Two leagues both at gap=1 will read
+    // the same.
+    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statValue === 1 ? `${ctx.quickRead.teamA.name} edges ${ctx.quickRead.teamB.name} by a cat.` : null,
+    // gap >= 2: "by N over" carries the specific margin.
+    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statValue && ctx.quickRead.statValue >= 2 ? `${ctx.quickRead.teamA.name} by ${ctx.quickRead.statValue} over ${ctx.quickRead.teamB.name}.` : null,
+    // Generic framings — gated against gap=1 so the specific "edges
+    // by a cat" variant above wins consistently for that gap.
+    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statValue !== 1 ? `${ctx.quickRead.teamA.name} vs ${ctx.quickRead.teamB.name}: too close to call.` : null,
+    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statValue !== 1 ? `${ctx.quickRead.teamA.name} and ${ctx.quickRead.teamB.name}: one game apart.` : null,
+    // Non-breaking spaces in "neck and neck" prevent the
+    // four-word idiom from breaking mid-phrase across two lines on
+    // narrow quick-read cards (saw "neck" / "and neck" split in Yahoo).
+    (ctx) => ctx.quickRead?.kind === 'tightest-race' && ctx.quickRead.teamA && ctx.quickRead.teamB && ctx.quickRead.statValue !== 1 ? `${ctx.quickRead.teamA.name} and ${ctx.quickRead.teamB.name}: neck and neck.` : null,
 
-    // Biggest-jump variants
-    (ctx) => ctx.quickRead?.kind === 'biggest-jump' && ctx.quickRead.teamA && ctx.quickRead.statLabel ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statLabel} this week` : null,
-    (ctx) => ctx.quickRead?.kind === 'biggest-jump' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: +${ctx.quickRead.statValue} spots` : null,
-    (ctx) => ctx.quickRead?.kind === 'biggest-jump' && ctx.quickRead.teamA ? `${ctx.quickRead.teamA.name}: biggest weekly climb.` : null,
+    // Biggest-jump — locked to a single declarative variant so every
+    // league reads identically. The "climbed N spots" form carries
+    // the strongest active verb; the secondary "up N spots" variant
+    // was dropped because the deterministic picker would land
+    // different leagues on different phrasings — which the eye
+    // reads as inconsistency, not editorial variety.
+    (ctx) => ctx.quickRead?.kind === 'biggest-jump' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name} climbed ${ctx.quickRead.statValue} spots since week 1.` : null,
+    (ctx) => ctx.quickRead?.kind === 'biggest-jump' && ctx.quickRead.teamA && !ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: biggest climb of the season.` : null,
 
-    // Longest-fall variants
-    (ctx) => ctx.quickRead?.kind === 'longest-fall' && ctx.quickRead.teamA && ctx.quickRead.statLabel ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statLabel} since week 1` : null,
-    (ctx) => ctx.quickRead?.kind === 'longest-fall' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: -${ctx.quickRead.statValue} spots, season` : null,
-    (ctx) => ctx.quickRead?.kind === 'longest-fall' && ctx.quickRead.teamA ? `${ctx.quickRead.teamA.name}: longest sustained drop.` : null,
+    // Longest-fall — symmetric. Single locked declarative variant.
+    (ctx) => ctx.quickRead?.kind === 'longest-fall' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name} dropped ${ctx.quickRead.statValue} spots since week 1.` : null,
+    (ctx) => ctx.quickRead?.kind === 'longest-fall' && ctx.quickRead.teamA && !ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: longest sustained drop.` : null,
 
-    // Longest-streak variants
-    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA && ctx.quickRead.statLabel ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statLabel}` : null,
-    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statValue} straight` : null,
-    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA && ctx.quickRead.catId && ctx.quickRead.statValue ? `${ctx.quickRead.catId} · ${ctx.quickRead.teamA.name} · ${plural(ctx.quickRead.statValue, 'sweep')}` : null,
-    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA ? `${ctx.quickRead.teamA.name}: longest active run.` : null,
+    // Longest-streak — locked to a single declarative variant so every
+    // league reads with the same voice register as BIGGEST JUMP /
+    // LONGEST FALL ("{Team}: N straight wins."). The earlier statLabel
+    // variants ("on W6") produced cross-league voice mismatch.
+    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA && ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statValue} straight wins.` : null,
+    (ctx) => ctx.quickRead?.kind === 'longest-streak' && ctx.quickRead.teamA && !ctx.quickRead.statValue ? `${ctx.quickRead.teamA.name}: longest active run.` : null,
 
-    // Generic compressed (always-applicable)
-    (ctx) => ctx.quickRead?.teamA && ctx.quickRead?.statLabel ? `${ctx.quickRead.teamA.name} · ${ctx.quickRead.statLabel}` : null,
-    (ctx) => ctx.quickRead?.teamA ? `${ctx.quickRead.teamA.name}.` : null,
+    // Generic compressed (always-applicable). Tightest-race,
+    // longest-streak, biggest-jump, and longest-fall are excluded —
+    // each has meaning-bearing structure (two teams / streak count /
+    // numeric spots delta) these fallbacks would strip. Without the
+    // gate, a random pick produces "NC PALE HOSE: 4." (number with no
+    // unit) or "NC PALE HOSE · +7 spots" (label-style fragment) that
+    // reads as inconsistent next to peer pills. Cat-anchored variants
+    // (the only category-bound quick read) are still allowed.
+    (ctx) => ctx.quickRead?.kind !== 'tightest-race' && ctx.quickRead?.kind !== 'longest-streak' && ctx.quickRead?.kind !== 'biggest-jump' && ctx.quickRead?.kind !== 'longest-fall' && ctx.quickRead?.teamA && ctx.quickRead?.statLabel ? `${ctx.quickRead.teamA.name} · ${ctx.quickRead.statLabel}` : null,
+    (ctx) => ctx.quickRead?.kind !== 'tightest-race' && ctx.quickRead?.kind !== 'longest-streak' && ctx.quickRead?.kind !== 'biggest-jump' && ctx.quickRead?.kind !== 'longest-fall' && ctx.quickRead?.teamA ? `${ctx.quickRead.teamA.name}.` : null,
 
     // Cat-anchored compressed
     (ctx) => ctx.quickRead?.catId && ctx.quickRead?.teamA && ctx.quickRead?.statValue ? `${ctx.quickRead.catId} · ${ctx.quickRead.teamA.name} · ${ctx.quickRead.statValue}` : null,
     (ctx) => ctx.quickRead?.catId && ctx.quickRead?.teamA ? `${ctx.quickRead.catId} · ${ctx.quickRead.teamA.name}` : null,
 
-    // Numbered fragment style
-    (ctx) => ctx.quickRead?.statValue && ctx.quickRead?.teamA ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statValue}.` : null,
-    (ctx) => ctx.quickRead?.teamA && ctx.quickRead?.teamB ? `${ctx.quickRead.teamA.name} over ${ctx.quickRead.teamB.name}` : null,
+    // Numbered fragment style — same exclusions as generic compressed.
+    (ctx) => ctx.quickRead?.kind !== 'tightest-race' && ctx.quickRead?.kind !== 'longest-streak' && ctx.quickRead?.kind !== 'biggest-jump' && ctx.quickRead?.kind !== 'longest-fall' && ctx.quickRead?.statValue && ctx.quickRead?.teamA ? `${ctx.quickRead.teamA.name}: ${ctx.quickRead.statValue}.` : null,
+    // Bare "X over Y" fallback — gated against tightest-race so a
+    // close adjacent seam never reads as "TeamA over TeamB" stripped
+    // of its gap. Longest-streak already excluded above.
+    (ctx) => ctx.quickRead?.kind !== 'longest-streak' && ctx.quickRead?.kind !== 'tightest-race' && ctx.quickRead?.teamA && ctx.quickRead?.teamB ? `${ctx.quickRead.teamA.name} over ${ctx.quickRead.teamB.name}` : null,
   ],
   bodies: [], // quick-read is pill-shaped: no body
 }
@@ -1568,6 +1752,8 @@ export const prTemplates: Record<PRKind, PRTemplate> = {
   'hero-biggest-climber': HERO_BIGGEST_CLIMBER,
   'hero-defending-champ-falling': HERO_DEFENDING_CHAMP_FALLING,
   'hero-bubble-surprise': HERO_BUBBLE_SURPRISE,
+  'hero-the-race': HERO_THE_RACE,
+  'hero-your-team': HERO_YOUR_TEAM,
   'pulse-heater': PULSE_HEATER,
   'pulse-long-fall': PULSE_LONG_FALL,
   'pulse-steady-hand': PULSE_STEADY_HAND,

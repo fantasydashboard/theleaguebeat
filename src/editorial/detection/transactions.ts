@@ -315,8 +315,16 @@ function formatMovementPlayer(m: TransactionMovement): {
 } {
   return {
     playerId: m.playerId,
-    playerName: m.playerName,
-    position: m.position,
+    // Strip trailing position parentheticals platforms tack onto
+    // player names ("Shohei Ohtani (Pitcher)" → "Shohei Ohtani").
+    // Yahoo lists two-way players this way; the suffix reads as
+    // unedited in magazine copy. Position is preserved in its own
+    // field so body copy can still reference it.
+    playerName: m.playerName.replace(/\s*\([^)]*\)\s*$/, '').trim(),
+    // Yahoo concatenates multi-position eligibility as "LF,RF" with
+    // no space. Add the space so the rendered body reads as a
+    // proper list ("SP for LF, RF" not "SP for LF,RF").
+    position: m.position?.replace(/,(?!\s)/g, ', '),
   }
 }
 
@@ -370,19 +378,53 @@ function standardTradeHeadline(acquired: AcquiredSide[]): string {
 }
 
 /**
- * Per-side detail line: who got what. Used as the card body for
- * both blockbuster and standard trades.
+ * Body line for trade cards. Adds context the headline doesn't —
+ * positions, shape of the swap, what changed beyond the player
+ * names. The old version restated the headline ("Injury Prone got
+ * Ohtani" + "Injury Prone gets Ohtani"), which read as filler. The
+ * new version comments on the SHAPE of the trade instead.
  *
- *   "Goof Juice gets Acuña, Strider. Sandlot gets Yelich, Castillo."
+ * For multi-player trades where the headline only names the lead
+ * piece on each side, we fall back to listing the additional bodies
+ * so the body still adds information.
  */
 function tradeBodyLine(acquired: AcquiredSide[]): string {
-  return acquired
-    .filter((s) => s.players.length > 0)
-    .map((s) => {
-      const names = joinNames(s.players.map((p) => p.playerName), 3)
-      return `${s.teamName} gets ${names}`
-    })
-    .join('. ') + '.'
+  const sides = acquired.filter((s) => s.players.length > 0)
+  if (sides.length < 2) return 'A trade clears. Both sides took the bet.'
+
+  const totalPlayers = sides.reduce((n, s) => n + s.players.length, 0)
+
+  // 1-for-1: the headline names both players already, so the body
+  // talks about position calculus instead of duplicating names.
+  if (sides.length === 2 && sides[0].players.length === 1 && sides[1].players.length === 1) {
+    const aPos = sides[0].players[0].position
+    const bPos = sides[1].players[0].position
+    if (aPos && bPos && aPos === bPos) {
+      return `Position-for-position. The roster shape stays; the names change.`
+    }
+    if (aPos && bPos) {
+      return `${aPos} for ${bPos}. Both sides bet they got the slot they needed more.`
+    }
+    return `One-for-one. The league chat will spend the weekend deciding who won.`
+  }
+
+  // Multi-player: the headline only mentioned the lead piece on each
+  // side, so listing the additional players IS adding information.
+  // Skip the first player on each side (already in the headline) and
+  // call out the rest by name.
+  const extraPieces = sides
+    .map((s) => ({ teamName: s.teamName, rest: s.players.slice(1) }))
+    .filter((s) => s.rest.length > 0)
+  if (extraPieces.length > 0) {
+    const extras = extraPieces
+      .map((s) => `${s.teamName} also got ${joinNames(s.rest.map((p) => p.playerName), 3)}`)
+      .join('; ')
+    return `${extras}. ${totalPlayers} pieces change hands; the standings will tell the story.`
+  }
+
+  // Fallback (every side is a single-player but more than two sides
+  // — a 3-way swap, e.g.).
+  return `${totalPlayers} players moving across ${sides.length} rosters. Both sides reshape; the standings catch up next week.`
 }
 
 function faabHeadline(teamName: string, playerName: string | undefined, bid: number): string {

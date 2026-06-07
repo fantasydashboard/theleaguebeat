@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="cr-root" role="presentation">
+    <div class="cr-root" :class="{ 'cr-closing': closing }" role="presentation">
       <div class="cr-backdrop" @click="onClose" aria-hidden="true"></div>
       <div
         ref="dialogRef"
@@ -138,8 +138,13 @@ const {
 const dialogRef = ref<HTMLElement | null>(null)
 const closeBtnRef = ref<HTMLElement | null>(null)
 
+// Play the exit animation before unmounting (the parent removes us with
+// v-if, so without this the modal would vanish instantly).
+const closing = ref(false)
 function onClose() {
-  emit('close')
+  if (closing.value) return
+  closing.value = true
+  window.setTimeout(() => emit('close'), 140)
 }
 
 useDemoModal({ dialogRef, closeBtnRef, onClose })
@@ -226,9 +231,21 @@ function sliderStyle(id: keyof CategoryFactorScores) {
   animation-delay: 30ms;
 }
 
+/* Exit — a quick reverse of the enter so the modal does not vanish
+   abruptly. Faster than the enter (130ms vs 180ms). */
+.cr-closing .cr-backdrop {
+  animation: cr-fade-out 120ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.cr-closing .cr-dialog {
+  animation: cr-dialog-out 130ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cr-backdrop,
-  .cr-dialog {
+  .cr-dialog,
+  .cr-closing .cr-backdrop,
+  .cr-closing .cr-dialog {
     animation: none;
     opacity: 1;
     transform: none;
@@ -237,6 +254,8 @@ function sliderStyle(id: keyof CategoryFactorScores) {
 
 @keyframes cr-fade-in { to { opacity: 1; } }
 @keyframes cr-dialog-in { to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes cr-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes cr-dialog-out { from { opacity: 1; transform: scale(1) translateY(0); } to { opacity: 0; transform: scale(0.97) translateY(4px); } }
 
 /* Header */
 .cr-head {
@@ -272,10 +291,13 @@ function sliderStyle(id: keyof CategoryFactorScores) {
   border-radius: 8px;
   color: var(--ink-2);
   cursor: pointer;
-  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 160ms cubic-bezier(0.22, 1, 0.36, 1),
               border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.cr-close:hover { color: var(--ink-1); border-color: oklch(0.36 0.015 90); }
+@media (hover: hover) and (pointer: fine) {
+  .cr-close:hover { color: var(--ink-1); border-color: oklch(0.36 0.015 90); }
+}
 .cr-close:active { transform: scale(0.97); transition-duration: 100ms; }
 .cr-close:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 

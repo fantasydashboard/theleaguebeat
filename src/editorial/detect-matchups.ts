@@ -251,29 +251,115 @@ export function detectMatchupHeroes(
       })
     }
 
-    /* hero-sweep-in-progress — leader has won 8+ cats already. */
+    /* hero-sweep-in-progress — fires whenever the gap is decisive
+       (>=5 cats led to none-or-few) OR the leader is already past 8.
+       Weight scales with the gap so a 9-0 wipeout beats a 7-4 bubble
+       collision for hero of the week (the visual + narrative drama
+       of dominance vs the abstract stakes of a cut-line matchup). */
     const leaderWins = Math.max(m.homeCatWins, m.awayCatWins)
-    if (leaderWins >= 8) {
+    const trailerWins = Math.min(m.homeCatWins, m.awayCatWins)
+    const sweepGap = leaderWins - trailerWins
+    if (sweepGap >= 5 || leaderWins >= 8) {
       out.push({
         kind: 'hero-sweep-in-progress',
-        weight: 70,
+        weight: Math.min(90, 60 + sweepGap * 5),
         context: {
           ...baseCtx,
           leaderCatWins: leaderWins,
-          signal: `sweep: ${leaderWins} cats won`,
+          signal: `sweep: ${leaderWins}-${trailerWins}`,
         },
       })
     }
 
-    /* hero-closest-race — contested >= 4 AND cat-record within 1. */
+    /* hero-closest-race — contested >= 4 AND cat-record within 1.
+       Also requires meaningful motion (≥3 total cats with current
+       leaders) so the storyline doesn't fire on Day 1 when both teams
+       are at 0-0 and "trading cats" is editorial fiction. */
     const catDiff = Math.abs(m.homeCatWins - m.awayCatWins)
-    if (m.contestedCount >= 4 && catDiff <= 1) {
+    const totalDecided = m.homeCatWins + m.awayCatWins
+    if (m.contestedCount >= 4 && catDiff <= 1 && totalDecided >= 3) {
       out.push({
         kind: 'hero-closest-race',
         weight: 60,
         context: {
           ...baseCtx,
-          signal: `closest: contested=${m.contestedCount} diff=${catDiff}`,
+          signal: `closest: contested=${m.contestedCount} diff=${catDiff} total=${totalDecided}`,
+        },
+      })
+    }
+  }
+
+  /* hero-week-preview — fires when the slate is still essentially
+     pre-game (total cat motion across all matchups is < 10) and no
+     stronger hero kind has matched. Picks the most editorially
+     interesting matchup by prior: a true coin flip OR a heavyweight
+     mismatch, whichever produces the better storyline that week.
+
+     Weight 55 sits below most live-week heroes (closest-race=60,
+     sweep=70+, top-clash=90, bubble=75, champ-collapsing=85) so this
+     only wins when the live-data ones haven't fired. By Wednesday
+     this gracefully steps aside. */
+  const totalSlateMotion = matchups.reduce(
+    (sum, m) => sum + m.homeCatWins + m.awayCatWins,
+    0,
+  )
+  if (totalSlateMotion < 10) {
+    // Score every matchup by editorial interest. Two storylines win:
+    // (a) the truest coin flip (most balanced prior), (b) the biggest
+    // projected mismatch ("heavyweight on the road"). A meaningful
+    // top-seed bonus tilts toward matchups involving #1 or #2 because
+    // top-seed matchups are reliably the most-read Day 1 storyline,
+    // even at slightly less-extreme priors.
+    let bestPick: typeof matchups[number] | null = null
+    let bestScore = -Infinity
+    for (const m of matchups) {
+      const wp = m.homeWinProb
+      if (wp === undefined) continue
+      const delta = Math.abs(wp - 0.5)
+      const homeRank = standingFor(data, m.homeTeamId)?.rank ?? 99
+      const awayRank = standingFor(data, m.awayTeamId)?.rank ?? 99
+      const topSeedRank = Math.min(homeRank, awayRank)
+
+      // Base score: rewards either extreme (true coin flip or true
+      // heavyweight) and dampens middling matchups in between.
+      let score: number
+      if (delta <= 0.06)        score = 100 - delta * 200           // ~88-100 for true coin flip
+      else if (delta >= 0.18)   score = 80 + (delta - 0.18) * 100   // 80+ for clear mismatch
+      else                      score = 60 - Math.abs(delta - 0.12) * 100 // 50ish for middle
+
+      // Top-seed bonus — magazine bias toward marquee matchups. A
+      // matchup involving the #1 seed is the marquee Day 1 storyline
+      // almost regardless of how close the projection is; the editor
+      // would lead with "Top seed on the road" before "middle-tier
+      // coin flip." Bonus is large enough to consistently win, but
+      // matchups WITHOUT a top seed can still climb if they're true
+      // 50/50 coin flips OR true heavyweight mismatches.
+      if (topSeedRank === 1) score += 50
+      else if (topSeedRank === 2) score += 35
+      else if (topSeedRank === 3) score += 15
+
+      if (score > bestScore) { bestScore = score; bestPick = m }
+    }
+    const pick = bestPick
+    if (pick) {
+      const homeStanding = standingFor(data, pick.homeTeamId)
+      const awayStanding = standingFor(data, pick.awayTeamId)
+      out.push({
+        kind: 'hero-week-preview',
+        weight: 55,
+        context: {
+          matchupId: pick.id,
+          homeTeamId: pick.homeTeamId,
+          awayTeamId: pick.awayTeamId,
+          contestedCount: pick.contestedCount,
+          daysLeftInWeek: daysLeft,
+          homeRank: homeStanding?.rank ?? 99,
+          awayRank: awayStanding?.rank ?? 99,
+          isHomeBubble: false,
+          isAwayBubble: false,
+          homeWasRecentlyTop: false,
+          awayWasRecentlyTop: false,
+          signal: `week-preview: pick-score=${bestScore.toFixed(1)} pick-id=${pick.id}`,
         },
       })
     }
@@ -290,7 +376,14 @@ export function detectMatchupSubHeadline(
   data: CategoryLeagueData,
 ): Array<StoryCandidate<MatchupsKind, MatchupSubHeadlineDetectionContext>> {
   const matchups = data.matchupsCurrentWeek ?? []
-  const liveCount = matchups.filter((m) => m.status === 'live').length
+  // "Live" here aligns with the page-header bucket: any matchup that
+  // hasn't been Yahoo-finalized. Day 1 with 6 upcoming matchups still
+  // reads as "6 live matchups" because they're all in play this week.
+  // The earlier `status === 'live'` definition only counted matchups
+  // Yahoo had already seen a stat-winner for, which produced
+  // "0 live matchups" on Monday morning — contradicting the page
+  // header's "6 LIVE" / "4 LIVE · 2 COIN FLIP" / etc.
+  const liveCount = matchups.filter((m) => m.status !== 'final').length
   const finalCount = matchups.filter((m) => m.status === 'final').length
   const upcomingCount = matchups.filter((m) => m.status === 'upcoming').length
   const today = deriveCurrentDay()
@@ -346,12 +439,15 @@ export function detectMatchupWatch(
     })
   }
 
-  /* what-to-watch-flip — a contested cat with margin within 1.
-     Pick the tightest contested cat that's close to flipping. */
+  /* what-to-watch-flip — a contested cat with margin within 1 AND
+     some real activity. A 0-0 cat at the start of the week has margin
+     0 but isn't "ready to flip" — it hasn't started yet. Requires the
+     combined current values to be > 0 so the flip storyline only
+     fires once cats are actually moving. */
   const contestedLines = lines.filter((l) => l.status === 'contested')
   const flipCandidates = contestedLines
     .map((l) => ({ line: l, margin: catMargin(l) }))
-    .filter((x) => x.margin <= 1)
+    .filter((x) => x.margin <= 1 && (x.line.homeCurrent + x.line.awayCurrent) > 0)
     .sort((a, b) => a.margin - b.margin)
   if (flipCandidates.length > 0) {
     const best = flipCandidates[0]
@@ -453,10 +549,33 @@ export function detectMatchupSeries(
   const homeWins = homeFirst ? fromHome.wins : fromHome.losses
   const awayWins = homeFirst ? fromHome.losses : fromHome.wins
   const ties = fromHome.ties
-  const meetings = entry.meetings
+  // Derive meetings from the record itself so the displayed "N
+  // meetings" always reconciles with the "X-Y" record. Yahoo's
+  // h2hMatrix.meetings can include a scheduled-but-not-yet-played
+  // game in the current week, which would make "0-1 all-time. 2
+  // meetings." render as internally contradictory.
+  const meetings = homeWins + awayWins + ties
   const decisive = homeWins + awayWins                       // exclude ties
   const homeShare = decisive > 0 ? homeWins / decisive : 0
   const awayShare = decisive > 0 ? awayWins / decisive : 0
+  // If the record sums to 0 (recordA was empty), treat this matchup as
+  // a first meeting to avoid emitting nonsense series candidates.
+  if (meetings === 0) {
+    out.push({
+      kind: 'season-series-first-meeting',
+      weight: 60,
+      context: {
+        matchupId: matchup.id,
+        homeTeamId: matchup.homeTeamId,
+        awayTeamId: matchup.awayTeamId,
+        allTimeRecord: '0-0',
+        totalMeetings: 0,
+        trend: 'First meeting',
+        signal: 'series-first-meeting-fallback',
+      },
+    })
+    return out
+  }
 
   /* season-series-one-sided — one team has won >= 70% of past meetings. */
   if (decisive >= 3 && (homeShare >= 0.7 || awayShare >= 0.7)) {
@@ -564,13 +683,19 @@ export function detectMatchupQuickReads(
     })
   }
 
-  /* biggest-sweep — biggest cat-record gap. */
+  /* biggest-sweep — biggest cat-record gap, but only when a real lead
+     exists. On Day 1 every matchup is 0-0; "0-0 sweep watch" reads as
+     editorial nonsense, so the pill hides until the leader has built
+     at least a 3-cat lead. */
   const biggestSweep = [...matchups].sort((a, b) => {
     const gapA = Math.abs(a.homeCatWins - a.awayCatWins)
     const gapB = Math.abs(b.homeCatWins - b.awayCatWins)
     return gapB - gapA
   })[0]
-  if (biggestSweep) {
+  const biggestSweepGap = biggestSweep
+    ? Math.abs(biggestSweep.homeCatWins - biggestSweep.awayCatWins)
+    : 0
+  if (biggestSweep && biggestSweepGap >= 3) {
     const leaderId = biggestSweep.homeCatWins >= biggestSweep.awayCatWins
       ? biggestSweep.homeTeamId
       : biggestSweep.awayTeamId
@@ -608,13 +733,39 @@ export function detectMatchupQuickReads(
     .sort((a, b) => b.score - a.score)
   const bubble = bubbleMatchups[0]?.m
   if (bubble) {
+    // Cutoff-aware copy: the suffix only reads correctly when we know
+    // which side is above the line. With both above → loser drops back
+    // toward the bubble. With both below → loser is out. With one of
+    // each → the bubble team needs the win to hold position.
+    const homeStanding = data.standings.find((s) => s.teamId === bubble.homeTeamId)
+    const awayStanding = data.standings.find((s) => s.teamId === bubble.awayTeamId)
+    const homeAbove = (homeStanding?.rank ?? 99) <= cutoff
+    const awayAbove = (awayStanding?.rank ?? 99) <= cutoff
+    let suffix: string
+    if (homeAbove && awayAbove) {
+      suffix = 'Loser slips back toward the bubble.'
+    } else if (!homeAbove && !awayAbove) {
+      suffix = 'Both chasing the line. Loser falls further.'
+    } else {
+      // One above, one below — the one above needs the win to hold seed.
+      // Strip leading emoji/punctuation from the name when echoing it
+      // in the suffix; the team name appears once already in
+      // `labelTeams`, so a second pass with the same emoji reads as a
+      // stutter (e.g. "⚾ Triple Threat vs Goof Juice. ⚾ Triple Threat
+      // needs the win").
+      const aboveTeamId = homeAbove ? bubble.homeTeamId : bubble.awayTeamId
+      const aboveTeam = data.teams.find((t) => t.id === aboveTeamId)
+      const aboveNameRaw = aboveTeam?.name ?? aboveTeamId
+      const aboveNameClean = aboveNameRaw.replace(/^[^a-zA-Z0-9]+\s*/, '').trim() || aboveNameRaw
+      suffix = `${aboveNameClean} needs the win to hold the line.`
+    }
     out.push({
       kind: 'quick-read',
       weight: 50,
       context: {
         pill: 'bubble-watch-matchup',
         matchupId: bubble.id,
-        label: `${labelTeams(data, bubble)}. Winner stays above the line.`,
+        label: `${labelTeams(data, bubble)}. ${suffix}`,
       },
     })
   }
@@ -664,7 +815,7 @@ export function detectMatchupQuickReads(
 }
 
 function labelTeams(data: CategoryLeagueData, matchup: CategoryLeagueDataMatchup): string {
-  const home = data.teams.find((t) => t.id === matchup.homeTeamId)?.id ?? matchup.homeTeamId
-  const away = data.teams.find((t) => t.id === matchup.awayTeamId)?.id ?? matchup.awayTeamId
+  const home = data.teams.find((t) => t.id === matchup.homeTeamId)?.name ?? matchup.homeTeamId
+  const away = data.teams.find((t) => t.id === matchup.awayTeamId)?.name ?? matchup.awayTeamId
   return `${home} vs ${away}`
 }

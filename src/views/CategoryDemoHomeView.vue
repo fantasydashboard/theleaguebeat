@@ -41,55 +41,19 @@
     </div>
 
     <!-- ─────────────────────────────────────────────────────────────
-         WEEKLY COVER — magazine-style issue cover. Distinct from
-         the hero (today's lede). The cover frames the WHOLE WEEK
-         and stays committed for 7 days. Renders only when there's
-         a story worthy of cover-tier framing; quiet weeks skip it
-         and the hero takes the top of the page.
-    ────────────────────────────────────────────────────────────── -->
-    <WeeklyCover
-      :stories="selectedStories"
-      :data="issueData"
-      :issue-number="coverMeta.issueNumber"
-      :vol="coverMeta.volume"
-      :week-of="weekOfLabel"
-      @share="onShareStory"
-    />
+         THE BEAT — daily home stack.
 
-    <!-- ─────────────────────────────────────────────────────────────
-         HERO SLOT — today's lede. Sits under the weekly cover.
-         The cover is the magazine; the hero is the issue's lead
-         story. Updates whenever the data shifts.
+         Three zones, top of page: THE LEDE (today's editorial column)
+         → ON YOUR LINE (your-team-focused fact strip) → TODAY'S
+         BEATS (TheWire, daily filings carousel). The weekly hero
+         ("THIS WEEK") and THRONE STREAK live on THE ISSUE; the
+         cover archive snapshot still composes silently below for
+         issue history.
     ────────────────────────────────────────────────────────────── -->
-    <template v-for="section in dynamicHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
-      <HeroFaceoff
-        v-if="section.type === 'hero-faceoff' && section.story"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
-      <HeroSolo
-        v-else-if="section.type === 'hero-solo' && section.story"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
-      <HeroQuiet
-        v-else-if="section.type === 'hero-quiet'"
-        :story="section.story"
-        :data="issueData"
-        @share="onShareStory"
-      />
-    </template>
+    <TheLede :lede="liveLede" />
 
-    <!-- ─────────────────────────────────────────────────────────────
-         THE WIRE — promoted to position 2 right after the hero.
-         The Wire's own header carries the cadence label ("DAILY")
-         and the section headline ("What's filed today.") so a
-         separate EditorialBreak above it was triple-labeling the
-         same thing in 200px of vertical space. Let whitespace +
-         the Wire's own header do the work instead.
-    ────────────────────────────────────────────────────────────── -->
+    <OnYourLine :data="issueData" />
+
     <TheWire
       :stories="selectedStories"
       :data="issueData"
@@ -97,22 +61,16 @@
     />
 
     <!-- ─────────────────────────────────────────────────────────────
-         WEEKLY BREAK + ANYTHING ELSE WORTH SAYING this week —
-         non-hero dynamic stories (matchup of week, streak watch,
-         division race) render here. Far enough from the hero to
-         function as a "feature spread" page rather than a sidebar.
+         WEEKLY THREAD — matchup-of-week + division-race only. The
+         StreakWatch surface (throne / basement) was removed: its
+         framing duplicates THE LEDE's streak-watch Kind and reads
+         as cacophony when both are loud the same day.
     ────────────────────────────────────────────────────────────── -->
-    <template v-if="dynamicNonHeroSections.length > 0">
+    <template v-if="weeklyNonHeroSections.length > 0">
       <EditorialBreak size="small" tone="teal" />
-      <template v-for="section in dynamicNonHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
+      <template v-for="section in weeklyNonHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
         <MatchupOfWeek
           v-if="section.type === 'matchup-of-week' && section.story"
-          :story="section.story"
-          :data="issueData"
-          @share="onShareStory"
-        />
-        <StreakWatch
-          v-else-if="section.type === 'streak-watch' && section.story"
           :story="section.story"
           :data="issueData"
           @share="onShareStory"
@@ -126,95 +84,12 @@
       </template>
     </template>
 
-    <!-- ─────────────────────────────────────────────────────────────
-         1. LEGACY HERO — kept for fallback only. The composition
-         pipeline above emits its own hero (faceoff/solo/quiet/etc)
-         when it detects a story; we only render this legacy inline
-         hero when the pipeline didn't produce one (empty data,
-         fixture without a strong story, etc).
-    ────────────────────────────────────────────────────────────── -->
-    <section v-if="!hasDynamicHero" class="hero" aria-labelledby="hero-headline">
-      <div class="hero-copy">
-        <p class="hero-eyebrow">
-          <span class="hero-eyebrow-bar" aria-hidden="true"></span>
-          {{ liveEditorial.hero.eyebrow }}
-        </p>
-        <h1 class="hero-headline" id="hero-headline">{{ liveEditorial.hero.headline }}</h1>
-        <p class="hero-body">{{ liveEditorial.hero.body }}</p>
-        <button
-          type="button"
-          class="hero-share"
-          aria-label="Share this story to your league chat"
-          @click="$emit('open-signup')"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-            <polyline points="16 6 12 2 8 6"/>
-            <line x1="12" y1="2" x2="12" y2="15"/>
-          </svg>
-          Share this story
-        </button>
-      </div>
-
-      <div
-        class="hero-faceoff"
-        :class="{ 'hero-faceoff-solo': !hasAntagonist }"
-        :aria-label="hasAntagonist
-          ? `${protagonist.name} overtaking ${antagonist.name} for first place`
-          : `${protagonist.name} feature`"
-      >
-        <article class="faceoff-team faceoff-rise">
-          <div class="faceoff-avatar" :style="{ background: `linear-gradient(135deg, ${protagonist.avatarColor})` }">
-            <img v-if="protagonist.avatarUrl" :src="protagonist.avatarUrl" class="avatar-image" alt="" />
-            <span v-else>{{ protagonist.ownerInitials }}</span>
-          </div>
-          <div class="faceoff-meta">
-            <p class="faceoff-name">{{ protagonist.name }}</p>
-            <p class="faceoff-owner">{{ protagonist.ownerName }}</p>
-            <div class="faceoff-rankrow">
-              <span class="faceoff-rankchip faceoff-rankchip-now">#{{ protagonistRank }}</span>
-              <span v-if="protagonistDelta !== 0" class="faceoff-trend" :class="protagonistDelta > 0 ? 'faceoff-trend-up' : 'faceoff-trend-down'">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline v-if="protagonistDelta > 0" points="6 15 12 9 18 15"/>
-                  <polyline v-else points="6 9 12 15 18 9"/>
-                </svg>
-                {{ protagonistDelta > 0 ? '+' : '' }}{{ protagonistDelta }}
-              </span>
-            </div>
-          </div>
-        </article>
-
-        <div v-if="hasAntagonist" class="faceoff-verb" aria-hidden="true">
-          <span class="faceoff-verb-line"></span>
-          <span class="faceoff-verb-word">overtakes</span>
-          <span class="faceoff-verb-line"></span>
-        </div>
-
-        <article v-if="hasAntagonist" class="faceoff-team faceoff-fall">
-          <div class="faceoff-avatar faceoff-avatar-dim" :style="{ background: `linear-gradient(135deg, ${antagonist.avatarColor})` }">
-            <img v-if="antagonist.avatarUrl" :src="antagonist.avatarUrl" class="avatar-image" alt="" />
-            <span v-else>{{ antagonist.ownerInitials }}</span>
-          </div>
-          <div class="faceoff-meta">
-            <p class="faceoff-name">{{ antagonist.name }}</p>
-            <p class="faceoff-owner">{{ antagonist.ownerName }}</p>
-            <div class="faceoff-rankrow">
-              <span class="faceoff-rankchip faceoff-rankchip-fell">#{{ antagonistRank }}</span>
-              <span v-if="antagonistDelta !== 0" class="faceoff-trend" :class="antagonistDelta > 0 ? 'faceoff-trend-up' : 'faceoff-trend-down'">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline v-if="antagonistDelta > 0" points="6 15 12 9 18 15"/>
-                  <polyline v-else points="6 9 12 15 18 9"/>
-                </svg>
-                {{ antagonistDelta > 0 ? '+' : '' }}{{ antagonistDelta }}
-              </span>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
+    <!-- Legacy inline hero (the protagonist/antagonist faceoff block)
+         removed — THE LEDE + ON YOUR LINE cover the top-of-page
+         editorial slots now. -->
 
     <!-- ─────────────────────────────────────────────────────────────
-         2. RACE FOR THE PLAYOFFS — Seeds 5-8 bubble comparison.
+         RACE FOR THE PLAYOFFS — Seeds 5-8 bubble comparison.
          Top 6 make playoffs. Bubble = seeds 5-8 with the playoff
          line between seed 6 and seed 7. MV row gets yellow wayfinding
          tint + star pin (third-person copy elsewhere).
@@ -271,7 +146,9 @@
               </div>
               <div class="bubble-name-block">
                 <p class="bubble-name">{{ lookupTeam(row.teamId).name }}</p>
-                <p class="bubble-owner">{{ lookupTeam(row.teamId).ownerName }}</p>
+                <p v-if="lookupTeam(row.teamId).ownerName" class="bubble-owner">
+                  {{ lookupTeam(row.teamId).ownerName }}
+                </p>
               </div>
             </div>
 
@@ -517,6 +394,7 @@
         <div>
           <p class="section-eyebrow section-eyebrow-magenta">Standings</p>
           <h2 class="standings-headline" id="standings-headline">{{ standingsHeadline }}</h2>
+          <p v-if="standingsDeck" class="standings-deck">{{ standingsDeck }}</p>
         </div>
         <router-link to="/demo-categories/power-rankings" class="section-link">
           View full rankings
@@ -542,6 +420,15 @@
             aria-hidden="true"
           >
             <span class="stand-separator-dots">· · ·</span>
+          </li>
+          <li
+            v-else-if="entry.type === 'playoff-line'"
+            class="stand-playoff-line"
+            aria-label="Playoff line"
+          >
+            <span class="stand-playoff-line-rule" aria-hidden="true"></span>
+            <span class="stand-playoff-line-label">Playoff line</span>
+            <span class="stand-playoff-line-rule" aria-hidden="true"></span>
           </li>
           <li
             v-else-if="entry.row"
@@ -580,7 +467,9 @@
               </div>
               <div class="stand-name-block">
                 <p class="stand-name">{{ lookupTeam(entry.row.teamId).name }}</p>
-                <p class="stand-owner">{{ lookupTeam(entry.row.teamId).ownerName }}</p>
+                <p v-if="lookupTeam(entry.row.teamId).ownerName" class="stand-owner">
+                  {{ lookupTeam(entry.row.teamId).ownerName }}
+                </p>
               </div>
             </div>
 
@@ -597,9 +486,11 @@
             </span>
 
             <span
+              v-if="entry.row.streak.length > 0"
               class="stand-streak"
               :class="entry.row.streak.type === 'W' ? 'stand-streak-win' : entry.row.streak.type === 'L' ? 'stand-streak-loss' : 'stand-streak-tie'"
             >{{ entry.row.streak.type }}{{ entry.row.streak.length }}</span>
+            <span v-else class="stand-streak-empty" aria-label="No streak yet">&mdash;</span>
           </li>
         </template>
       </ol>
@@ -613,7 +504,10 @@
     ────────────────────────────────────────────────────────────── -->
     <section class="momentum" aria-labelledby="momentum-headline">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal">The climb</p>
+        <p class="section-eyebrow section-eyebrow-teal">
+          The climb
+          <span v-if="climbThroughWeekLabel" class="section-eyebrow-meta">{{ climbThroughWeekLabel }}</span>
+        </p>
         <h2 class="momentum-headline" id="momentum-headline">Who's been heating up.</h2>
       </header>
 
@@ -689,6 +583,9 @@ import {
 } from '@/fixtures/categoriesLeague'
 import { accentFor } from '@/utils/teamColor'
 import { renderHomePage, type RenderedHomeCopy } from '@/editorial/render'
+import { renderLedePage, type RenderedLede } from '@/editorial/render-lede'
+import TheLede from '@/components/issue/TheLede.vue'
+import OnYourLine from '@/components/issue/OnYourLine.vue'
 import { detectAll } from '@/editorial/detection'
 import { selectStoriesForIssue } from '@/editorial/selection'
 import { composeIssue, type IssueSection } from '@/editorial/composition'
@@ -703,7 +600,6 @@ import TheWire from '@/components/issue/TheWire.vue'
 import EditorialBreak from '@/components/issue/EditorialBreak.vue'
 import SeasonalBlock from '@/components/issue/SeasonalBlock.vue'
 import RankSparkline from '@/components/issue/RankSparkline.vue'
-import WeeklyCover from '@/components/issue/WeeklyCover.vue'
 import { composeWeeklyCover, resolveCoverImageUrl } from '@/editorial/composition/weeklyCover'
 import { snapshotCover, claimIssue } from '@/services/coverArchive'
 import { useShareStory } from '@/composables/useShareStory'
@@ -878,7 +774,7 @@ const standings = computed(() =>
  * a visual cue.
  */
 interface CompactRow {
-  type: 'row' | 'separator'
+  type: 'row' | 'separator' | 'playoff-line'
   row?: typeof standings2026Week8[number]
 }
 
@@ -922,6 +818,20 @@ const standingsHeadline = computed<string>(() => {
   return `Top ${cutoff} make the playoffs.`
 })
 
+/** Standings deck — the small subtitle line under the headline.
+ *  Always shows the cutoff number so the playoff structure is on
+ *  the page regardless of which headline variant fired. Suppressed
+ *  when the headline ALREADY names the cutoff (no point repeating
+ *  "Top 6 make the playoffs" twice).
+ */
+const standingsDeck = computed<string>(() => {
+  const cutoff = bubbleCutoff.value
+  if (!cutoff || cutoff < 1) return ''
+  const headline = standingsHeadline.value
+  if (headline.startsWith('Top ')) return ''
+  return `Top ${cutoff} make the playoffs.`
+})
+
 const compactStandings = computed<CompactRow[]>(() => {
   const all = standings.value
   if (!all || all.length === 0) return []
@@ -946,6 +856,17 @@ const compactStandings = computed<CompactRow[]>(() => {
       out.push({ type: 'separator' })
     }
     out.push({ type: 'row', row: all[sorted[i]] })
+    // Inject a "Playoff line" label between the cutoff row (last
+    // team in) and the next-rendered row, whenever the next row is
+    // the first team out. Without this the cutoff is only signaled
+    // by a thin border, which readers don't always catch.
+    const currentIdx = sorted[i]
+    const nextIdx = sorted[i + 1]
+    const currentRank = all[currentIdx]?.rank
+    const nextRank = all[nextIdx]?.rank
+    if (currentRank === cutoff && nextRank === cutoff + 1) {
+      out.push({ type: 'playoff-line' })
+    }
   }
   return out
 })
@@ -1045,6 +966,13 @@ const bubbleRows = computed<BubbleRow[]>(() => {
 ───────────────────────────────────────────────────────────────── */
 const liveEditorial = shallowRef<RenderedHomeCopy>(
   renderHomePage(categoriesFixtureToLeagueData()),
+)
+// THE LEDE — the day's editorial column. Date-seeded, stable across
+// reloads within the same day. Initialized from fixture so first
+// paint shows the demo lede; gets replaced wholesale when the live
+// adapter resolves the user's actual league data.
+const liveLede = shallowRef<RenderedLede | null>(
+  renderLedePage(categoriesFixtureToLeagueData()),
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
@@ -1188,6 +1116,15 @@ const heroStorySignature = computed<string | undefined>(() => {
 })
 const dynamicNonHeroSections = computed(() =>
   dynamicIssueSections.value.filter((s) => !HERO_SECTION_TYPES.has(s.type)),
+)
+
+/** THE BEAT weekly thread. Filters out streak-watch — the throne /
+ *  basement framing duplicates THE LEDE's streak-watch Kind and the
+ *  two surfaces reading the same story right next to each other is
+ *  the cacophony bug Josh flagged. Matchup-of-week and division-race
+ *  pass through unchanged. */
+const weeklyNonHeroSections = computed(() =>
+  dynamicNonHeroSections.value.filter((s) => s.type !== 'streak-watch'),
 )
 
 /** "Now" stamp for the daily EditorialBreak — uses the issue store's
@@ -1368,16 +1305,27 @@ async function loadLiveData() {
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = data
     liveEditorial.value = renderHomePage(data)
+    liveLede.value = renderLedePage(data)
     // Publish live issue context to the shared store so the
     // layout's masthead can swap its first-paint fallback ("ISSUE ?")
     // for the real week. Includes season stage so the playoff
     // labels ("PLAYOFFS · ROUND 1") light up at the right time.
+    // Founded year: prefer the platform-API truth from seasonHistory
+    // (every season the platform records) over the connected-leagues
+    // estimate (only seasons the user wired up to TLB).
+    const historyYears = (data.seasonHistory ?? [])
+      .map((s) => s.year)
+      .filter((y): y is number => Number.isFinite(y))
+    const connectedFounded = coverFoundedSeason.value ?? data.currentSeason
+    const foundedSeason = historyYears.length > 0
+      ? Math.min(connectedFounded, ...historyYears)
+      : connectedFounded
     issueStore.setIssue({
       currentWeek: data.currentWeek,
       currentSeason: data.currentSeason,
       regularSeasonEndWeek: data.regularSeasonEndWeek,
       seasonStage: deriveSeasonStage(data.currentWeek, data.regularSeasonEndWeek),
-      leagueFoundedSeason: coverFoundedSeason.value,
+      leagueFoundedSeason: foundedSeason,
       lastUpdated: new Date(),
     })
   } catch (err) {
@@ -1428,6 +1376,7 @@ watch(
     if (next === prev) return
     liveData.value = null
     liveEditorial.value = renderHomePage(categoriesFixtureToLeagueData())
+    liveLede.value = renderLedePage(categoriesFixtureToLeagueData())
     await loadLiveData()
   },
 )
@@ -1659,6 +1608,21 @@ const momentumFocusColors = computed<string[]>(() => {
 const hasRankHistory = computed(
   () => (issueData.value.seasonRankHistory?.length ?? 0) >= 2,
 )
+
+/** The Climb chart trails by one week — it shows end-of-completed-
+ *  week ranks because that's the only point at which a week's
+ *  outcome is settled. Live standings move within the current week
+ *  as cats accrue. Without a time-frame label the reader sees the
+ *  same team at two different ranks in two surfaces and reads it
+ *  as a bug. Caption the chart with "Through week N" so the time
+ *  frame is explicit. */
+const climbThroughWeekLabel = computed<string | null>(() => {
+  const history = issueData.value.seasonRankHistory ?? []
+  if (history.length === 0) return null
+  const lastWeek = history[history.length - 1]?.week
+  if (typeof lastWeek !== 'number') return null
+  return `Through week ${lastWeek}`
+})
 </script>
 
 <style scoped>
@@ -1782,6 +1746,13 @@ const hasRankHistory = computed(
 .section-eyebrow-teal    { color: var(--accent-tertiary); }
 .section-eyebrow-magenta { color: var(--accent-secondary); }
 .section-eyebrow-mute    { color: var(--ink-3); }
+.section-eyebrow-meta {
+  margin-left: 12px;
+  color: var(--ink-4);
+  letter-spacing: 0.10em;
+  font-weight: 700;
+  text-transform: none;
+}
 
 .section-link {
   display: inline-flex;
@@ -2510,6 +2481,15 @@ const hasRankHistory = computed(
   color: var(--ink-1);
   margin: 0;
 }
+.standings-deck {
+  margin: 6px 0 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
 .stand-list {
   list-style: none;
   padding: 0;
@@ -2569,6 +2549,37 @@ const hasRankHistory = computed(
    bubble pair reads as "the line is here." */
 .stand-row-out {
   border-top: 1px dashed oklch(0.65 0.20 25 / 0.40);
+}
+
+/* Inline "Playoff line" marker between the last team in and first
+   team out. Two hairline rules straddling a small label — reads
+   like a magazine sidebar break, not a competing row. */
+.stand-playoff-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px;
+  margin: 4px 0;
+  list-style: none;
+}
+.stand-playoff-line-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.65 0.20 25 / 0.45),
+    transparent
+  );
+}
+.stand-playoff-line-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.65 0.20 25 / 0.85);
+  white-space: nowrap;
 }
 .stand-row-mine {
   background: oklch(0.78 0.18 92 / 0.06);
@@ -2708,6 +2719,14 @@ const hasRankHistory = computed(
 .stand-streak-win  { color: var(--accent-up);        background: oklch(0.74 0.18 145 / 0.12); }
 .stand-streak-loss { color: var(--accent-secondary); background: oklch(0.70 0.27 350 / 0.12); }
 .stand-streak-tie  { color: var(--ink-3);            background: oklch(0.30 0.012 90 / 0.4); }
+.stand-streak-empty {
+  justify-self: end;
+  color: var(--ink-5);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 
 @media (max-width: 720px) {
   .stand-head {

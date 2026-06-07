@@ -21,6 +21,14 @@
       Season one, in progress. The record book opens when the first champion is crowned.
     </div>
 
+    <!-- Chronicles breadcrumb — anchors this page as a deeper view
+         inside the Chronicles section, not a standalone surface. -->
+    <router-link
+      v-if="chroniclesBackLink"
+      :to="chroniclesBackLink"
+      class="chronicles-back"
+    >← Chronicles</router-link>
+
     <!-- ─────────────────────────────────────────────────────────────
          SECTION 1 — PAGE HEAD
     ────────────────────────────────────────────────────────────── -->
@@ -28,7 +36,7 @@
       <div class="page-head-copy">
         <p class="page-eyebrow">
           <span class="page-eyebrow-bar" aria-hidden="true"></span>
-          League history
+          Chronicles · Seasons
         </p>
         <h1 id="page-headline" class="page-headline">{{ pageHeadline }}</h1>
         <p class="page-sub">Champions, rivalries, and the record book.</p>
@@ -655,6 +663,15 @@ defineEmits<{ (e: 'open-signup'): void }>()
 const route = useRoute()
 const router = useRouter()
 
+/** Breadcrumb back to the Chronicles landing page when this view was
+ *  opened from /chronicles. Anchors /history as a deeper view inside
+ *  Chronicles rather than a standalone surface. */
+const chroniclesBackLink = computed<string | null>(() => {
+  const leagueId = route.params.leagueId
+  if (typeof leagueId !== 'string' || leagueId.length === 0) return null
+  return `/leagues/${leagueId}/chronicles`
+})
+
 /* ─────────────────────────────────────────────────────────────────
    LIVE DATA — same pattern as CategoryDemoHomeView.
 
@@ -903,7 +920,7 @@ interface WatchItem {
  *  view was reached. */
 function liveHomeHref(): string {
   if (isStrictLiveMode.value && typeof route.params.leagueId === 'string') {
-    return `/leagues/${route.params.leagueId}/home`
+    return `/leagues/${route.params.leagueId}/the-beat`
   }
   const q: string[] = []
   if (typeof route.query.leagueId === 'string') q.push(`leagueId=${encodeURIComponent(route.query.leagueId)}`)
@@ -1693,6 +1710,22 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
 }
+
+/* Chronicles back-breadcrumb — small, dim, sits above the page head. */
+.chronicles-back {
+  align-self: flex-start;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-tertiary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  margin: -16px 0 -32px;
+  transition: border-color 200ms ease;
+}
+.chronicles-back:hover { border-bottom-color: currentColor; }
 
 /* ─── Shared section heading typography ───────────────────────── */
 .section-head { margin-bottom: 18px; }
