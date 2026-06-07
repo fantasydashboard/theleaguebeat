@@ -636,10 +636,14 @@ const prCommentary = computed<string | null>(() => {
 
   // Middle cluster — how many consecutive teams below the leader
   // sit within 5 cats of each other. Captures the "the chase pack
-  // is tight" story when present.
+  // is tight" story when present. Math.abs because standings are
+  // sorted by winPct, and a lower-ranked team can have more raw
+  // catWins (different decision counts across the season). Without
+  // abs, a negative gap silently satisfied `<= 5` and inflated the
+  // cluster count.
   let middleCluster = 0
   for (let i = 1; i < sorted.length - 1; i++) {
-    if (sorted[i].catWins - sorted[i + 1].catWins <= 5) {
+    if (Math.abs(sorted[i].catWins - sorted[i + 1].catWins) <= 5) {
       middleCluster++
     } else {
       break
@@ -651,10 +655,15 @@ const prCommentary = computed<string | null>(() => {
   // doesn't skip from "leader" straight to "cellar" when there's a
   // genuine race underneath. Captures the story the previous version
   // missed when middleCluster was only 1.
+  //
+  // ALSO Math.abs: same reason as middleCluster. ESPN issue 9 case
+  // had Dem Bums (#2, 93-71) and Port Angeles (#3, 97-78). Subtracting
+  // raw wins gave -4, which printed as "chase -4 cats apart" before
+  // this fix.
   const third = sorted[2]
   const fourth = sorted[3]
-  const chasePairGap = second.catWins - third.catWins
-  const chasePairBreakaway = third.catWins - fourth.catWins
+  const chasePairGap = Math.abs(second.catWins - third.catWins)
+  const chasePairBreakaway = Math.abs(third.catWins - fourth.catWins)
   const tightChasePair =
     chasePairGap <= 2 && chasePairBreakaway >= 4
       ? {
@@ -681,13 +690,15 @@ const prCommentary = computed<string | null>(() => {
   // takes precedence over the broader "cluster" or "middle thins"
   // framing because it names the pursuit specifically.
   if (tightChasePair) {
-    const gapWord =
-      tightChasePair.gap === 0
-        ? 'tied'
-        : tightChasePair.gap === 1
-        ? '1 cat apart'
-        : `${tightChasePair.gap} cats apart`
-    parts.push(`${tightChasePair.firstName} and ${tightChasePair.secondName} chase ${gapWord} in pursuit.`)
+    if (tightChasePair.gap === 0) {
+      // Special case: "chase tied in pursuit" parses as malformed.
+      // Use a separate verb so the sentence holds together.
+      parts.push(`${tightChasePair.firstName} and ${tightChasePair.secondName} are tied in pursuit.`)
+    } else {
+      const gapWord =
+        tightChasePair.gap === 1 ? '1 cat apart' : `${tightChasePair.gap} cats apart`
+      parts.push(`${tightChasePair.firstName} and ${tightChasePair.secondName} chase ${gapWord} in pursuit.`)
+    }
   } else if (middleCluster >= 4) {
     parts.push(`Below the leader, ${middleCluster + 1} teams cluster within striking distance of each other.`)
   } else if (middleCluster >= 2) {
@@ -1239,44 +1250,62 @@ async function loadIssue() {
         archivedWeek,
       )
       if (snap) {
-        // For rendering: force currentWeek to the synthetic
-        // "weekN + 1" value. The editorial pipeline (cover body,
-        // PR commentary) uses `currentWeek - 1` to label the week
-        // just played. Post-fix snapshots store the LIVE
-        // currentWeek (e.g. 11) so navigation knows where "latest"
-        // sits; without this override the cover body for Issue 9
-        // would read "Week 10" instead of "Week 9".
-        liveData.value = { ...snap.data, currentWeek: archivedWeek + 1 }
-        const historyYears = (snap.data.seasonHistory ?? [])
-          .map((s) => s.year)
-          .filter((y): y is number => Number.isFinite(y))
-        const foundedFromHistory = historyYears.length > 0
-          ? Math.min(snap.data.currentSeason, ...historyYears)
-          : snap.data.currentSeason
-        // For navigation: trust snap.data.currentWeek when it's
-        // clearly the LIVE value (greater than weekN+1, which
-        // post-fix snapshots use). Pre-fix snapshots stored the
-        // synthetic value (== weekN+1); fall back to the cached
-        // league row's current_week for those.
+        // Trust assessment. Two signals can make us trust the
+        // snapshot for navigation:
+        //  - looksLikeLive: snap.data.currentWeek > archivedWeek+1
+        //    (post-fix snapshots persist the LIVE currentWeek).
+        //  - cachedSaysLater: the cached league row's current_week
+        //    is past archivedWeek+1 (independent confirmation that
+        //    a later issue exists, even if the snapshot's metadata
+        //    is stale).
+        // When neither holds, the snapshot could either be (a) a
+        // legitimate just-published archive (no forward arrow
+        // correct) or (b) a pre-fix stale archive masking a
+        // forward arrow that should exist. We can't tell from
+        // metadata alone — fall through to the live adapter path,
+        // which will re-synth and rewrite the snapshot with the
+        // correct currentWeek. One slow load per stale snapshot,
+        // then fast forever after.
         const looksLikeLive = snap.data.currentWeek > archivedWeek + 1
         const cachedLiveWeek =
           strictLeagueRecord.value?.settings?.current_week
-        const storeWeek = looksLikeLive
-          ? snap.data.currentWeek
-          : typeof cachedLiveWeek === 'number' &&
-            cachedLiveWeek > archivedWeek + 1
-          ? cachedLiveWeek
-          : snap.data.currentWeek
-        issueStore.setIssue({
-          currentWeek: storeWeek,
-          currentSeason: snap.data.currentSeason,
-          regularSeasonEndWeek: snap.data.regularSeasonEndWeek,
-          seasonStage: deriveSeasonStage(storeWeek, snap.data.regularSeasonEndWeek),
-          leagueFoundedSeason: foundedFromHistory,
-          lastUpdated: snap.publishedAt,
-        })
-        liveLoading.value = false
-        return
+        const cachedSaysLater =
+          typeof cachedLiveWeek === 'number' &&
+          cachedLiveWeek > archivedWeek + 1
+        const trustSnapshot = looksLikeLive || cachedSaysLater
+
+        if (trustSnapshot) {
+          // For rendering: force currentWeek to the synthetic
+          // "weekN + 1" value. The editorial pipeline (cover body,
+          // PR commentary) uses `currentWeek - 1` to label the
+          // week just played. Post-fix snapshots store the LIVE
+          // currentWeek so navigation knows where "latest" sits;
+          // without this override the cover body for Issue 9
+          // would read "Week 10" instead of "Week 9".
+          liveData.value = { ...snap.data, currentWeek: archivedWeek + 1 }
+          const historyYears = (snap.data.seasonHistory ?? [])
+            .map((s) => s.year)
+            .filter((y): y is number => Number.isFinite(y))
+          const foundedFromHistory = historyYears.length > 0
+            ? Math.min(snap.data.currentSeason, ...historyYears)
+            : snap.data.currentSeason
+          const storeWeek = looksLikeLive
+            ? snap.data.currentWeek
+            : (cachedLiveWeek as number) // cachedSaysLater branch
+          issueStore.setIssue({
+            currentWeek: storeWeek,
+            currentSeason: snap.data.currentSeason,
+            regularSeasonEndWeek: snap.data.regularSeasonEndWeek,
+            seasonStage: deriveSeasonStage(storeWeek, snap.data.regularSeasonEndWeek),
+            leagueFoundedSeason: foundedFromHistory,
+            lastUpdated: snap.publishedAt,
+          })
+          liveLoading.value = false
+          return
+        }
+        // Snapshot exists but we can't trust its navigation
+        // metadata — drop through to the live adapter, which will
+        // overwrite the stale row.
       }
       // Snapshot miss — we'll fall through to the adapter so we can
       // (a) decide whether this archived week is actually too old to
