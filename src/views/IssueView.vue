@@ -21,14 +21,17 @@
         <span class="issue-loading-bar-fill"></span>
       </div>
       <div class="issue-loading-stage">
-        <!-- Brand monogram — the same TLB chip used in the OG share
-             card and the cover masthead. Anchors identity at the
-             moment the user is most uncertain. -->
-        <div class="issue-loading-monogram" aria-hidden="true">TLB</div>
-        <p class="issue-loading-eyebrow">
-          <span class="issue-loading-eyebrow-bar" aria-hidden="true"></span>
-          The League Beat
-        </p>
+        <!-- Brand lockup — the full magazine logo with tagline.
+             Anchors identity at the moment the user is most
+             uncertain. The lockup already includes "THE LEAGUE
+             BEAT" and "YOUR LEAGUE STORY, CHRONICLED.", so the
+             eyebrow that used to live under the mark is removed —
+             it would have read as duplication. -->
+        <img
+          src="/tlb-logo-primary.png"
+          alt="The League Beat"
+          class="issue-loading-logo"
+        />
         <p class="issue-loading-title">{{ loadingTitle }}</p>
         <p class="issue-loading-sub">{{ loadingSubline }}</p>
       </div>
@@ -1236,28 +1239,34 @@ async function loadIssue() {
         archivedWeek,
       )
       if (snap) {
-        liveData.value = snap.data
+        // For rendering: force currentWeek to the synthetic
+        // "weekN + 1" value. The editorial pipeline (cover body,
+        // PR commentary) uses `currentWeek - 1` to label the week
+        // just played. Post-fix snapshots store the LIVE
+        // currentWeek (e.g. 11) so navigation knows where "latest"
+        // sits; without this override the cover body for Issue 9
+        // would read "Week 10" instead of "Week 9".
+        liveData.value = { ...snap.data, currentWeek: archivedWeek + 1 }
         const historyYears = (snap.data.seasonHistory ?? [])
           .map((s) => s.year)
           .filter((y): y is number => Number.isFinite(y))
         const foundedFromHistory = historyYears.length > 0
           ? Math.min(snap.data.currentSeason, ...historyYears)
           : snap.data.currentSeason
-        // CRITICAL: do NOT publish snap.data.currentWeek to the
-        // store. Snapshots written from synthesizeIssue carry the
-        // synthetic "weekN + 1" as currentWeek (so the rendering
-        // math resolves issueNumber correctly without a URL param).
-        // Pushing that into the store would overwrite the live
-        // value with one that points AT the archive being viewed,
-        // collapsing the forward arrow ("Issue N+1 ▶") into nothing.
-        // Use the cached league row's current_week instead — the
-        // Supabase-resident copy of the league's real live week.
+        // For navigation: trust snap.data.currentWeek when it's
+        // clearly the LIVE value (greater than weekN+1, which
+        // post-fix snapshots use). Pre-fix snapshots stored the
+        // synthetic value (== weekN+1); fall back to the cached
+        // league row's current_week for those.
+        const looksLikeLive = snap.data.currentWeek > archivedWeek + 1
         const cachedLiveWeek =
           strictLeagueRecord.value?.settings?.current_week
-        const storeWeek =
-          typeof cachedLiveWeek === 'number' && cachedLiveWeek >= 1
-            ? cachedLiveWeek
-            : snap.data.currentWeek
+        const storeWeek = looksLikeLive
+          ? snap.data.currentWeek
+          : typeof cachedLiveWeek === 'number' &&
+            cachedLiveWeek > archivedWeek + 1
+          ? cachedLiveWeek
+          : snap.data.currentWeek
         issueStore.setIssue({
           currentWeek: storeWeek,
           currentSeason: snap.data.currentSeason,
@@ -1323,12 +1332,22 @@ async function loadIssue() {
           // Persist the reconstruction so the next reader skips
           // synthesis altogether. Idempotent — wins the race only
           // on the first save.
+          //
+          // IMPORTANT: override the synth's currentWeek with the
+          // LIVE adapter value before writing. synth.currentWeek
+          // is the synthetic "weekN + 1" used for in-memory render
+          // math; persisting it would clobber navigation — the
+          // next reader would resolve "latest issue" to the very
+          // archive being viewed and hide the forward arrow. The
+          // editorial pipeline still renders correctly on read
+          // because the reader patches currentWeek back to the
+          // synthetic value before assigning to liveData.
           if (leagueRowId) {
             void writeIssueSnapshot(
               leagueRowId,
               synth.currentSeason,
               archivedWeek,
-              synth,
+              { ...synth, currentWeek: adapted.currentWeek },
             )
           }
           liveLoading.value = false
@@ -1376,11 +1395,16 @@ async function loadIssue() {
       if (canSynthesizeIssue(adapted, justPublishedWeek)) {
         const frozen = synthesizeIssue(adapted, justPublishedWeek)
         if (frozen) {
+          // Same currentWeek override as the synth render path:
+          // persist the LIVE currentWeek so future readers know
+          // where "latest" sits. The reader patches it back to the
+          // synthetic value at render time so editorial copy stays
+          // anchored to the archived week.
           void writeIssueSnapshot(
             leagueRowId,
             frozen.currentSeason,
             justPublishedWeek,
-            frozen,
+            { ...frozen, currentWeek: adapted.currentWeek },
           )
         }
       }
@@ -1523,42 +1547,25 @@ function collectUserIdentity() {
   align-items: center;
   gap: 0;
 }
-/* Brand monogram — pink tinted card matching the OG share card's
-   masthead chip. Subtle inner glow gives it presence. */
-.issue-loading-monogram {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  background: var(--accent-secondary);
-  color: oklch(0.08 0.014 90);
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 900;
-  font-size: 1.5rem;
-  letter-spacing: -0.02em;
-  margin-bottom: 22px;
-  box-shadow:
-    0 16px 40px oklch(0.66 0.22 0 / 0.30),
-    0 0 0 1px oklch(0.66 0.22 0 / 0.15) inset;
+/* Brand lockup — the full magazine logo with tagline. Sized so
+   the lockup carries the space the way the OG share card does
+   (the logo IS the brand at this moment, not a chip next to it).
+   Drop shadow lifts it slightly off the radial-glow background. */
+.issue-loading-logo {
+  width: 80%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 0 28px;
+  display: block;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+  /* Fade-in keyed to component mount — ease-out, fast, no
+     translateY (the radial-glow animation already provides
+     atmosphere; a moving logo would compete with it). */
+  animation: issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.issue-loading-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--accent-secondary);
-  margin: 0 0 14px;
-}
-.issue-loading-eyebrow-bar {
-  width: 28px;
-  height: 1px;
-  background: var(--accent-secondary);
+@keyframes issue-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
 }
 .issue-loading-title {
   font-family: 'Barlow Condensed', sans-serif;
