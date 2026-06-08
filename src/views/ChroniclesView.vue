@@ -36,8 +36,8 @@
       <h1 class="chronicles-title">{{ leagueName }}</h1>
       <p class="chronicles-sub">
         The all-time archive of {{ leagueName }}.
-        Champions, records, dynasties, rivalries — the story across the seasons.
-        <span v-if="seasonsCount > 0">{{ seasonsCount }} seasons on the books.</span>
+        Champions, eras, and the constants that survive across years.
+        <span v-if="seasonsCount > 0">{{ seasonsCount }} {{ seasonsCount === 1 ? 'season' : 'seasons' }} on the books.</span>
       </p>
     </header>
 
@@ -201,14 +201,14 @@ const departments = computed(() => [
   {
     path: 'history',
     label: 'Seasons',
-    body: 'Every season this league has played, with the champion, the runner-up, the basement, and the year\'s biggest story.',
+    body: 'Every season this league has played. Champions, eras, the receipts — the multi-year story of who held the trophy and what it meant.',
     cta: 'Open the seasons archive',
   },
   {
     path: 'archive',
-    label: 'Records',
-    body: 'Single-season records, all-time leaders, longest streaks, biggest weeks. The numbers that survive across years.',
-    cta: 'Open the records book',
+    label: 'Past issues',
+    body: 'Your collection of past issues. Every weekly recap from every season the league has played, on a shelf you can flip back through.',
+    cta: 'Open the issue library',
   },
 ])
 

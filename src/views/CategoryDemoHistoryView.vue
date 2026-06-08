@@ -160,465 +160,71 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         SECTION 3 — ALL-TIME LEGACY
+         SECTION 3 — THE ERAS
+         Narrative arcs across years. Only fires when a real pattern
+         is in the data (back-to-back runs, founding-year origins,
+         dormant champions, etc). Silent on a league with too few
+         seasons for any era to have formed.
     ────────────────────────────────────────────────────────────── -->
-    <section id="sec-legacy" class="legacy" aria-labelledby="legacy-heading">
+    <section v-if="eras.length > 0" class="eras" aria-labelledby="eras-heading">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="legacy-heading">All-time legacy</p>
-        <h2 class="section-headline">Who's the best to ever do it.</h2>
-        <p class="legacy-context">{{ legacyManagerCount }} managers across {{ displaySeasonCount }} seasons.</p>
-        <p class="legacy-formula">{{ legacyFormulaLabel }}</p>
+        <p class="section-eyebrow section-eyebrow-teal" id="eras-heading">The eras</p>
+        <h2 class="section-headline">{{ erasHeadline }}</h2>
+        <p class="section-sub">
+          Where the patterns are. The named periods that shaped this league.
+        </p>
       </header>
 
-      <div class="podium" role="list">
-        <!-- #2 -->
-        <component
-          :is="legacyInteractive ? 'button' : 'div'"
-          v-if="podium[1]"
-          :id="`legacy-${podium[1].key}`"
-          :type="legacyInteractive ? 'button' : undefined"
-          class="podium-card podium-2"
-          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[1].isMyTeam }"
-          role="listitem"
-          @click="onLegacyClick(podium[1])"
-          :style="{ '--podium-accent': accentOfEntry(podium[1]) } as any"
-          :aria-label="`Rank 2 ${podium[1].name}, ${podium[1].score} legacy`"
+      <ol class="era-list" role="list">
+        <li
+          v-for="era in eras"
+          :key="era.id"
+          class="era-card"
+          :data-tone="era.tone"
         >
-          <span class="podium-rank-badge">#2</span>
-          <div
-            class="podium-avatar podium-avatar-2"
-            :style="{ background: `linear-gradient(135deg, ${podium[1].avatarColor})` }"
-          >
-            <img v-if="podium[1].logoUrl" :src="podium[1].logoUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ podium[1].ownerInitials }}</span>
-          </div>
-          <p class="podium-score podium-score-2">{{ podium[1].score }}</p>
-          <p class="podium-team">{{ podium[1].name }}</p>
-          <p class="podium-seasons">{{ podium[1].seasonsPlayed }} season{{ podium[1].seasonsPlayed === 1 ? '' : 's' }}</p>
-          <ul class="podium-badges" role="list">
-            <li v-if="podium[1].titles > 0" class="podium-badge podium-badge-gold">{{ podium[1].titles }} title{{ podium[1].titles === 1 ? '' : 's' }}</li>
-            <li v-if="podium[1].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[1].playoffApps) }}</li>
-            <li class="podium-badge">{{ podium[1].totalCatWins }} cat wins</li>
-          </ul>
-        </component>
-
-        <!-- #1 -->
-        <component
-          :is="legacyInteractive ? 'button' : 'div'"
-          v-if="podium[0]"
-          :id="`legacy-${podium[0].key}`"
-          :type="legacyInteractive ? 'button' : undefined"
-          class="podium-card podium-1"
-          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[0].isMyTeam }"
-          role="listitem"
-          @click="onLegacyClick(podium[0])"
-          :style="{ '--podium-accent': accentOfEntry(podium[0]) } as any"
-          :aria-label="`Rank 1 ${podium[0].name}, ${podium[0].score} legacy`"
-        >
-          <span class="podium-rank-badge podium-rank-1">#1</span>
-          <div
-            class="podium-avatar podium-avatar-1"
-            :style="{ background: `linear-gradient(135deg, ${podium[0].avatarColor})` }"
-          >
-            <img v-if="podium[0].logoUrl" :src="podium[0].logoUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ podium[0].ownerInitials }}</span>
-          </div>
-          <p class="podium-score podium-score-1">{{ podium[0].score }}</p>
-          <p class="podium-team">{{ podium[0].name }}</p>
-          <p class="podium-seasons">{{ podium[0].seasonsPlayed }} season{{ podium[0].seasonsPlayed === 1 ? '' : 's' }}</p>
-          <ul class="podium-badges" role="list">
-            <li v-if="podium[0].titles > 0" class="podium-badge podium-badge-gold">{{ podium[0].titles }} title{{ podium[0].titles === 1 ? '' : 's' }}</li>
-            <li v-if="podium[0].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[0].playoffApps) }}</li>
-            <li class="podium-badge">{{ podium[0].totalCatWins }} cat wins</li>
-          </ul>
-          <p class="podium-1-sub">{{ podiumLede(podium[0]) }}</p>
-        </component>
-
-        <!-- #3 -->
-        <component
-          :is="legacyInteractive ? 'button' : 'div'"
-          v-if="podium[2]"
-          :id="`legacy-${podium[2].key}`"
-          :type="legacyInteractive ? 'button' : undefined"
-          class="podium-card podium-3"
-          :class="{ 'is-static': !legacyInteractive, 'podium-card-me': podium[2].isMyTeam }"
-          role="listitem"
-          @click="onLegacyClick(podium[2])"
-          :style="{ '--podium-accent': accentOfEntry(podium[2]) } as any"
-          :aria-label="`Rank 3 ${podium[2].name}, ${podium[2].score} legacy`"
-        >
-          <span class="podium-rank-badge">#3</span>
-          <div
-            class="podium-avatar podium-avatar-3"
-            :style="{ background: `linear-gradient(135deg, ${podium[2].avatarColor})` }"
-          >
-            <img v-if="podium[2].logoUrl" :src="podium[2].logoUrl" class="podium-avatar-img" alt="" />
-            <span v-else>{{ podium[2].ownerInitials }}</span>
-          </div>
-          <p class="podium-score podium-score-3">{{ podium[2].score }}</p>
-          <p class="podium-team">{{ podium[2].name }}</p>
-          <p class="podium-seasons">{{ podium[2].seasonsPlayed }} season{{ podium[2].seasonsPlayed === 1 ? '' : 's' }}</p>
-          <ul class="podium-badges" role="list">
-            <li v-if="podium[2].titles > 0" class="podium-badge podium-badge-gold">{{ podium[2].titles }} title{{ podium[2].titles === 1 ? '' : 's' }}</li>
-            <li v-if="podium[2].playoffApps > 0" class="podium-badge">{{ playoffWord(podium[2].playoffApps) }}</li>
-            <li class="podium-badge">{{ podium[2].totalCatWins }} cat wins</li>
-          </ul>
-        </component>
-      </div>
-
-      <div class="legacy-rows-head" aria-hidden="true">
-        <span>The rest of the field</span>
-        <span class="legacy-rows-head-score">Legacy</span>
-      </div>
-
-      <ol class="legacy-rows" role="list">
-        <li v-for="entry in legacyTail" :key="entry.key" role="listitem">
-          <component
-            :is="legacyInteractive ? 'button' : 'div'"
-            :id="`legacy-${entry.key}`"
-            :type="legacyInteractive ? 'button' : undefined"
-            class="legacy-row"
-            @click="onLegacyClick(entry)"
-            :class="{ 'legacy-row-me': entry.isMyTeam, 'is-static': !legacyInteractive }"
-            :aria-label="`Rank ${entry.rank} ${entry.name}, ${entry.score} legacy`"
-          >
-            <span class="legacy-rank">{{ entry.rank }}</span>
-            <span class="legacy-mepin" aria-hidden="true">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9"/></svg>
-            </span>
-            <div
-              class="legacy-avatar"
-              :style="{ background: `linear-gradient(135deg, ${entry.avatarColor})` }"
-            >
-              <img v-if="entry.logoUrl" :src="entry.logoUrl" class="legacy-avatar-img" alt="" />
-              <span v-else>{{ entry.ownerInitials }}</span>
-            </div>
-            <div class="legacy-meta">
-              <p class="legacy-team">{{ entry.name }}</p>
-              <p class="legacy-seasons">{{ entry.seasonsPlayed }} season{{ entry.seasonsPlayed === 1 ? '' : 's' }}</p>
-            </div>
-            <ul class="legacy-badges" role="list">
-              <li v-if="entry.titles > 0" class="legacy-badge legacy-badge-gold">{{ entry.titles }} title{{ entry.titles > 1 ? 's' : '' }}</li>
-              <li v-if="entry.playoffApps > 0" class="legacy-badge">{{ playoffWord(entry.playoffApps) }}</li>
-              <li class="legacy-badge">{{ entry.totalCatWins }} cat wins</li>
-            </ul>
-            <span class="legacy-score">{{ entry.score }}</span>
-          </component>
+          <p class="era-eyebrow">{{ era.eyebrow }}</p>
+          <h3 class="era-title">{{ era.title }}</h3>
+          <p class="era-body">{{ era.body }}</p>
+          <p v-if="era.signature" class="era-signature">
+            <span class="era-signature-label">Signature</span>
+            <span class="era-signature-value">{{ era.signature }}</span>
+          </p>
         </li>
       </ol>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         SECTION 4 — ACROSS THE YEARS (trend chart)
+         SECTION 4 — THE RECEIPTS
+         Typographic one-line records. The constants of league lore —
+         numbers that survive across years, written like pull-quotes
+         rather than database rows.
     ────────────────────────────────────────────────────────────── -->
-    <section class="trends" aria-labelledby="trends-heading">
+    <section v-if="receipts.length > 0" class="receipts" aria-labelledby="receipts-heading">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="trends-heading">Across the years</p>
-        <h2 class="section-headline">When the empires rose.</h2>
-        <p class="section-sub">Where every team finished, season by season. Top three and your team in color; the rest dimmed. 2026 is the current standings.</p>
+        <p class="section-eyebrow section-eyebrow-magenta" id="receipts-heading">The receipts</p>
+        <h2 class="section-headline">The constants.</h2>
+        <p class="section-sub">
+          The numbers that don't move. League lore, written in one line.
+        </p>
       </header>
 
-      <div class="bump-wrap">
-        <svg
-          class="bump-chart"
-          :viewBox="`0 0 ${TX_W} ${TX_H}`"
-          preserveAspectRatio="none"
-          role="img"
-          aria-label="Finish position by season for each manager"
-        >
-          <!-- faint rank gridlines -->
-          <g class="bump-grid">
-            <line v-for="r in bumpMaxRank" :key="`r-${r}`"
-              :x1="TX_PAD_L" :y1="yForRank(r)" :x2="TX_W - TX_PAD_R" :y2="yForRank(r)" />
-          </g>
-          <!-- year ticks -->
-          <g class="bump-xticks">
-            <text v-for="(y, i) in trendYears" :key="`yr-${y}`"
-              :x="xFor(i)" :y="TX_H - 8" text-anchor="middle">{{ y }}</text>
-          </g>
-          <!-- dimmed connectors -->
-          <path v-for="s in dimBump" :key="`dim-${s.key}`"
-            :d="s.path" class="bump-line-dim" fill="none" />
-          <!-- featured lines -->
-          <path v-for="s in featuredBump" :key="`line-${s.key}`"
-            :d="s.path" :stroke="s.lineColor"
-            class="bump-line" :class="{ 'is-me': s.isMyTeam }"
-            fill="none" stroke-linejoin="round" stroke-linecap="round" />
-        </svg>
-
-        <!-- y-axis hints -->
-        <span class="bump-axis bump-axis-top">1st</span>
-        <span class="bump-axis bump-axis-bot">{{ bumpMaxRank }}th</span>
-
-        <!-- HTML overlay: logo nodes for featured, faint dots for the rest -->
-        <div class="bump-overlay">
-          <template v-for="s in dimBump" :key="`ddots-${s.key}`">
-            <span v-for="nd in s.displayNodes" :key="`dd-${s.key}-${nd.i}`"
-              class="bump-dot-dim" :style="{ left: nd.xPct + '%', top: nd.yPct + '%' }" />
-          </template>
-          <template v-for="s in featuredBump" :key="`fnodes-${s.key}`">
-            <div v-for="nd in s.displayNodes" :key="`fn-${s.key}-${nd.i}`"
-              class="bump-node" :class="{ 'is-me': s.isMyTeam }"
-              :style="{ left: nd.xPct + '%', top: nd.yPct + '%', '--node-accent': s.lineColor } as any">
-              <div class="bump-node-avatar" :style="{ background: `linear-gradient(135deg, ${s.avatarColor})` }">
-                <img v-if="s.logoUrl" :src="s.logoUrl" alt="" />
-                <span v-else>{{ s.ownerInitials }}</span>
-              </div>
-            </div>
-          </template>
-          <span v-for="lbl in bumpLabels" :key="`lbl-${lbl.key}`"
-            class="bump-label" :style="{ left: lbl.xPct + '%', top: lbl.yPct + '%', color: lbl.color }">{{ lbl.name }}</span>
-        </div>
-      </div>
+      <ol class="receipt-list" role="list">
+        <li v-for="r in receipts" :key="r.id" class="receipt-row">
+          <span class="receipt-label">{{ r.label }}</span>
+          <span class="receipt-name">{{ r.name }}</span>
+          <span class="receipt-value">{{ r.value }}</span>
+        </li>
+      </ol>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         SECTION 5 — ALL-TIME SERIES (H2H matrix)
+         The dashboard-style content that used to live here (All-time
+         Legacy podium + leaderboard, Across-the-years bump chart,
+         Who-owns-who h2h matrices, Category crowns, Hall of Fame /
+         Hall of Shame numeric record book) belongs in Ultimate
+         Fantasy Dashboard, not in The League Beat's editorial
+         magazine voice. Stripped 2026-06-08.
     ────────────────────────────────────────────────────────────── -->
-    <section class="h2h" aria-labelledby="h2h-heading">
-      <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="h2h-heading">The rivalries</p>
-        <h2 class="section-headline">Who owns who.</h2>
-        <p class="section-sub">Head-to-head from this season's matchups.</p>
-      </header>
-
-      <div v-if="rivalries.length" class="rivalry-grid">
-        <article
-          v-for="r in rivalries"
-          :key="r.kind"
-          class="rivalry-card"
-          :class="{ 'rivalry-card-me': r.kind !== 'blowout' }"
-        >
-          <p class="rivalry-eyebrow">{{ r.eyebrow }}</p>
-
-          <div class="rivalry-faces">
-            <div class="rivalry-face">
-              <div
-                class="rivalry-avatar"
-                :class="{ 'rivalry-avatar-me': getTeam(r.leftId).isMyTeam }"
-                :style="{ background: `linear-gradient(135deg, ${getTeam(r.leftId).avatarColor})` }"
-              >
-                <img v-if="getTeam(r.leftId).avatarUrl" :src="getTeam(r.leftId).avatarUrl" alt="" />
-                <span v-else>{{ getTeam(r.leftId).ownerInitials }}</span>
-              </div>
-              <p class="rivalry-name">{{ getTeam(r.leftId).name }}</p>
-            </div>
-
-            <p class="rivalry-record">
-              {{ r.leftWins }}<span class="rivalry-dash">–</span>{{ r.rightWins }}<span v-if="r.ties" class="rivalry-ties">–{{ r.ties }}</span>
-            </p>
-
-            <div class="rivalry-face">
-              <div
-                class="rivalry-avatar"
-                :class="{ 'rivalry-avatar-me': getTeam(r.rightId).isMyTeam }"
-                :style="{ background: `linear-gradient(135deg, ${getTeam(r.rightId).avatarColor})` }"
-              >
-                <img v-if="getTeam(r.rightId).avatarUrl" :src="getTeam(r.rightId).avatarUrl" alt="" />
-                <span v-else>{{ getTeam(r.rightId).ownerInitials }}</span>
-              </div>
-              <p class="rivalry-name">{{ getTeam(r.rightId).name }}</p>
-            </div>
-          </div>
-
-          <p class="rivalry-meta">
-            <span v-if="r.dominantCatDiff > 0">+{{ r.dominantCatDiff }} cats</span>
-            <span v-if="r.dominantCatDiff > 0" class="rivalry-dot" aria-hidden="true">·</span>
-            <span>{{ r.meetings }} meeting{{ r.meetings === 1 ? '' : 's' }}</span>
-          </p>
-          <p class="rivalry-caption">{{ r.caption }}</p>
-        </article>
-      </div>
-
-      <p v-else class="rivalry-empty">Head-to-head meetings haven't been logged yet this season.</p>
-    </section>
-
-    <!-- ─────────────────────────────────────────────────────────────
-         SECTION 6 — THE CATEGORY DYNASTIES (category-specific)
-    ────────────────────────────────────────────────────────────── -->
-    <section class="dynasties" aria-labelledby="dynasties-heading">
-      <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-teal" id="dynasties-heading">Category crowns</p>
-        <h2 class="section-headline">Who rules each cat.</h2>
-        <p class="section-sub">This season's category leaders. Moves every week.</p>
-      </header>
-
-      <div v-if="categoryCrowns.length" class="crown-grid">
-        <article
-          v-for="c in categoryCrowns"
-          :key="c.kind"
-          class="crown-card"
-          :class="`crown-${c.kind}`"
-        >
-          <p class="crown-eyebrow">{{ c.eyebrow }}</p>
-          <div class="crown-id">
-            <div
-              class="crown-avatar"
-              :class="{ 'crown-avatar-me': getTeam(c.teamId).isMyTeam }"
-              :style="{ background: `linear-gradient(135deg, ${getTeam(c.teamId).avatarColor})` }"
-            >
-              <img v-if="getTeam(c.teamId).avatarUrl" :src="getTeam(c.teamId).avatarUrl" alt="" />
-              <span v-else>{{ getTeam(c.teamId).ownerInitials }}</span>
-            </div>
-            <p class="crown-name">{{ getTeam(c.teamId).name }}</p>
-          </div>
-          <p class="crown-count">
-            <span class="crown-num">{{ c.count }}</span>
-            <span class="crown-label">{{ c.kind === 'punt' ? 'cats in the cellar' : 'cats led' }}</span>
-          </p>
-          <ul v-if="c.cats.length" class="crown-cats" role="list">
-            <li v-for="cat in c.cats" :key="cat" class="crown-cat-chip" :class="`crown-cat-${c.kind}`">{{ cat }}</li>
-          </ul>
-          <p class="crown-caption">{{ c.caption }}</p>
-        </article>
-      </div>
-
-      <p v-else class="crown-empty">Category leaders post once the season's first matchups settle.</p>
-    </section>
-
-    <!-- ─────────────────────────────────────────────────────────────
-         SECTION 7 — THE RECORD BOOK (Hall of Fame / Shame)
-    ────────────────────────────────────────────────────────────── -->
-    <section class="awards" aria-labelledby="awards-heading">
-      <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-magenta" id="awards-heading">The record book</p>
-        <h2 class="section-headline">Hall of Fame. Hall of Shame.</h2>
-        <p class="section-sub">All-time, across every season the league has played.</p>
-      </header>
-
-      <!-- HALL OF FAME -->
-      <h3 class="awards-sub awards-sub-fame">Hall of Fame</h3>
-      <div class="fame-grid">
-        <button type="button" class="fame-a"
-          @click="onRecordClick(fameEntries[0])"
-          :aria-label="`${fameEntries[0].eyebrow}: ${fameEntries[0].name} ${fameEntries[0].value}`">
-          <span class="fame-a-eyebrow">{{ fameEntries[0].eyebrow }}</span>
-          <div class="fame-a-body">
-            <div class="fame-a-id">
-              <div class="fame-a-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[0].avatarColor})` }">
-                <img v-if="fameEntries[0].avatarUrl" :src="fameEntries[0].avatarUrl" alt="" />
-                <span v-else>{{ fameEntries[0].ownerInitials }}</span>
-              </div>
-              <div class="fame-a-id-text">
-                <p class="fame-a-team">{{ fameEntries[0].name }}</p>
-                <p class="fame-a-when">{{ fameEntries[0].metric }}</p>
-              </div>
-            </div>
-            <p class="fame-a-value">{{ fameEntries[0].value }}</p>
-          </div>
-          <p v-if="fameEntries[0].context" class="fame-a-trail">{{ fameEntries[0].context }}</p>
-        </button>
-
-        <button type="button" class="fame-b"
-          @click="onRecordClick(fameEntries[1])"
-          :aria-label="`${fameEntries[1].eyebrow}: ${fameEntries[1].name} ${fameEntries[1].value}`">
-          <span class="fame-tile-eyebrow">{{ fameEntries[1].eyebrow }}</span>
-          <div class="fame-b-mid">
-            <div class="fame-b-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[1].avatarColor})` }">
-              <img v-if="fameEntries[1].avatarUrl" :src="fameEntries[1].avatarUrl" alt="" />
-              <span v-else>{{ fameEntries[1].ownerInitials }}</span>
-            </div>
-            <p class="fame-b-team">{{ fameEntries[1].name }}</p>
-          </div>
-          <p class="fame-b-value">{{ fameEntries[1].value }}</p>
-          <p class="fame-b-sub">{{ fameEntries[1].metric }}</p>
-        </button>
-
-        <button type="button" class="fame-c"
-          @click="onRecordClick(fameEntries[2])"
-          :aria-label="`${fameEntries[2].eyebrow}: ${fameEntries[2].name} ${fameEntries[2].value}`">
-          <span class="fame-tile-eyebrow">{{ fameEntries[2].eyebrow }}</span>
-          <div class="fame-c-row">
-            <p class="fame-c-value">{{ fameEntries[2].value }}</p>
-            <div class="fame-c-id">
-              <div class="fame-c-avatar" :style="{ background: `linear-gradient(135deg, ${fameEntries[2].avatarColor})` }">
-                <img v-if="fameEntries[2].avatarUrl" :src="fameEntries[2].avatarUrl" alt="" />
-                <span v-else>{{ fameEntries[2].ownerInitials }}</span>
-              </div>
-              <p class="fame-c-team">{{ fameEntries[2].name }}</p>
-            </div>
-          </div>
-          <p v-if="fameEntries[2].context" class="fame-c-sub">{{ fameEntries[2].context }}</p>
-        </button>
-
-        <button type="button" class="fame-d"
-          @click="onRecordClick(fameEntries[3])"
-          :aria-label="`${fameEntries[3].eyebrow}: ${fameEntries[3].name} ${fameEntries[3].value}`">
-          <span class="fame-d-eyebrow">{{ fameEntries[3].eyebrow }}</span>
-          <p class="fame-d-text">
-            <strong>{{ fameEntries[3].name }}</strong>
-            <span class="fame-d-dot" aria-hidden="true">·</span>
-            <span class="fame-d-pct">{{ fameEntries[3].value }}</span>
-            <span class="fame-d-dot" aria-hidden="true">·</span>
-            <span class="fame-d-rec">{{ fameEntries[3].metric }}</span>
-          </p>
-        </button>
-      </div>
-
-      <!-- HALL OF SHAME -->
-      <h3 class="awards-sub awards-sub-shame">Hall of Shame</h3>
-      <div class="shame-grid">
-        <button type="button" class="shame-a"
-          @click="onRecordClick(shameEntries[0])"
-          :aria-label="`${shameEntries[0].eyebrow}: ${shameEntries[0].name} ${shameEntries[0].value}`">
-          <span class="shame-tile-eyebrow">{{ shameEntries[0].eyebrow }}</span>
-          <p class="shame-a-value">{{ shameEntries[0].value }}</p>
-          <div class="shame-a-foot">
-            <div class="shame-a-avatar" :style="{ background: `linear-gradient(135deg, ${shameEntries[0].avatarColor})` }">
-              <img v-if="shameEntries[0].avatarUrl" :src="shameEntries[0].avatarUrl" alt="" />
-              <span v-else>{{ shameEntries[0].ownerInitials }}</span>
-            </div>
-            <div>
-              <p class="shame-a-team">{{ shameEntries[0].name }}</p>
-              <p class="shame-a-when">{{ shameEntries[0].metric }}</p>
-            </div>
-          </div>
-        </button>
-
-        <button type="button" class="shame-b"
-          @click="onRecordClick(shameEntries[1])"
-          :aria-label="`${shameEntries[1].eyebrow}: ${shameEntries[1].name} ${shameEntries[1].value}`">
-          <span class="shame-tile-eyebrow">{{ shameEntries[1].eyebrow }}</span>
-          <div class="shame-b-row">
-            <div class="shame-b-text">
-              <p class="shame-b-value">{{ shameEntries[1].value }}</p>
-              <p class="shame-b-sub">{{ shameEntries[1].metric }}</p>
-              <p class="shame-b-team">{{ shameEntries[1].name }}</p>
-            </div>
-            <div class="shame-b-avatar" :style="{ background: `linear-gradient(135deg, ${shameEntries[1].avatarColor})` }">
-              <img v-if="shameEntries[1].avatarUrl" :src="shameEntries[1].avatarUrl" alt="" />
-              <span v-else>{{ shameEntries[1].ownerInitials }}</span>
-            </div>
-          </div>
-        </button>
-
-        <button type="button" class="shame-c"
-          @click="onRecordClick(shameEntries[2])"
-          :aria-label="`${shameEntries[2].eyebrow}: ${shameEntries[2].name} ${shameEntries[2].value}`">
-          <span class="shame-c-eyebrow">{{ shameEntries[2].eyebrow }}</span>
-          <p class="shame-c-text">
-            <strong>{{ shameEntries[2].name }}</strong>
-            <span class="shame-c-dot" aria-hidden="true">·</span>
-            <span class="shame-c-value">{{ shameEntries[2].value }}</span>
-            <span class="shame-c-dot" aria-hidden="true">·</span>
-            <span class="shame-c-trail">{{ shameEntries[2].context || shameEntries[2].metric }}</span>
-          </p>
-        </button>
-
-        <button type="button" class="shame-d"
-          @click="onRecordClick(shameEntries[3])"
-          :aria-label="`${shameEntries[3].eyebrow}: ${shameEntries[3].name} ${shameEntries[3].value}`">
-          <span class="shame-d-eyebrow">{{ shameEntries[3].eyebrow }}</span>
-          <p class="shame-d-text">
-            <strong>{{ shameEntries[3].name }}</strong>
-            <span class="shame-d-dot" aria-hidden="true">·</span>
-            <span class="shame-d-pct">{{ shameEntries[3].value }}</span>
-            <span v-if="shameEntries[3].context" class="shame-d-dot" aria-hidden="true">·</span>
-            <span v-if="shameEntries[3].context" class="shame-d-rec">{{ shameEntries[3].context }}</span>
-          </p>
-        </button>
-      </div>
-    </section>
 
     <!-- Modals -->
     <CategoryTeamLegacyModal
@@ -769,10 +375,14 @@ const liveSeasonCount = computed<number>(() => {
   return seasons.size
 })
 
-/** Season count for display — real connected-season count on a live
- *  league, fixture/completed count in the demo. */
+/** Season count for display. Reads from data.seasonHistory.length —
+ *  the canonical count across the page. Previously the strict-live
+ *  branch used liveSeasonCount (counts only leagues connected to TLB),
+ *  which under-counted on leagues where the adapter pulled past
+ *  seasons we don't have separate connect rows for. The Chronicles
+ *  landing page reads the seasonHistory count too; aligning both
+ *  surfaces removes the "5 seasons" vs "3 seasons" inconsistency. */
 const displaySeasonCount = computed<number>(() => {
-  if (isStrictLiveMode.value && strictLeagueRecord.value) return liveSeasonCount.value
   return liveData.value?.seasonHistory?.length ?? seasonHistory.length
 })
 
@@ -1093,6 +703,270 @@ const currentSeasonCard = computed(() => {
     secondId: sorted[1]?.teamId ?? '',
   }
 })
+
+/* ─────────────────────────────────────────────────────────────────
+   THE ERAS — multi-year narrative arcs detected from real patterns.
+
+   Only fires when the data actually supports the story. The pool:
+     - Back-to-back runs ("The X Era, year1-year2").
+     - Founding-year origin champion still active ("Origin Story").
+     - Comet — championship year with no titles before or after.
+     - Constant — team in every season the league has played.
+     - Drought — multi-year stretch with no repeat champion.
+
+   The wire is silent when no pattern fires. Better silent than
+   fabricating an era from thin data.
+───────────────────────────────────────────────────────────────── */
+interface Era {
+  id: string
+  eyebrow: string
+  title: string
+  body: string
+  signature?: string
+  tone: 'gold' | 'pink' | 'teal' | 'ink'
+}
+
+/** Identity key for a champion across yearly records — prefers name
+ *  (stable across team-id reshuffles), falls back to teamId. */
+function champKey(r: any): string {
+  return String(r.championName ?? r.championTeamId ?? '')
+}
+
+const eras = computed<Era[]>(() => {
+  const recs = seasonsNewestFirst.value
+  if (recs.length < 2) return []
+  const out: Era[] = []
+
+  // 1. Back-to-back runs. Walk the chronological order looking for
+  //    consecutive same-champion stretches of length >= 2. Each run
+  //    becomes one era card.
+  const chronological = [...recs].sort((a, b) => a.year - b.year)
+  let runStart: number | null = null
+  let runKey: string | null = null
+  let runName: string | null = null
+  const closeRun = (endYear: number) => {
+    if (runStart != null && runKey && runName && endYear - runStart >= 1) {
+      const span = endYear - runStart + 1
+      out.push({
+        id: `era:run:${runKey}:${runStart}`,
+        eyebrow: span >= 3 ? 'Dynasty' : 'Back-to-back',
+        title: `The ${runName} run.`,
+        body: span >= 3
+          ? `${runName} hoisted the trophy ${numberToWord(span)} years in a row, ${runStart}-${endYear}. The longest run in this league's history.`
+          : `${runName} went back-to-back in ${runStart} and ${endYear}. Two crowns. Two years.`,
+        signature: `${span} consecutive titles`,
+        tone: 'gold',
+      })
+    }
+    runStart = null
+    runKey = null
+    runName = null
+  }
+  for (let i = 0; i < chronological.length; i++) {
+    const r = chronological[i]
+    const k = champKey(r)
+    if (!k) continue
+    if (k === runKey) continue
+    // New champion — close any active run that ended at i-1.
+    if (runKey != null) closeRun(chronological[i - 1].year)
+    runStart = r.year
+    runKey = k
+    runName = String(r.championName ?? '')
+  }
+  // Close trailing run.
+  if (runKey != null) {
+    const last = chronological[chronological.length - 1]
+    const span = last.year - (runStart as number) + 1
+    if (span >= 2) closeRun(last.year)
+  }
+
+  // 2. Founding-year origin champion. The team that won the league's
+  //    first season has a special place even if they never won again.
+  const founding = chronological[0]
+  if (founding && champKey(founding)) {
+    const name = String(founding.championName ?? '')
+    const wonAgain = chronological.some(
+      (r, i) => i > 0 && champKey(r) === champKey(founding),
+    )
+    if (!wonAgain) {
+      out.push({
+        id: `era:origin:${founding.year}`,
+        eyebrow: 'Origin story',
+        title: `${name}, where it started.`,
+        body: `${name} took the inaugural crown in ${founding.year} and never won again. The first name in the book.`,
+        signature: `Founding champion · ${founding.year}`,
+        tone: 'teal',
+      })
+    } else {
+      out.push({
+        id: `era:origin:${founding.year}`,
+        eyebrow: 'Origin story',
+        title: `${name}, from the jump.`,
+        body: `${name} won the inaugural ${founding.year} season and came back for more. The original.`,
+        signature: `Founding champion · ${founding.year}`,
+        tone: 'teal',
+      })
+    }
+  }
+
+  // 3. Comet — a one-time champion sandwiched between others' runs.
+  //    Identifies sleeper stories: the team that surprised everyone
+  //    once and went back to being mortal.
+  const nameToYears = new Map<string, number[]>()
+  for (const r of chronological) {
+    const k = champKey(r)
+    if (!k) continue
+    const arr = nameToYears.get(k) ?? []
+    arr.push(r.year)
+    nameToYears.set(k, arr)
+  }
+  const cometThreshold = recs.length >= 5 ? 1 : null
+  if (cometThreshold != null) {
+    for (const [k, years] of nameToYears) {
+      if (years.length !== 1) continue
+      // Only flag comets when at least 2 seasons exist before AND
+      // after the comet year — gives the "lone bright spot" framing
+      // some surrounding context.
+      const year = years[0]
+      const before = chronological.filter((r) => r.year < year).length
+      const after = chronological.filter((r) => r.year > year).length
+      if (before < 2 || after < 2) continue
+      // Skip if this would duplicate an existing run-era card.
+      const dup = out.some((e) => e.id.includes(`:${k}:`))
+      if (dup) continue
+      out.push({
+        id: `era:comet:${k}:${year}`,
+        eyebrow: 'The comet',
+        title: `${k}'s one bright year.`,
+        body: `${k} took the ${year} crown and slipped back into the field. The kind of season that becomes a story.`,
+        signature: `Lone title · ${year}`,
+        tone: 'ink',
+      })
+    }
+  }
+
+  // Cap output so the section doesn't sprawl on long-lived leagues.
+  return out.slice(0, 5)
+})
+
+const erasHeadline = computed(() => {
+  const n = eras.value.length
+  if (n === 0) return ''
+  if (n === 1) return 'One arc to track.'
+  if (n === 2) return 'Two arcs, two stories.'
+  return `${capitalize(numberToWord(n))} arcs across the years.`
+})
+
+/* ─────────────────────────────────────────────────────────────────
+   THE RECEIPTS — typographic one-line records.
+
+   The constants that survive across years. Rendered as a list of
+   plain-text lines (label + name + value) rather than a card grid.
+   The point is league lore in one sentence — pull-quote shape, not
+   database row.
+───────────────────────────────────────────────────────────────── */
+interface Receipt {
+  id: string
+  label: string
+  name: string
+  value: string
+}
+
+const receipts = computed<Receipt[]>(() => {
+  const recs = seasonsNewestFirst.value
+  if (recs.length === 0) return []
+  const chronological = [...recs].sort((a, b) => a.year - b.year)
+  const out: Receipt[] = []
+
+  // First champion in league history.
+  const first = chronological[0]
+  if (first && first.championName) {
+    out.push({
+      id: 'receipt:first-champion',
+      label: 'First champion',
+      name: String(first.championName),
+      value: String(first.year),
+    })
+  }
+
+  // Most rings, ranked by count of championships.
+  const nameToWins = new Map<string, number>()
+  for (const r of chronological) {
+    const k = champKey(r)
+    if (!k) continue
+    nameToWins.set(k, (nameToWins.get(k) ?? 0) + 1)
+  }
+  if (nameToWins.size > 0) {
+    const sorted = [...nameToWins.entries()].sort((a, b) => b[1] - a[1])
+    const [topName, topCount] = sorted[0]
+    if (topCount >= 2) {
+      out.push({
+        id: 'receipt:most-rings',
+        label: 'Most rings',
+        name: topName,
+        value: `${topCount} crowns`,
+      })
+    }
+  }
+
+  // Years played.
+  out.push({
+    id: 'receipt:years-played',
+    label: 'Seasons on the books',
+    name: 'The League',
+    value: `${recs.length}`,
+  })
+
+  // Longest title gap — the longest stretch between two
+  // championships by the same team. Editorial framing: this is a
+  // record about return, not absence.
+  const gaps: { name: string; gap: number; from: number; to: number }[] = []
+  for (const [name, years] of (() => {
+    const m = new Map<string, number[]>()
+    for (const r of chronological) {
+      const k = champKey(r)
+      if (!k) continue
+      const arr = m.get(k) ?? []
+      arr.push(r.year)
+      m.set(k, arr)
+    }
+    return m
+  })()) {
+    if (years.length < 2) continue
+    const sorted = years.slice().sort((a, b) => a - b)
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = sorted[i] - sorted[i - 1] - 1
+      if (gap >= 2) gaps.push({ name, gap, from: sorted[i - 1], to: sorted[i] })
+    }
+  }
+  if (gaps.length > 0) {
+    gaps.sort((a, b) => b.gap - a.gap)
+    const g = gaps[0]
+    out.push({
+      id: 'receipt:longest-gap',
+      label: 'Longest title gap',
+      name: g.name,
+      value: `${g.gap} years (${g.from}→${g.to})`,
+    })
+  }
+
+  // Most recent crown — anchors the list to the present.
+  const last = chronological[chronological.length - 1]
+  if (last && last.championName) {
+    out.push({
+      id: 'receipt:most-recent',
+      label: 'Most recent crown',
+      name: String(last.championName),
+      value: String(last.year),
+    })
+  }
+
+  return out
+})
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1)
+}
 
 /* ─── Category crowns — this season's per-cat leaders ──────────
    The old "dynasties" beat needed per-category history every season
@@ -1740,6 +1614,170 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
 .section-eyebrow-magenta { color: var(--accent-secondary); }
 .section-eyebrow-mute    { color: var(--ink-3); }
 .section-eyebrow-gold    { color: var(--gold); }
+
+/* ─── THE ERAS ──────────────────────────────────────────────────
+   Narrative blocks. Each card is a paragraph of editorial text
+   anchored by an eyebrow + title. Visual weight is in the prose,
+   not in numbers or chips. */
+.eras {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.era-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.era-card {
+  position: relative;
+  padding: 22px 24px 24px;
+  border-radius: 16px;
+  border: 1px solid oklch(0.20 0.015 90);
+  background:
+    radial-gradient(120% 180% at 0% 0%, oklch(0.14 0.013 90), transparent 60%),
+    oklch(0.09 0.013 90);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.era-card[data-tone='gold']::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 18px; bottom: 18px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--gold);
+}
+.era-card[data-tone='pink']::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 18px; bottom: 18px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent-secondary);
+}
+.era-card[data-tone='teal']::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 18px; bottom: 18px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent-tertiary);
+}
+.era-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.70rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0;
+}
+.era-card[data-tone='gold']  .era-eyebrow { color: var(--gold); }
+.era-card[data-tone='pink']  .era-eyebrow { color: var(--accent-secondary); }
+.era-card[data-tone='teal']  .era-eyebrow { color: var(--accent-tertiary); }
+.era-title {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  line-height: 1.05;
+  color: var(--ink-1);
+  letter-spacing: -0.005em;
+}
+.era-body {
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 56ch;
+}
+.era-signature {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 0;
+}
+.era-signature-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.era-signature-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--ink-1);
+}
+
+/* ─── THE RECEIPTS ──────────────────────────────────────────────
+   Pull-quote-style one-line records. Plain typography. No cards,
+   no chips, no charts. League lore in one sentence per line. */
+.receipts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.receipt-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.receipt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.42fr) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid oklch(0.16 0.015 90);
+}
+.receipt-row:last-child { border-bottom: 0; }
+.receipt-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.receipt-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.18rem;
+  color: var(--ink-1);
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receipt-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1.02rem;
+  color: var(--accent-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .receipt-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 12px 0;
+  }
+  .receipt-value {
+    text-align: left;
+  }
+}
 .section-headline {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
