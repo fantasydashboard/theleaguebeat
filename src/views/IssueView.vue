@@ -21,14 +21,13 @@
         <span class="issue-loading-bar-fill"></span>
       </div>
       <div class="issue-loading-stage">
-        <!-- Brand lockup — the full magazine logo with tagline.
-             Anchors identity at the moment the user is most
-             uncertain. The lockup already includes "THE LEAGUE
-             BEAT" and "YOUR LEAGUE STORY, CHRONICLED.", so the
-             eyebrow that used to live under the mark is removed —
-             it would have read as duplication. -->
+        <!-- Spinning TLB monogram. The square favicon spins cleanly
+             (the wide lockup would look broken rotating). A linear
+             1.6s rotation reads as "alive, working" rather than
+             frozen. Subtle pulse on scale completes the breathing
+             feel without competing with the rotation. -->
         <img
-          src="/tlb-logo-primary.png"
+          src="/tlb-favicon.png"
           alt="The League Beat"
           class="issue-loading-logo"
         />
@@ -1576,25 +1575,31 @@ function collectUserIdentity() {
   align-items: center;
   gap: 0;
 }
-/* Brand lockup — the full magazine logo with tagline. Sized so
-   the lockup carries the space the way the OG share card does
-   (the logo IS the brand at this moment, not a chip next to it).
-   Drop shadow lifts it slightly off the radial-glow background. */
+/* Spinning TLB monogram — square favicon, continuous rotation.
+   Drives the "loading is happening" signal the previous static
+   lockup couldn't. 1.6s linear is the sweet spot: fast enough to
+   feel active, slow enough not to read as anxious or buzzy. */
 .issue-loading-logo {
-  width: 80%;
-  max-width: 420px;
-  height: auto;
+  width: 88px;
+  height: 88px;
   margin: 0 0 28px;
   display: block;
+  border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
-  /* Fade-in keyed to component mount — ease-out, fast, no
-     translateY (the radial-glow animation already provides
-     atmosphere; a moving logo would compete with it). */
-  animation: issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  /* Compose two animations: enter (one-shot, ease-out) + spin
+     (continuous, linear). Both targeting transform so the GPU
+     can run them together without a layout pass. */
+  animation:
+    issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    issue-loading-spin 1.6s linear infinite 320ms;
 }
 @keyframes issue-loading-logo-in {
-  0%   { opacity: 0; transform: scale(0.96); }
-  100% { opacity: 1; transform: scale(1); }
+  0%   { opacity: 0; transform: scale(0.85) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes issue-loading-spin {
+  0%   { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1) rotate(360deg); }
 }
 .issue-loading-title {
   font-family: 'Barlow Condensed', sans-serif;

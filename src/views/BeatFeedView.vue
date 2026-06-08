@@ -19,8 +19,12 @@
         <span class="beat-loading-bar-fill"></span>
       </div>
       <div class="beat-loading-stage">
+        <!-- Spinning TLB monogram — same treatment as the Issue's
+             loading state so the two surfaces feel like one
+             publication. The square favicon spins cleanly; the
+             wide lockup would look broken rotating. -->
         <img
-          src="/tlb-logo-primary.png"
+          src="/tlb-favicon.png"
           alt="The League Beat"
           class="beat-loading-logo"
         />
@@ -524,17 +528,23 @@ function collectUserIdentity() {
   align-items: center;
 }
 .beat-loading-logo {
-  width: 80%;
-  max-width: 420px;
-  height: auto;
+  width: 88px;
+  height: 88px;
   margin: 0 0 28px;
   display: block;
+  border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
-  animation: beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation:
+    beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    beat-loading-spin 1.6s linear infinite 320ms;
 }
 @keyframes beat-loading-logo-in {
-  0%   { opacity: 0; transform: scale(0.96); }
-  100% { opacity: 1; transform: scale(1); }
+  0%   { opacity: 0; transform: scale(0.85) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes beat-loading-spin {
+  0%   { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1) rotate(360deg); }
 }
 .beat-loading-title {
   font-family: 'Barlow Condensed', sans-serif;

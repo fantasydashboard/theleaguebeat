@@ -436,6 +436,33 @@ export async function espnLeagueToCategoryData(
   //     normalized name against MLB Stats API box scores. ESPN
   //     uses its own player IDs (not MLB IDs), so name matching
   //     is our only path.
+  //
+  //     CRITICAL: espnService.getLeague() only requests SETTINGS
+  //     + STATUS views, so league.teams[].roster.entries is empty
+  //     by default. Without rosters, every PlayerNight's
+  //     ownedByTeamIds was empty — silently dropping every
+  //     HUGE_GAME and BENCH_BLUNDER on ESPN. Pull rosters here
+  //     via the dedicated getTeamsWithRosters endpoint and stitch
+  //     them onto league.teams so the existing matchers work.
+  //     Non-fatal: a roster fetch failure logs a warning and
+  //     player events silently skip (rest of the page is fine).
+  try {
+    const teamsWithRosters = await withCache(
+      cacheKey(leagueId, 'teams-rosters', season),
+      () => espnService.getTeamsWithRosters(sport, leagueId, season),
+    )
+    const rosterById = new Map<number, any>()
+    for (const t of teamsWithRosters ?? []) {
+      if (t.roster) rosterById.set(Number(t.id), t.roster)
+    }
+    for (const t of league.teams ?? []) {
+      const roster = rosterById.get(Number(t.id))
+      if (roster) (t as any).roster = roster
+    }
+  } catch (err) {
+    console.warn('[espnAdapter] roster fetch failed (player events will be silent):', err)
+  }
+
   const playerNights = await buildEspnPlayerNights(league)
   const injuryReports = await buildEspnInjuryReports(league)
   const slumpReports = await buildEspnSlumpReports(league)
