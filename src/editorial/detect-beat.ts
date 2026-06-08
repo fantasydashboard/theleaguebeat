@@ -984,17 +984,21 @@ export function detectFreeAgents(
 }
 
 /**
- * BENCH BLUNDER — Phase 1: VIEWER-SIDE ONLY.
+ * BENCH BLUNDER — fires when a notable performance came from a
+ * player who was benched on the responsible team that game day.
  *
- * Fires when a player on the viewer's own bench had a HUGE_GAME-tier
- * night. Cross-league bench blunders (someone else benched Bichette)
- * stay deferred until the Yahoo per-day-roster spike lands — we don't
- * have other managers' per-day bench data yet.
+ * Two paths depending on data availability:
  *
- * Silent when playerNights aren't present, when no bench data is
- * present, or when no benched player qualifies. The starter
- * comparison fields (startedPlayerName, startedStats) stay undefined
- * for now — Phase 2 will pull the rostered alternative.
+ * CROSS-TEAM (Phase 2): when data.dailyRosters has per-team per-day
+ * snapshots for the current week, fires for every team in the
+ * league. "Goof Juice benched Bichette: 3-for-4, 2 HR, 6 RBI."
+ *
+ * VIEWER-ONLY (Phase 1 fallback): when daily rosters aren't loaded
+ * yet, only the viewer's own bench is checked via
+ * data.myBenchedPlayers. Lazy background fetch swaps to cross-team
+ * mid-session when it completes.
+ *
+ * Silent when no PlayerNights are present at all.
  */
 export function detectBenchBlunders(
   data: CategoryLeagueData,
@@ -1002,6 +1006,18 @@ export function detectBenchBlunders(
 ): BeatItemSeed[] {
   const nights = data.playerNights
   if (!nights || nights.length === 0) return []
+  const dailyRosters = data.dailyRosters
+  if (dailyRosters && dailyRosters.length > 0) {
+    return detectCrossTeamBenchBlunders(data, nights, dailyRosters)
+  }
+  return detectViewerBenchBlunders(data, nights)
+}
+
+/** Phase 1 path: viewer-side only via myBenchedPlayers. */
+function detectViewerBenchBlunders(
+  data: CategoryLeagueData,
+  nights: NonNullable<CategoryLeagueData['playerNights']>,
+): BeatItemSeed[] {
   const benchedKeys = data.myBenchedPlayers
   if (!benchedKeys || benchedKeys.size === 0) return []
   const myTeamId = data.teams.find((t) => t.isMyTeam)?.id
@@ -1010,59 +1026,152 @@ export function detectBenchBlunders(
   for (const night of nights) {
     const verdict = classifyNight(night)
     if (!verdict) continue
-    // Must be on viewer's roster (owned by my team) AND on the
-    // viewer's bench (name in the bench set). The PlayerNight's
-    // ownership data confirms the first half; the normalized-name
-    // bench set confirms the second.
     if (!night.ownedByTeamIds.includes(myTeamId)) continue
     const nameKey = normalizeName(night.name)
     if (!benchedKeys.has(nameKey)) continue
-    const stats = nightToStatRecord(night)
-    const benchedStats = formatNightStats(night)
-    // Importance: HUGE_GAME's existing high/med carries over, but
-    // the bench-blunder framing makes everything feel a step bigger
-    // (it's a story about a decision, not just a performance). Bump
-    // med-importance multi-HRs to high when 3+ HR; keep no-hitter at
-    // high already.
-    const importance: BeatImportance =
-      verdict.importance === 'high' || (night.hitting?.homeRuns ?? 0) >= 3
-        ? 'high'
-        : 'med'
-    const day = new Date(`${night.gameDate}T22:00:00`)
-    const ts = isNaN(day.getTime()) ? new Date() : day
-    const photoUrl = playerHeadshotUrl({
-      platform: 'espn', // MLB branch in playerHeadshotUrl ignores platform
-      sport: 'mlb',
-      playerId: night.mlbId,
-    }) ?? undefined
-    out.push({
-      id: `BENCH_BLUNDER:${myTeamId}:${night.mlbId}:${night.gameDate}`,
-      category: 'BENCH_BLUNDER',
-      timestamp: ts,
-      importance,
-      payload: {
-        category: 'BENCH_BLUNDER',
-        playerId: String(night.mlbId),
-        playerName: night.name,
-        position: night.position,
-        mlbTeam: night.mlbTeam,
-        photoUrl,
-        fantasyTeamId: myTeamId,
-        day: night.gameDate,
-        benchedStats,
-        // Phase 2 will fill these in by reading the day's actual
-        // starter at the same roster slot. Phase 1 leaves them
-        // undefined — the render-beat variant pool already gates the
-        // "started X over Y" phrasings on startedPlayerName presence.
-        startedPlayerId: undefined,
-        startedPlayerName: undefined,
-        startedStats: undefined,
-        costSummary: deriveCostSummary(stats),
-      },
-      signal: `bench blunder: ${night.name} on my bench (${verdict.trigger})`,
-    })
+    out.push(makeBenchBlunderSeed(night, verdict, myTeamId))
   }
   return out
+}
+
+/** Phase 2 path: cross-team via daily roster snapshots. For each
+ *  (team, day) pair in the cache, find benched players who had
+ *  notable nights. Emit one BENCH_BLUNDER per (team, player, day).
+ *
+ *  Cap the daily volume so the wire doesn't drown when many teams
+ *  bench notable performers on the same day — keep the top 5
+ *  blunders per day ranked by importance + trigger weight. */
+function detectCrossTeamBenchBlunders(
+  data: CategoryLeagueData,
+  nights: NonNullable<CategoryLeagueData['playerNights']>,
+  rosters: NonNullable<CategoryLeagueData['dailyRosters']>,
+): BeatItemSeed[] {
+  // Build a (team, day) → bench-name-set index for fast lookups.
+  const benchIndex = new Map<string, Set<string>>()
+  const starterIndex = new Map<string, Set<string>>()
+  for (const r of rosters) {
+    const key = `${r.teamId}:${r.day}`
+    benchIndex.set(key, new Set(r.benched))
+    starterIndex.set(key, new Set(r.started))
+  }
+  // Candidate seeds before per-day capping.
+  type Candidate = {
+    seed: BeatItemSeed
+    triggerWeight: number
+  }
+  const candidates: Candidate[] = []
+  for (const night of nights) {
+    const verdict = classifyNight(night)
+    if (!verdict) continue
+    const nameKey = normalizeName(night.name)
+    // Check every team that owns the player. With cross-team data
+    // we don't restrict to the viewer's team. A player owned by
+    // multiple teams (free-agent edge case) wouldn't happen in a
+    // normal league, but the loop handles it correctly.
+    for (const teamId of night.ownedByTeamIds) {
+      const key = `${teamId}:${night.gameDate}`
+      const benchSet = benchIndex.get(key)
+      // No daily-roster row for this team/day yet — skip rather than
+      // false-fire. Background fetch may fill it on next refresh.
+      if (!benchSet) continue
+      if (!benchSet.has(nameKey)) continue
+      // Edge case: same player listed in both started and benched
+      // (data quality issue). Skip — can't tell which side fired.
+      const starterSet = starterIndex.get(key)
+      if (starterSet?.has(nameKey)) continue
+      const seed = makeBenchBlunderSeed(night, verdict, teamId)
+      candidates.push({ seed, triggerWeight: triggerWeight(verdict.trigger) })
+    }
+  }
+  // Cap to 5 per day, ranked by importance band + trigger weight.
+  // Without this cap, a big Sunday slate could surface 15 bench-
+  // blunders and crowd out everything else.
+  const byDay = new Map<string, Candidate[]>()
+  for (const c of candidates) {
+    const day = c.seed.timestamp.toISOString().slice(0, 10)
+    const arr = byDay.get(day) ?? []
+    arr.push(c)
+    byDay.set(day, arr)
+  }
+  const out: BeatItemSeed[] = []
+  for (const [, arr] of byDay) {
+    arr.sort((a, b) => {
+      const ai = a.seed.importance === 'high' ? 2 : a.seed.importance === 'med' ? 1 : 0
+      const bi = b.seed.importance === 'high' ? 2 : b.seed.importance === 'med' ? 1 : 0
+      if (bi !== ai) return bi - ai
+      return b.triggerWeight - a.triggerWeight
+    })
+    for (const c of arr.slice(0, 5)) out.push(c.seed)
+  }
+  return out
+}
+
+/** Trigger rarity weighting used by the cross-team cap to keep the
+ *  best stories on the wire. No-hitters and multi-HR games beat
+ *  4-hit days when we have to drop items. */
+function triggerWeight(t: HugeGamePayload['trigger']): number {
+  switch (t) {
+    case 'no-hitter':  return 100
+    case 'multi-cat':  return 90
+    case 'multi-hr':   return 80
+    case 'big-k':      return 70
+    case 'big-rbi':    return 50
+    case 'multi-hit':  return 40
+    case 'big-sv':     return 30
+    case 'cycle':      return 95
+    default:           return 10
+  }
+}
+
+/** Build a BENCH_BLUNDER seed for the given (night, team) combo.
+ *  Shared by viewer-only and cross-team paths so the payload shape
+ *  stays consistent. */
+function makeBenchBlunderSeed(
+  night: NonNullable<CategoryLeagueData['playerNights']>[number],
+  verdict: { trigger: HugeGamePayload['trigger']; importance: BeatImportance },
+  fantasyTeamId: string,
+): BeatItemSeed {
+  const stats = nightToStatRecord(night)
+  const benchedStats = formatNightStats(night)
+  // Importance: bench-blunder framing makes the story feel bigger
+  // than a vanilla HUGE_GAME — bump med-importance multi-HRs to
+  // high when 3+ HR.
+  const importance: BeatImportance =
+    verdict.importance === 'high' || (night.hitting?.homeRuns ?? 0) >= 3
+      ? 'high'
+      : 'med'
+  const day = new Date(`${night.gameDate}T22:00:00`)
+  const ts = isNaN(day.getTime()) ? new Date() : day
+  const photoUrl = playerHeadshotUrl({
+    platform: 'espn', // MLB branch in playerHeadshotUrl ignores platform
+    sport: 'mlb',
+    playerId: night.mlbId,
+  }) ?? undefined
+  return {
+    id: `BENCH_BLUNDER:${fantasyTeamId}:${night.mlbId}:${night.gameDate}`,
+    category: 'BENCH_BLUNDER',
+    timestamp: ts,
+    importance,
+    payload: {
+      category: 'BENCH_BLUNDER',
+      playerId: String(night.mlbId),
+      playerName: night.name,
+      position: night.position,
+      mlbTeam: night.mlbTeam,
+      photoUrl,
+      fantasyTeamId,
+      day: night.gameDate,
+      benchedStats,
+      // Phase 2 future: pull the actual starter at the same
+      // position from startersByPosition. For now leave undefined —
+      // the variant pool gates "started X over Y" on presence.
+      startedPlayerId: undefined,
+      startedPlayerName: undefined,
+      startedStats: undefined,
+      costSummary: deriveCostSummary(stats),
+    },
+    signal: `bench blunder: ${night.name} on ${fantasyTeamId} bench (${verdict.trigger})`,
+  }
 }
 
 /** A compact stat-line cost summary for the BENCH_BLUNDER body line.

@@ -482,22 +482,24 @@ const HUGE_GAME_BODIES: VariantFn<HugeGamePayload>[] = [
    out, not the columnist writing a takedown.
 ───────────────────────────────────────────────────────────────── */
 
-// Third-person team-name framing, consistent with HUGE_GAME copy
-// ("Carson Benge ... for The Queens Bombers"). The earlier
-// second-person variants ("your bench had…") were the friend-at-bar
-// register, but mixing voices across categories made the wire feel
-// inconsistent. Phase 2's cross-league bench blunders will fire for
-// other teams too — keeping it third-person now means no rewrite
-// then. Phrasings avoid possessive 's to dodge plural team-name
-// awkwardness ("TittyWittys's", "Bombers's") without a helper.
+// Third-person team-name framing, consistent with HUGE_GAME copy.
+// With Phase 2's cross-team bench data, these fire for ANY team in
+// the league — not just the viewer's. Phrasings avoid possessive 's
+// to dodge plural team-name awkwardness ("TittyWittys's").
 const BENCH_BLUNDER_HEADLINES: VariantFn<BenchBlunderPayload>[] = [
   (p, c) => `${c.teamName(p.fantasyTeamId)} benched ${p.playerName}: ${p.benchedStats}.`,
   (p, c) => `${p.playerName} sat for ${c.teamName(p.fantasyTeamId)}: ${p.benchedStats}.`,
   (p, c) => `${c.teamName(p.fantasyTeamId)} had ${p.playerName} on the bench: ${p.benchedStats}.`,
   (p, c) => `Bench watch: ${p.playerName} went ${p.benchedStats} for ${c.teamName(p.fantasyTeamId)}.`,
-  // Phase 2 variants — fire when the starter comparison data lands.
+  (p, c) => `Inactive for ${c.teamName(p.fantasyTeamId)}: ${p.playerName}, ${p.benchedStats}.`,
+  (p, c) => `${p.playerName} on ${c.teamName(p.fantasyTeamId)}'s bench: ${p.benchedStats}.`,
+  // Future starter-comparison variants fire when phase 2.5 wires up
+  // the rostered-alternative lookup from startersByPosition.
   (p, c) => p.startedPlayerName && p.startedStats
     ? `${c.teamName(p.fantasyTeamId)} started ${p.startedPlayerName} (${p.startedStats}) over ${p.playerName} (${p.benchedStats}).`
+    : null,
+  (p, c) => p.startedPlayerName
+    ? `${c.teamName(p.fantasyTeamId)} went with ${p.startedPlayerName}, left ${p.playerName} (${p.benchedStats}) on the bench.`
     : null,
 ]
 

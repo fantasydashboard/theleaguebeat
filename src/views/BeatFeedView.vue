@@ -210,6 +210,7 @@ import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
+import { hydrateYahooDailyRosters } from '@/services/dailyRosterHydrator'
 import type { CategoryLeagueData } from '@/editorial/types'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
@@ -418,6 +419,20 @@ async function loadBeat() {
       leagueFoundedSeason: foundedFromHistory,
       lastUpdated: new Date(),
     })
+
+    // Phase 2 lazy background fill — fetch per-day rosters for the
+    // days that had notable player nights so detectBenchBlunders can
+    // fire cross-team blunders (not just the viewer's own bench).
+    //
+    // Off the critical path: the wire renders immediately with the
+    // viewer-only Phase 1 detector. When this completes (read cache,
+    // fetch missing from Yahoo, write back), we re-assign liveData
+    // so Vue re-renders with the cross-team items in place.
+    //
+    // Yahoo only for now; ESPN per-day roster fetch deferred.
+    if (platform === 'yahoo' && leagueRowId) {
+      void hydrateBenchBlunderRosters(data, leagueRowId)
+    }
   } catch (err) {
     const label =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
@@ -445,6 +460,47 @@ watch(
     void loadBeat()
   },
 )
+
+/** Background-fill the cross-team bench-blunder data. Reads the
+ *  daily_rosters cache and fetches missing days from Yahoo, then
+ *  triggers a re-render by re-assigning liveData with the rosters
+ *  merged in. Safe to abandon mid-flight (a league switch will
+ *  null out liveData and the post-hydration assignment becomes a
+ *  no-op via the leagueId check). */
+async function hydrateBenchBlunderRosters(
+  data: CategoryLeagueData,
+  leagueRowId: string,
+): Promise<void> {
+  try {
+    // Pull the set of days where notable performances actually
+    // happened. No point fetching rosters for days with no story.
+    const days = Array.from(
+      new Set((data.playerNights ?? []).map((n) => n.gameDate)),
+    ).sort()
+    if (days.length === 0) return
+    // Team keys come from the standings array (Yahoo team_key is
+    // the stable identifier). PlayerNights' ownedByTeamIds carry
+    // those same keys, so the detector matches without translation.
+    const teamKeys = data.teams.map((t) => t.id).filter(Boolean)
+    if (teamKeys.length === 0) return
+    const dailyRosters = await hydrateYahooDailyRosters({
+      leagueRowId,
+      teamKeys,
+      days,
+    })
+    if (dailyRosters.length === 0) return
+    // Guard against league-switch races: if the current liveData
+    // is for a different league now, skip the merge.
+    const current = liveData.value
+    if (!current || current.leagueId !== data.leagueId) return
+    // Re-assign liveData with daily rosters merged in. The renderer
+    // recomputes detectBeat → cross-team bench-blunder branch fires.
+    liveData.value = { ...current, dailyRosters }
+    renderedAt.value = new Date()
+  } catch (err) {
+    console.warn('[BeatFeedView] background bench-blunder hydration failed:', err)
+  }
+}
 
 function collectUserIdentity() {
   try {

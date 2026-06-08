@@ -435,6 +435,15 @@ export interface CategoryLeagueData {
    *  moved players. Acceptable heuristic; most users don't shuffle
    *  daily lineups across days. */
   myBenchedPlayers?: Set<string>
+
+  /** Per-team per-day roster snapshots covering the current scoring
+   *  week. Populated lazily after initial render by a background
+   *  fetch (see services/dailyRosters.ts). When present, the bench-
+   *  blunder detector can fire CROSS-TEAM blunders ("Goof Juice
+   *  benched Bichette") instead of only viewer-side ones. Optional —
+   *  detector falls back to viewer-only via myBenchedPlayers when
+   *  absent. */
+  dailyRosters?: import('../services/dailyRosters').DailyRoster[]
 }
 
 /* ─────────────────────────────────────────────────────────────────

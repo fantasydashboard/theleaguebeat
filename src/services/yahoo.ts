@@ -539,16 +539,36 @@ export class YahooFantasyService {
   }
 
   /**
-   * Get roster for a team
+   * Get current roster for a team. Returns the lineup as of now —
+   * each player's `selected_position` reflects today's lineup slot.
    */
   async getRoster(teamKey: string): Promise<YahooPlayer[]> {
     const data = await this.apiRequest(
       `/team/${teamKey}/roster?format=json`
     )
+    return this.parseRosterResponse(data)
+  }
 
+  /**
+   * Get a team's roster as it was set for a specific date. Powers
+   * Phase 2 cross-team bench-blunder detection — we need to know
+   * which players were benched/started on the day notable
+   * performances happened. Yahoo's `;date=YYYY-MM-DD` matrix param
+   * resolves the lineup to that day's actual setting.
+   */
+  async getRosterForDay(teamKey: string, day: string): Promise<YahooPlayer[]> {
+    const data = await this.apiRequest(
+      `/team/${teamKey}/roster;date=${day}?format=json`
+    )
+    return this.parseRosterResponse(data)
+  }
+
+  /** Shared parser for the team/{key}/roster response shape. Yahoo's
+   *  JSON is positional, deeply nested, and inconsistent — extract
+   *  once, reuse for both the current-roster and per-day variants. */
+  private parseRosterResponse(data: any): YahooPlayer[] {
     const players: YahooPlayer[] = []
     const rosterData = data.fantasy_content?.team?.[1]?.roster?.[0]?.players
-
     if (!rosterData) return players
 
     for (const playerWrapper of Object.values(rosterData) as any[]) {
