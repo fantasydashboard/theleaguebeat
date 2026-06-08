@@ -2,6 +2,32 @@
   <div class="chronicles">
     <LiveLoadError v-if="liveError" :message="liveError" :platform-label="platformLabel" />
 
+    <!-- Loading guard — same treatment as The Issue / The Beat so
+         the three surfaces feel like one publication. In strict
+         live mode wait for the adapter before rendering; the
+         fixture would otherwise leak through ("Triple Crown
+         Fantasy Baseball" demo content on a real ESPN league). -->
+    <div
+      v-if="isStrictLiveMode && !liveData && !liveError"
+      class="chronicles-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="chronicles-loading-bar" aria-hidden="true">
+        <span class="chronicles-loading-bar-fill"></span>
+      </div>
+      <div class="chronicles-loading-stage">
+        <div class="chronicles-loading-logo-shadow">
+          <div class="chronicles-loading-logo" aria-hidden="true">
+            <img src="/tlb-favicon.png" alt="" />
+          </div>
+        </div>
+        <p class="chronicles-loading-title">{{ loadingTitle }}</p>
+        <p class="chronicles-loading-sub">{{ loadingSubline }}</p>
+      </div>
+    </div>
+
+    <template v-else>
     <header class="chronicles-masthead">
       <p class="chronicles-eyebrow">
         <span class="chronicles-eyebrow-bar" aria-hidden="true"></span>
@@ -84,11 +110,12 @@
         The League Beat · Your league story, chronicled.
       </p>
     </footer>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
@@ -146,6 +173,15 @@ const platformLabel = computed(() => {
   return 'your league'
 })
 
+/** Loading-state copy — matches the Issue/Beat loading voice so
+ *  the three surfaces feel like one publication. */
+const loadingTitle = computed(() => `Opening the archive.`)
+const loadingSubline = computed(() => {
+  const league = strictLeagueRecord.value?.league_name
+  if (league) return `Pulling ${league} from ${platformLabel.value}.`
+  return `Pulling the all-time record from ${platformLabel.value}.`
+})
+
 const data = computed<CategoryLeagueData>(() => liveData.value ?? fixtureData)
 
 const leagueName = computed(
@@ -184,7 +220,7 @@ function initialsFor(name: string | undefined): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-onMounted(async () => {
+async function loadChronicles() {
   if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
     try {
       await leaguesStore.fetchLeagues()
@@ -193,9 +229,20 @@ onMounted(async () => {
     }
   }
 
+  // Reset prior render state so a league switch doesn't briefly
+  // flash the previous league's archive.
+  liveData.value = null
+  liveError.value = null
+
   const id = liveLeagueId.value
   const platform = livePlatform.value
   if (!id || (platform !== 'sleeper' && platform !== 'espn' && platform !== 'yahoo')) {
+    // In strict live mode an unresolved league would leave the
+    // loading guard spinning forever — surface the failure.
+    if (isStrictLiveMode.value) {
+      liveError.value =
+        'This league couldn\'t be resolved. Try refreshing, or reconnect it from the home page.'
+    }
     return
   }
 
@@ -215,6 +262,11 @@ onMounted(async () => {
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = adapted
+    // Backfill stale ESPN placeholder league_name once the real
+    // name resolves. Self-heals "ESPN baseball League 6416" rows.
+    if (leagueRowId && adapted.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, adapted.leagueName)
+    }
     const historyYears = (adapted.seasonHistory ?? [])
       .map((s) => s.year)
       .filter((y): y is number => Number.isFinite(y))
@@ -236,7 +288,23 @@ onMounted(async () => {
   } finally {
     liveLoading.value = false
   }
+}
+
+onMounted(() => {
+  void loadChronicles()
 })
+
+// Watch for league-switcher navigation. Same component instance is
+// reused on every /leagues/:leagueId/chronicles, so onMounted only
+// fires once — without this watcher, switching leagues leaves the
+// previous league's archive on screen until a hard refresh.
+watch(
+  () => route.params.leagueId,
+  (next, prev) => {
+    if (next === prev) return
+    void loadChronicles()
+  },
+)
 
 function collectUserIdentity() {
   try {
@@ -260,6 +328,116 @@ function collectUserIdentity() {
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
   padding: 32px 0 80px;
+}
+
+/* ─── LOADING STATE ───────────────────────────────────────────── */
+/* Same TLB-wobble treatment as IssueView / BeatFeedView so the
+   three surfaces share one loading vocabulary. The Y-axis wobble
+   keeps "TLB" upright every frame (no back-face mirroring); the
+   shadow lives on an outer wrapper so it doesn't flatten the 3D
+   context. See IssueView for the full rationale. */
+.chronicles-loading {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background:
+    radial-gradient(
+      ellipse 600px 400px at 50% 35%,
+      oklch(0.66 0.22 0 / 0.10),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 700px 400px at 50% 95%,
+      oklch(0.78 0.18 92 / 0.06),
+      transparent 70%
+    );
+  animation: chronicles-loading-glow 4s ease-in-out infinite alternate;
+}
+@keyframes chronicles-loading-glow {
+  0%   { opacity: 0.85; }
+  100% { opacity: 1.00; }
+}
+.chronicles-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: oklch(0.18 0.015 90);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+}
+.chronicles-loading-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-primary) 50%,
+    transparent 100%
+  );
+  animation: chronicles-loading-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes chronicles-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.chronicles-loading-stage {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  perspective: 800px;
+}
+.chronicles-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
+.chronicles-loading-logo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+}
+.chronicles-loading-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 18px;
+  animation:
+    chronicles-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    chronicles-loading-spin 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite 320ms;
+}
+@keyframes chronicles-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes chronicles-loading-spin {
+  0%, 100% { transform: rotateY(-50deg); }
+  50%      { transform: rotateY( 50deg); }
+}
+.chronicles-loading-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+  color: var(--ink-1);
+  margin: 0 0 10px;
+}
+.chronicles-loading-sub {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 42ch;
 }
 
 .chronicles-masthead {
