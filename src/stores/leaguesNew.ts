@@ -316,6 +316,55 @@ export const useLeaguesStore = defineStore('leagues', () => {
     error.value = null
   }
 
+  /**
+   * Backfill stale league names. ESPN connect originally stored a
+   * placeholder name (`ESPN ${sport} League ${id}`) when the connect
+   * flow didn't fetch the real league info. When the adapter later
+   * resolves the real name during a page load, this writes it back
+   * so the masthead and switcher reflect reality.
+   *
+   * Strict guard: only overwrites the EXACT placeholder string
+   * matching the row's sport + platform_league_id. Anything else
+   * is left alone — the user may have manually renamed.
+   *
+   * Non-fatal: a Supabase error logs a warning and the page
+   * continues with the stored name. Worst case the user sees the
+   * placeholder one more page-load, but the name updates next visit.
+   */
+  async function maybeBackfillLeagueName(
+    leagueRowId: string,
+    realName: string | undefined | null,
+  ): Promise<void> {
+    if (!supabase || !realName) return
+    const trimmed = realName.trim()
+    if (!trimmed) return
+    const row = leagues.value.find((l) => l.id === leagueRowId)
+    if (!row) return
+    if (row.platform !== 'espn') return
+    const expectedPlaceholder = `ESPN ${row.sport} League ${row.platform_league_id}`
+    if (row.league_name !== expectedPlaceholder) return
+    if (row.league_name === trimmed) return
+
+    try {
+      const { error: updateError } = await supabase
+        .from('leagues')
+        .update({ league_name: trimmed })
+        .eq('id', leagueRowId)
+      if (updateError) {
+        console.warn('[leaguesStore] backfill league_name failed:', updateError)
+        return
+      }
+      // Reflect locally so the masthead / switcher update without a
+      // fetchLeagues round-trip.
+      const idx = leagues.value.findIndex((l) => l.id === leagueRowId)
+      if (idx >= 0) {
+        leagues.value[idx] = { ...leagues.value[idx], league_name: trimmed }
+      }
+    } catch (err) {
+      console.warn('[leaguesStore] backfill league_name threw:', err)
+    }
+  }
+
   return {
     // State
     leagues,
@@ -339,6 +388,7 @@ export const useLeaguesStore = defineStore('leagues', () => {
     syncLeaguesFromPlatform,
     setActiveSport,
     setActiveLeague,
-    clearState
+    clearState,
+    maybeBackfillLeagueName,
   }
 })

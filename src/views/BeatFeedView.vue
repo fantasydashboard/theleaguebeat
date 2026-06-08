@@ -397,6 +397,14 @@ async function loadBeat() {
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = data
     renderedAt.value = new Date()
+    // Backfill a stale ESPN placeholder league_name once the real
+    // name resolves. No-op for Yahoo / Sleeper / already-named ESPN
+    // rows; see leaguesStore.maybeBackfillLeagueName for the guard
+    // logic. Fire-and-forget — UI updates reactively when the row
+    // does, no need to await.
+    if (leagueRowId && data.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+    }
     // Founded year — derive from the adapter's seasonHistory so the
     // masthead Vol stays consistent regardless of which tab loaded
     // first. Omitting this field resets the store's value to null

@@ -525,6 +525,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { yahooService } from '@/services/yahoo'
+import { espnService } from '@/services/espn'
 import { classifyLeagueSupport, type UnsupportedKind } from '@/utils/leagueSupport'
 import {
   isExtensionInstalled,
@@ -897,6 +898,30 @@ async function onEspnSubmit(): Promise<void> {
         return
       }
     }
+    // Attempt to fetch the real league info (name, size) from ESPN
+    // before persisting. Without this the syncEspnLeague fallback
+    // writes a placeholder name like "ESPN baseball League 6416",
+    // which then surfaces on the masthead until the user manually
+    // renames. Non-fatal — if the fetch fails (creds not yet warm,
+    // league not accessible), the placeholder ships and the
+    // backfill in loadBeat/loadIssue self-heals on first page load.
+    let leagueInfo: { name: string; size: number } | undefined
+    try {
+      const espnLeague = await espnService.getLeague(
+        'baseball',
+        id,
+        new Date().getFullYear(),
+      )
+      if (espnLeague?.name) {
+        leagueInfo = {
+          name: espnLeague.name,
+          size: espnLeague.size || 0,
+        }
+      }
+    } catch (err) {
+      console.warn('[CategoryDemoConnect] ESPN league pre-fetch failed:', err)
+    }
+
     // Persist the league row to power the switcher across sessions.
     let leagueRowId: string | undefined
     if (authStore.isAuthenticated) {
@@ -905,6 +930,7 @@ async function onEspnSubmit(): Promise<void> {
           id,
           'baseball',
           new Date().getFullYear(),
+          leagueInfo,
         )
         if (result.success) leagueRowId = result.leagueRowId
       } catch (err) {

@@ -1397,6 +1397,14 @@ async function loadIssue() {
     }
 
     liveData.value = adapted
+    // Backfill a stale ESPN placeholder league_name once the real
+    // name resolves. No-op for Yahoo / Sleeper / already-named ESPN
+    // rows; the leaguesStore.maybeBackfillLeagueName guard enforces
+    // strict pattern matching. Fire-and-forget — UI updates
+    // reactively when the row does.
+    if (leagueRowId && adapted.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, adapted.leagueName)
+    }
     // Founded year — prefer the platform-API truth from seasonHistory
     // over the conservative connected-leagues estimate. The latter
     // reports Vol. 1 for every league whose prior seasons the user
