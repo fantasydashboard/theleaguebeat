@@ -19,6 +19,7 @@ import type {
   CategoryLeagueData,
   CategoryLeagueDataStanding,
 } from './types.ts'
+import { normalizeName } from './players/buildPlayerNights.ts'
 
 /* ─────────────────────────────────────────────────────────────────
    PUBLIC TYPES
@@ -691,219 +692,265 @@ function dayKeyForBriefing(d: Date): string {
 
 /* ─────────────────────────────────────────────────────────────────
    PLAYER EVENTS — HUGE_GAME + BENCH_BLUNDER
-   These detectors need adapter data the V0 platform integrations
-   don't yet surface (see docs/player-events-scope.md for the spike
-   plan). When `players` + `playerPerformances` are absent, the
-   detectors return [] silently — the Beat feed renders the rest of
-   the categories unaffected.
+
+   Phase 1 wiring: these detectors consume `data.playerNights[]`
+   (populated by the MLB Stats API pipeline in buildPlayerNights —
+   already live for Yahoo + ESPN + Sleeper). The earlier scope doc
+   imagined a brand-new `playerPerformances` shape that would need a
+   custom Yahoo per-day-roster fetch (13-16hr spike). The shortcut:
+   PlayerNight already carries everything HUGE_GAME needs, plus
+   `myBenchedPlayers` already tracks the viewer's bench, so we get
+   the viewer-side BENCH_BLUNDER for free.
+
+   What's still deferred to Phase 2 (the full spike): cross-league
+   bench blunders ("Goof Juice benched Bichette"). That requires
+   per-team per-day roster fetches we don't have yet. The detector
+   skips that case until the data lands.
 ───────────────────────────────────────────────────────────────── */
 
-/** Thresholds for editorial "huge game" classification per stat. The
- *  bar is set high enough that league-wide it's a once-per-week-ish
- *  event for any given team — too noisy at lower thresholds. */
-const HUGE_GAME_THRESHOLDS = {
-  HR: 3,           // 3+ HR = headline territory
-  RBI: 5,          // 5+ RBI = "went off"
-  H: 5,            // 5+ hits = monster day
-  K: 10,           // 10+ K (pitcher) = dominant start
-  SV: 3,           // 3+ SV (closer's day-of-action)
-  SB: 4,           // 4+ SB = burner day
-  W: 1,            // pitcher: 1 W with 10+ K is multi-cat
-} as const
+/** Format a PlayerNight stat line into editorial-ready display.
+ *  Hitter: "4-for-5, 2 HR, 6 RBI" / "3 H, 1 HR, 4 RBI" when no AB.
+ *  Pitcher: "7 IP, 11 K, 0 ER" / "1 SV" / "6 IP, 0 H, 7 K" (no-hit). */
+function formatNightStats(n: NonNullable<CategoryLeagueData['playerNights']>[number]): string {
+  if (n.pitching) {
+    const p = n.pitching
+    const pieces: string[] = []
+    if (p.noHitter || p.perfectGame) pieces.push(p.perfectGame ? 'PERFECT GAME' : 'NO-HITTER')
+    if (p.inningsPitched > 0) pieces.push(`${formatIP(p.inningsPitched)} IP`)
+    if (p.strikeouts > 0) pieces.push(`${p.strikeouts} K`)
+    if (p.decision === 'S') pieces.push('SV')
+    else if (p.decision === 'W') pieces.push('W')
+    if (typeof p.earnedRuns === 'number') pieces.push(`${p.earnedRuns} ER`)
+    return pieces.join(', ') || 'big start'
+  }
+  if (n.hitting) {
+    const h = n.hitting
+    const pieces: string[] = []
+    if (typeof h.atBats === 'number' && h.atBats > 0) {
+      pieces.push(`${h.hits}-for-${h.atBats}`)
+    } else if (h.hits > 0) {
+      pieces.push(`${h.hits} H`)
+    }
+    if (h.homeRuns > 0) pieces.push(`${h.homeRuns} HR`)
+    if (h.rbi > 0) pieces.push(`${h.rbi} RBI`)
+    if (h.stolenBases > 0) pieces.push(`${h.stolenBases} SB`)
+    return pieces.join(', ') || 'big day'
+  }
+  return 'big day'
+}
 
-function classifyHugeGame(
-  stats: Record<string, number>,
+/** "6.2" not "6.6666" — IP is base-10 in source but reads as base-3 outs. */
+function formatIP(ip: number): string {
+  const whole = Math.floor(ip)
+  const frac = Math.round((ip - whole) * 10)
+  return frac > 0 ? `${whole}.${frac}` : `${whole}`
+}
+
+/** Classify the editorial trigger + importance from a PlayerNight. */
+function classifyNight(
+  n: NonNullable<CategoryLeagueData['playerNights']>[number],
 ): { trigger: HugeGamePayload['trigger']; importance: BeatImportance } | null {
-  const hr = stats.HR ?? 0
-  const rbi = stats.RBI ?? 0
-  const h = stats.H ?? 0
-  const k = stats.K ?? 0
-  const sv = stats.SV ?? 0
-  // Cycle = at least 1 of each: 1B, 2B, 3B, HR. Since we only carry
-  // category-level stats, infer from H + HR + extra-base totals; if
-  // those aren't surfaced, cycle detection sits out until adapters
-  // populate per-hit-type counts.
-  // Multi-cat: 2+ HR AND 5+ RBI in the same game.
-  if (hr >= 2 && rbi >= 5) return { trigger: 'multi-cat', importance: 'high' }
-  if (hr >= HUGE_GAME_THRESHOLDS.HR) return { trigger: 'multi-hr', importance: 'high' }
-  if (rbi >= HUGE_GAME_THRESHOLDS.RBI) return { trigger: 'big-rbi', importance: 'med' }
-  if (h >= HUGE_GAME_THRESHOLDS.H) return { trigger: 'multi-hit', importance: 'med' }
-  if (k >= HUGE_GAME_THRESHOLDS.K) return { trigger: 'big-k', importance: 'high' }
-  if (sv >= HUGE_GAME_THRESHOLDS.SV) return { trigger: 'big-sv', importance: 'med' }
+  if (n.pitching) {
+    const p = n.pitching
+    if (p.noHitter || p.perfectGame) return { trigger: 'no-hitter', importance: 'high' }
+    if (p.strikeouts >= 13) return { trigger: 'big-k', importance: 'high' }
+    if (p.strikeouts >= 10) return { trigger: 'big-k', importance: 'high' }
+    if (p.decision === 'S') return { trigger: 'big-sv', importance: 'med' }
+    return null
+  }
+  if (n.hitting) {
+    const h = n.hitting
+    if (h.homeRuns >= 2 && h.rbi >= 5) return { trigger: 'multi-cat', importance: 'high' }
+    if (h.homeRuns >= 3) return { trigger: 'multi-hr', importance: 'high' }
+    if (h.homeRuns >= 2) return { trigger: 'multi-hr', importance: 'med' }
+    if (h.rbi >= 5) return { trigger: 'big-rbi', importance: 'med' }
+    if (h.hits >= 4) return { trigger: 'multi-hit', importance: 'med' }
+    return null
+  }
   return null
 }
 
-function formatStatLine(stats: Record<string, number>): string {
-  // Build an editorial-ready stat line. Pitching and hitting stats
-  // surface differently — a pitcher's day reads "7 IP, 11 K, 0 ER";
-  // a hitter's reads "4-for-5, 2 HR, 6 RBI". Heuristic: if K + IP
-  // dominate, it's a pitcher's day.
-  const hasPitchingDay = (stats.K ?? 0) >= 4 || (stats.IP ?? 0) >= 3 || (stats.SV ?? 0) >= 1
-  const pieces: string[] = []
-  if (hasPitchingDay) {
-    if (stats.IP) pieces.push(`${stats.IP} IP`)
-    if (stats.K) pieces.push(`${stats.K} K`)
-    if (stats.SV) pieces.push(`${stats.SV} SV`)
-    if (stats.W) pieces.push(`${stats.W} W`)
-    if (typeof stats.ER === 'number') pieces.push(`${stats.ER} ER`)
-  } else {
-    // Hitting day. "X-for-Y" requires AB; if absent, fall back to hit
-    // totals + the extras.
-    if (typeof stats.H === 'number' && typeof stats.AB === 'number') {
-      pieces.push(`${stats.H}-for-${stats.AB}`)
-    } else if (stats.H) {
-      pieces.push(`${stats.H} H`)
-    }
-    if (stats.HR) pieces.push(`${stats.HR} HR`)
-    if (stats.RBI) pieces.push(`${stats.RBI} RBI`)
-    if (stats.SB) pieces.push(`${stats.SB} SB`)
+/** Project a PlayerNight's stats into the flat Record<string, number>
+ *  shape HugeGamePayload uses, so the renderer's variant pool can
+ *  read `stats.HR`, `stats.K`, etc. without knowing about the night
+ *  shape. Hitting-only and pitching-only nights map cleanly; two-way
+ *  nights (Ohtani) merge both. */
+function nightToStatRecord(
+  n: NonNullable<CategoryLeagueData['playerNights']>[number],
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (n.hitting) {
+    out.AB = n.hitting.atBats
+    out.H = n.hitting.hits
+    out.HR = n.hitting.homeRuns
+    out.RBI = n.hitting.rbi
+    out.R = n.hitting.runs
+    out.SB = n.hitting.stolenBases
+    out.BB = n.hitting.walks
   }
-  return pieces.length > 0 ? pieces.join(', ') : 'big day'
+  if (n.pitching) {
+    out.IP = n.pitching.inningsPitched
+    out.K = n.pitching.strikeouts
+    out.ER = n.pitching.earnedRuns
+    out.HA = n.pitching.hits
+    out.BB = (out.BB ?? 0) + n.pitching.walks
+    if (n.pitching.decision === 'S') out.SV = 1
+    if (n.pitching.decision === 'W') out.W = 1
+  }
+  return out
 }
 
 /**
- * HUGE GAME — fires per player-day that clears a threshold. Silent
- * when adapter hasn't populated playerPerformances.
+ * HUGE GAME — fires per (notable PlayerNight × team that owns the
+ * player). One night with two fantasy owners produces two items so
+ * each owning manager sees their own copy in the wire.
+ *
+ * Silent when no playerNights are present (non-MLB or pre-spike
+ * adapter). Free agents (unowned notable performers) are intentionally
+ * skipped — the wire prioritizes "your guy did X" over league gossip.
  */
 export function detectHugeGames(
   data: CategoryLeagueData,
   now: Date = new Date(),
 ): BeatItemSeed[] {
-  const perfs = data.playerPerformances
-  if (!perfs || perfs.length === 0) return []
-  const playerById = new Map<string, NonNullable<CategoryLeagueData['players']>[number]>()
-  for (const p of data.players ?? []) playerById.set(p.id, p)
+  const nights = data.playerNights
+  if (!nights || nights.length === 0) return []
   const out: BeatItemSeed[] = []
-  for (const perf of perfs) {
-    const verdict = classifyHugeGame(perf.stats)
+  for (const night of nights) {
+    const verdict = classifyNight(night)
     if (!verdict) continue
-    const player = playerById.get(perf.playerId)
-    const playerName = player?.name ?? `Player ${perf.playerId}`
-    const day = new Date(`${perf.day}T20:00:00`)
-    // If the day stamp is invalid, fall back to "now" minus an
-    // arbitrary hash-staggered minutes window so the feed orders OK.
-    const ts = isNaN(day.getTime())
-      ? new Date(now.getTime() - hashStagger(perf.playerId, 0, 720) * 60 * 1000)
-      : day
-    out.push({
-      id: `HUGE_GAME:${perf.fantasyTeamId}:${perf.playerId}:${perf.day}`,
-      category: 'HUGE_GAME',
-      timestamp: ts,
-      importance: verdict.importance,
-      payload: {
-        category: 'HUGE_GAME',
-        playerId: perf.playerId,
-        playerName,
-        position: player?.position,
-        mlbTeam: player?.mlbTeam,
-        photoUrl: player?.photoUrl,
-        fantasyTeamId: perf.fantasyTeamId,
-        trigger: verdict.trigger,
-        day: perf.day,
-        headlineStats: formatStatLine(perf.stats),
-        stats: perf.stats,
-      },
-      signal: `huge game: ${perf.playerId} for ${perf.fantasyTeamId} (${verdict.trigger})`,
-    })
-  }
-  return out
-}
-
-/** Cat-impact score — sums up the "did this player out-produce the
- *  starter in this cat" margin across the cats that matter most. */
-function compareStatLines(
-  bench: Record<string, number>,
-  starter: Record<string, number>,
-): number {
-  const cats: Array<keyof typeof HUGE_GAME_THRESHOLDS> = ['HR', 'RBI', 'H', 'K', 'SV', 'SB', 'W']
-  let cost = 0
-  for (const c of cats) {
-    const b = bench[c] ?? 0
-    const s = starter[c] ?? 0
-    if (b > s) cost += b - s
-  }
-  return cost
-}
-
-/**
- * BENCH BLUNDER — fires when a benched player had a HUGE_GAME-tier
- * day AND a same-team starter at any roster slot posted clearly
- * lower stats. The cost summary captures what the manager left on
- * the bench.
- *
- * Silent when adapter doesn't populate playerPerformances or no
- * benched player qualifies.
- */
-export function detectBenchBlunders(
-  data: CategoryLeagueData,
-  now: Date = new Date(),
-): BeatItemSeed[] {
-  const perfs = data.playerPerformances
-  if (!perfs || perfs.length === 0) return []
-  const playerById = new Map<string, NonNullable<CategoryLeagueData['players']>[number]>()
-  for (const p of data.players ?? []) playerById.set(p.id, p)
-  // Group performances by fantasy team + day so the comparison is
-  // cheap: "what did this team's starters do on this day vs their
-  // bench."
-  const byTeamDay = new Map<string, { bench: typeof perfs; starters: typeof perfs }>()
-  for (const perf of perfs) {
-    const key = `${perf.fantasyTeamId}:${perf.day}`
-    let bucket = byTeamDay.get(key)
-    if (!bucket) {
-      bucket = { bench: [], starters: [] }
-      byTeamDay.set(key, bucket)
-    }
-    if (perf.started) bucket.starters.push(perf)
-    else bucket.bench.push(perf)
-  }
-  const out: BeatItemSeed[] = []
-  for (const [, bucket] of byTeamDay) {
-    for (const benchPerf of bucket.bench) {
-      const verdict = classifyHugeGame(benchPerf.stats)
-      if (!verdict) continue
-      // Find the starter whose stats are most cleanly out-produced
-      // by this bench player. Threshold: cost ≥ 3 cats summed.
-      let bestComparison: { starter: typeof benchPerf; cost: number } | null = null
-      for (const starterPerf of bucket.starters) {
-        const cost = compareStatLines(benchPerf.stats, starterPerf.stats)
-        if (cost < 3) continue
-        if (!bestComparison || cost > bestComparison.cost) {
-          bestComparison = { starter: starterPerf, cost }
-        }
-      }
-      if (!bestComparison) continue
-      const starterPlayer = playerById.get(bestComparison.starter.playerId)
-      const benchPlayer = playerById.get(benchPerf.playerId)
-      const day = new Date(`${benchPerf.day}T22:00:00`)
-      const ts = isNaN(day.getTime())
-        ? new Date(now.getTime() - hashStagger(benchPerf.playerId, 0, 240) * 60 * 1000)
-        : day
+    // Skip free agents — playerNights includes them for league-wide
+    // gossip surfaces (the Wire's standalone player cards), but The
+    // Beat is league-rostered ownership. No owner means no fantasy
+    // story to tell.
+    if (night.ownedByTeamIds.length === 0) continue
+    const stats = nightToStatRecord(night)
+    const headlineStats = formatNightStats(night)
+    // 8 PM local on the game day, hash-staggered per (player,team) so
+    // multiple HUGE_GAMEs in one night don't stack at the same minute.
+    const day = new Date(`${night.gameDate}T20:00:00`)
+    const tsBase = isNaN(day.getTime()) ? now : day
+    for (const teamId of night.ownedByTeamIds) {
+      const offsetMinutes = hashStagger(`${night.mlbId}:${teamId}`, 0, 90)
+      const ts = new Date(tsBase.getTime() - offsetMinutes * 60 * 1000)
       out.push({
-        id: `BENCH_BLUNDER:${benchPerf.fantasyTeamId}:${benchPerf.playerId}:${benchPerf.day}`,
-        category: 'BENCH_BLUNDER',
+        id: `HUGE_GAME:${teamId}:${night.mlbId}:${night.gameDate}`,
+        category: 'HUGE_GAME',
         timestamp: ts,
-        importance: bestComparison.cost >= 8 ? 'high' : 'med',
+        importance: verdict.importance,
         payload: {
-          category: 'BENCH_BLUNDER',
-          playerId: benchPerf.playerId,
-          playerName: benchPlayer?.name ?? `Player ${benchPerf.playerId}`,
-          position: benchPlayer?.position,
-          mlbTeam: benchPlayer?.mlbTeam,
-          photoUrl: benchPlayer?.photoUrl,
-          fantasyTeamId: benchPerf.fantasyTeamId,
-          day: benchPerf.day,
-          benchedStats: formatStatLine(benchPerf.stats),
-          startedPlayerId: bestComparison.starter.playerId,
-          startedPlayerName: starterPlayer?.name,
-          startedStats: formatStatLine(bestComparison.starter.stats),
-          costSummary: `Cost: ${bestComparison.cost} cats`,
+          category: 'HUGE_GAME',
+          playerId: String(night.mlbId),
+          playerName: night.name,
+          position: night.position,
+          mlbTeam: night.mlbTeam,
+          // PlayerNight doesn't carry a photoUrl today. The widget
+          // falls back to player initials when undefined — safe.
+          photoUrl: undefined,
+          fantasyTeamId: teamId,
+          trigger: verdict.trigger,
+          day: night.gameDate,
+          headlineStats,
+          stats,
         },
-        signal: `bench blunder: ${benchPerf.playerId} for ${benchPerf.fantasyTeamId} (cost ${bestComparison.cost})`,
+        signal: `huge game: ${night.name} for ${teamId} (${verdict.trigger})`,
       })
     }
   }
   return out
 }
+
+/**
+ * BENCH BLUNDER — Phase 1: VIEWER-SIDE ONLY.
+ *
+ * Fires when a player on the viewer's own bench had a HUGE_GAME-tier
+ * night. Cross-league bench blunders (someone else benched Bichette)
+ * stay deferred until the Yahoo per-day-roster spike lands — we don't
+ * have other managers' per-day bench data yet.
+ *
+ * Silent when playerNights aren't present, when no bench data is
+ * present, or when no benched player qualifies. The starter
+ * comparison fields (startedPlayerName, startedStats) stay undefined
+ * for now — Phase 2 will pull the rostered alternative.
+ */
+export function detectBenchBlunders(
+  data: CategoryLeagueData,
+  _now: Date = new Date(),
+): BeatItemSeed[] {
+  const nights = data.playerNights
+  if (!nights || nights.length === 0) return []
+  const benchedKeys = data.myBenchedPlayers
+  if (!benchedKeys || benchedKeys.size === 0) return []
+  const myTeamId = data.teams.find((t) => t.isMyTeam)?.id
+  if (!myTeamId) return []
+  const out: BeatItemSeed[] = []
+  for (const night of nights) {
+    const verdict = classifyNight(night)
+    if (!verdict) continue
+    // Must be on viewer's roster (owned by my team) AND on the
+    // viewer's bench (name in the bench set). The PlayerNight's
+    // ownership data confirms the first half; the normalized-name
+    // bench set confirms the second.
+    if (!night.ownedByTeamIds.includes(myTeamId)) continue
+    const nameKey = normalizeName(night.name)
+    if (!benchedKeys.has(nameKey)) continue
+    const stats = nightToStatRecord(night)
+    const benchedStats = formatNightStats(night)
+    // Importance: HUGE_GAME's existing high/med carries over, but
+    // the bench-blunder framing makes everything feel a step bigger
+    // (it's a story about a decision, not just a performance). Bump
+    // med-importance multi-HRs to high when 3+ HR; keep no-hitter at
+    // high already.
+    const importance: BeatImportance =
+      verdict.importance === 'high' || (night.hitting?.homeRuns ?? 0) >= 3
+        ? 'high'
+        : 'med'
+    const day = new Date(`${night.gameDate}T22:00:00`)
+    const ts = isNaN(day.getTime()) ? new Date() : day
+    out.push({
+      id: `BENCH_BLUNDER:${myTeamId}:${night.mlbId}:${night.gameDate}`,
+      category: 'BENCH_BLUNDER',
+      timestamp: ts,
+      importance,
+      payload: {
+        category: 'BENCH_BLUNDER',
+        playerId: String(night.mlbId),
+        playerName: night.name,
+        position: night.position,
+        mlbTeam: night.mlbTeam,
+        photoUrl: undefined,
+        fantasyTeamId: myTeamId,
+        day: night.gameDate,
+        benchedStats,
+        // Phase 2 will fill these in by reading the day's actual
+        // starter at the same roster slot. Phase 1 leaves them
+        // undefined — the render-beat variant pool already gates the
+        // "started X over Y" phrasings on startedPlayerName presence.
+        startedPlayerId: undefined,
+        startedPlayerName: undefined,
+        startedStats: undefined,
+        costSummary: deriveCostSummary(stats),
+      },
+      signal: `bench blunder: ${night.name} on my bench (${verdict.trigger})`,
+    })
+  }
+  return out
+}
+
+/** A compact stat-line cost summary for the BENCH_BLUNDER body line.
+ *  Phase 1 reads only from the bench player's actual stats since we
+ *  don't have the starter's line yet. Phase 2 will subtract starter
+ *  production for a true "cost" delta. */
+function deriveCostSummary(stats: Record<string, number>): string | undefined {
+  const pieces: string[] = []
+  if ((stats.HR ?? 0) > 0) pieces.push(`${stats.HR} HR`)
+  if ((stats.RBI ?? 0) >= 3) pieces.push(`${stats.RBI} RBI`)
+  if ((stats.SB ?? 0) >= 2) pieces.push(`${stats.SB} SB`)
+  if ((stats.K ?? 0) >= 8) pieces.push(`${stats.K} K`)
+  if (pieces.length === 0) return undefined
+  return `Cost: ${pieces.join(', ')}`
+}
+
 
 /* ─────────────────────────────────────────────────────────────────
    COMPOSITION

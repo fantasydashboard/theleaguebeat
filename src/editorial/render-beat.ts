@@ -445,22 +445,27 @@ const HUGE_GAME_BODIES: VariantFn<HugeGamePayload>[] = [
    out, not the columnist writing a takedown.
 ───────────────────────────────────────────────────────────────── */
 
+// Viewer-side framing: in Phase 1, every BENCH_BLUNDER attaches to
+// the viewer's own team (myBenchedPlayers only resolves their bench).
+// So the copy reads in the second person — "you benched Bichette" —
+// not third person. This is the friend at the bar pointing it out,
+// not the columnist writing about someone else.
 const BENCH_BLUNDER_HEADLINES: VariantFn<BenchBlunderPayload>[] = [
-  (p, c) => `${c.teamName(p.fantasyTeamId)} benched ${p.playerName}. He went ${p.benchedStats}.`,
-  (p, c) => p.startedPlayerName
-    ? `${c.teamName(p.fantasyTeamId)} started ${p.startedPlayerName} over ${p.playerName}. Bichette-esque outcome.`
-    : null,
-  (p, c) => `${p.playerName} sat for ${c.teamName(p.fantasyTeamId)} and went ${p.benchedStats}.`,
-  (p, c) => p.startedPlayerName && p.startedStats
-    ? `${c.teamName(p.fantasyTeamId)}'s lineup decision: ${p.startedPlayerName} (${p.startedStats}) over ${p.playerName} (${p.benchedStats}).`
+  (p, _c) => `Tough bench: ${p.playerName} went ${p.benchedStats}.`,
+  (p, _c) => `${p.playerName} sat on your bench and went ${p.benchedStats}.`,
+  (p, _c) => `Your bench had ${p.playerName} for ${p.benchedStats}.`,
+  (p, _c) => `${p.playerName}, on your bench: ${p.benchedStats}.`,
+  // Phase 2 variants — fire when the starter comparison data lands.
+  (p, _c) => p.startedPlayerName && p.startedStats
+    ? `Started ${p.startedPlayerName} (${p.startedStats}) over ${p.playerName} (${p.benchedStats}).`
     : null,
 ]
 
 const BENCH_BLUNDER_BODIES: VariantFn<BenchBlunderPayload>[] = [
-  (p, _c) => p.costSummary && p.costSummary.includes('cats')
+  (p, _c) => p.costSummary
     ? `${p.costSummary}. Sometimes it's like that.`
     : null,
-  (_p, _c) => `The kind of lineup decision that haunts the rest of the week.`,
+  (_p, _c) => `Sometimes the lineup decisions don't break your way.`,
   (p, _c) => p.startedPlayerName
     ? `${p.startedPlayerName} got the slot, the production stayed on the bench.`
     : null,
