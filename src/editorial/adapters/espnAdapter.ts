@@ -505,6 +505,14 @@ export async function espnLeagueToCategoryData(
     injuryReports,
     slumpReports,
     myBenchedPlayers,
+    // Pass through the league's current scoringPeriodId so the
+    // Phase 2 ESPN daily-roster hydrator can map YYYY-MM-DD dates
+    // (from playerNights.gameDate) onto ESPN's sequential period
+    // numbering. Without this the hydrator would have to make
+    // another league fetch to learn it.
+    espnTodayScoringPeriodId: typeof league.scoringPeriodId === 'number'
+      ? league.scoringPeriodId
+      : undefined,
   }
   const snapshotDelta = await hydrateSnapshotDelta(opts?.leagueRowId, partialData)
 

@@ -444,6 +444,12 @@ export interface CategoryLeagueData {
    *  detector falls back to viewer-only via myBenchedPlayers when
    *  absent. */
   dailyRosters?: import('../services/dailyRosters').DailyRoster[]
+
+  /** ESPN scoringPeriodId for "today" — used by the daily-roster
+   *  hydrator to map YYYY-MM-DD calendar dates onto ESPN's
+   *  sequential period numbering. Set by the ESPN adapter from
+   *  league.scoringPeriodId. Other platforms ignore it. */
+  espnTodayScoringPeriodId?: number
 }
 
 /* ─────────────────────────────────────────────────────────────────

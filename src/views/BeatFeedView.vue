@@ -224,6 +224,7 @@ import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { hydrateYahooDailyRosters } from '@/services/dailyRosterHydrator'
+import { hydrateEspnDailyRosters } from '@/services/espnDailyRosterHydrator'
 import type { CategoryLeagueData } from '@/editorial/types'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
@@ -442,13 +443,14 @@ async function loadBeat() {
     // fire cross-team blunders (not just the viewer's own bench).
     //
     // Off the critical path: the wire renders immediately with the
-    // viewer-only Phase 1 detector. When this completes (read cache,
-    // fetch missing from Yahoo, write back), we re-assign liveData
-    // so Vue re-renders with the cross-team items in place.
-    //
-    // Yahoo only for now; ESPN per-day roster fetch deferred.
-    if (platform === 'yahoo' && leagueRowId) {
-      void hydrateBenchBlunderRosters(data, leagueRowId)
+    // viewer-only Phase 1 detector. When the hydrator completes
+    // (read cache, fetch missing from the platform, write back),
+    // we re-assign liveData so Vue re-renders with the cross-team
+    // items in place. Per-platform handler dispatches the right
+    // hydrator; both ultimately write to the same daily_rosters
+    // cache table.
+    if (leagueRowId && (platform === 'yahoo' || platform === 'espn')) {
+      void hydrateBenchBlunderRosters(data, leagueRowId, platform, id)
     }
   } catch (err) {
     const label =
@@ -478,8 +480,8 @@ watch(
   },
 )
 
-/** Background-fill the cross-team bench-blunder data. Reads the
- *  daily_rosters cache and fetches missing days from Yahoo, then
+/** Background-fill the cross-team bench-blunder data. Dispatches
+ *  to the right per-platform hydrator (Yahoo or ESPN), then
  *  triggers a re-render by re-assigning liveData with the rosters
  *  merged in. Safe to abandon mid-flight (a league switch will
  *  null out liveData and the post-hydration assignment becomes a
@@ -487,6 +489,8 @@ watch(
 async function hydrateBenchBlunderRosters(
   data: CategoryLeagueData,
   leagueRowId: string,
+  platform: 'yahoo' | 'espn',
+  platformLeagueId: string,
 ): Promise<void> {
   try {
     // Pull the set of days where notable performances actually
@@ -495,16 +499,33 @@ async function hydrateBenchBlunderRosters(
       new Set((data.playerNights ?? []).map((n) => n.gameDate)),
     ).sort()
     if (days.length === 0) return
-    // Team keys come from the standings array (Yahoo team_key is
-    // the stable identifier). PlayerNights' ownedByTeamIds carry
-    // those same keys, so the detector matches without translation.
-    const teamKeys = data.teams.map((t) => t.id).filter(Boolean)
-    if (teamKeys.length === 0) return
-    const dailyRosters = await hydrateYahooDailyRosters({
-      leagueRowId,
-      teamKeys,
-      days,
-    })
+    // Team IDs are the platform's stable team identifier. PlayerNights'
+    // ownedByTeamIds carry those same IDs, so the cross-team detector
+    // matches without translation.
+    const teamIds = data.teams.map((t) => t.id).filter(Boolean)
+    if (teamIds.length === 0) return
+    let dailyRosters: Awaited<ReturnType<typeof hydrateYahooDailyRosters>> = []
+    if (platform === 'yahoo') {
+      dailyRosters = await hydrateYahooDailyRosters({
+        leagueRowId,
+        teamKeys: teamIds,
+        days,
+      })
+    } else if (platform === 'espn') {
+      const todayScoringPeriodId = data.espnTodayScoringPeriodId
+      if (!todayScoringPeriodId) {
+        console.warn('[BeatFeedView] ESPN league missing todayScoringPeriodId — skipping hydration')
+        return
+      }
+      dailyRosters = await hydrateEspnDailyRosters({
+        leagueRowId,
+        platformLeagueId,
+        season: data.currentSeason,
+        teamIds,
+        days,
+        todayScoringPeriodId,
+      })
+    }
     if (dailyRosters.length === 0) return
     // Guard against league-switch races: if the current liveData
     // is for a different league now, skip the merge.
