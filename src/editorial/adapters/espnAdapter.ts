@@ -571,14 +571,33 @@ function buildEspnMyBench(
 
   const BENCH_SLOTS = new Set([16, 17]) // 16 = BE, 17 = IL
   const out = new Set<string>()
-  for (const e of (myEspnTeam.roster?.entries ?? []) as any[]) {
+  for (const e of rosterEntries(myEspnTeam.roster)) {
     const slotId = e.lineupSlotId
     if (slotId == null || !BENCH_SLOTS.has(Number(slotId))) continue
-    const fullName = e.playerPoolEntry?.player?.fullName
+    // Handle both shapes: parsed EspnPlayer (flat fullName) and raw
+    // mRoster API entry (nested playerPoolEntry.player.fullName).
+    const fullName = e.fullName ?? e.playerPoolEntry?.player?.fullName
     if (!fullName) continue
     out.add(normalizeName(fullName))
   }
   return out
+}
+
+/** Resolve roster entries from either shape `team.roster` can take:
+ *  - The parsed EspnPlayer[] from `parseTeamsWithRosters` (flat array)
+ *  - The raw `{ entries: [...] }` object from a direct mRoster view
+ *
+ *  The previous helpers read `team.roster?.entries` directly. When
+ *  team.roster is an array, `array.entries` resolves to
+ *  `Array.prototype.entries` (a function reference) instead of
+ *  undefined, so the `?? []` fallback skipped and downstream code
+ *  tried to iterate a function — "function is not iterable" crash.
+ *  This helper centralizes the shape resolution. */
+function rosterEntries(roster: any): any[] {
+  if (!roster) return []
+  if (Array.isArray(roster)) return roster
+  if (Array.isArray(roster.entries)) return roster.entries
+  return []
 }
 
 /** Shared roster-name index — same logic for player nights AND
@@ -587,9 +606,9 @@ function buildEspnRosterByName(league: EspnLeague): Map<string, string[]> {
   const rosterByName = new Map<string, string[]>()
   for (const team of league.teams ?? []) {
     const teamId = String(team.id)
-    const entries = (team.roster?.entries ?? []) as any[]
-    for (const e of entries) {
-      const fullName = e.playerPoolEntry?.player?.fullName
+    for (const e of rosterEntries(team.roster)) {
+      // Handle both shapes — see rosterEntries() for context.
+      const fullName = e.fullName ?? e.playerPoolEntry?.player?.fullName
       if (!fullName) continue
       const key = normalizeName(fullName)
       const existing = rosterByName.get(key)
@@ -1446,13 +1465,14 @@ interface PlayerInfo {
 function buildPlayerLookup(league: EspnLeague): Map<string, PlayerInfo> {
   const m = new Map<string, PlayerInfo>()
   for (const team of league.teams || []) {
-    const entries = (team.roster?.entries ?? []) as any[]
-    for (const e of entries) {
+    for (const e of rosterEntries(team.roster)) {
+      // Handle both shapes — parsed EspnPlayer has flat id/fullName,
+      // raw mRoster entry has them under playerPoolEntry.player.
       const ppe = e.playerPoolEntry?.player
-      const id = ppe?.id ?? e.playerId
+      const id = e.playerId ?? e.id ?? ppe?.id
       if (id == null) continue
-      const name = ppe?.fullName || `Player ${id}`
-      const position = positionLabel(ppe?.defaultPositionId)
+      const name = e.fullName ?? ppe?.fullName ?? `Player ${id}`
+      const position = e.position ?? positionLabel(ppe?.defaultPositionId)
       m.set(String(id), { name, position })
     }
   }

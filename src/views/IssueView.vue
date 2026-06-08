@@ -21,16 +21,25 @@
         <span class="issue-loading-bar-fill"></span>
       </div>
       <div class="issue-loading-stage">
-        <!-- Spinning TLB monogram. The square favicon spins cleanly
-             (the wide lockup would look broken rotating). A linear
-             1.6s rotation reads as "alive, working" rather than
-             frozen. Subtle pulse on scale completes the breathing
-             feel without competing with the rotation. -->
-        <img
-          src="/tlb-favicon.png"
-          alt="The League Beat"
-          class="issue-loading-logo"
-        />
+        <!-- Spinning TLB monogram with TWO faces. The wrapper rotates
+             continuously around its Y axis; each face has
+             `backface-visibility: hidden` so only the side facing the
+             viewer is rendered. The back face is pre-rotated 180°,
+             so when the wrapper is mid-spin the back face arrives
+             at the user's POV reading TLB the correct way — never
+             mirrored. -->
+        <div class="issue-loading-logo" aria-hidden="true">
+          <img
+            src="/tlb-favicon.png"
+            alt=""
+            class="issue-loading-logo-face issue-loading-logo-face-front"
+          />
+          <img
+            src="/tlb-favicon.png"
+            alt=""
+            class="issue-loading-logo-face issue-loading-logo-face-back"
+          />
+        </div>
         <p class="issue-loading-title">{{ loadingTitle }}</p>
         <p class="issue-loading-sub">{{ loadingSubline }}</p>
       </div>
@@ -1579,25 +1588,40 @@ function collectUserIdentity() {
      dimensionality without making the rotation feel exaggerated. */
   perspective: 800px;
 }
-/* Spinning TLB monogram — square favicon, continuous rotation
-   around its vertical Y axis (like a sign on a spindle, not a
-   flat clockwise spin). 2.4s is the sweet spot: edge-on at 0.6s
-   and 1.8s creates a natural rhythm, slow enough to read as
-   deliberate rather than buzzy. preserve-3d + backface-visibility
-   make sure the back of the monogram is rendered identically as
-   it passes through. */
+/* Spinning TLB monogram. The wrapper rotates around its vertical
+   Y axis; the front and back faces are pre-rotated so the text
+   ("TLB") always reads correctly to the viewer — never mirrored.
+   2.4s/rotation is the rhythm sweet spot: edge-on at 0.6s and
+   1.8s feels deliberate, not buzzy. */
 .issue-loading-logo {
+  position: relative;
   width: 88px;
   height: 88px;
   margin: 0 0 28px;
-  display: block;
-  border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
   transform-style: preserve-3d;
-  backface-visibility: visible;
   animation:
     issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
     issue-loading-spin 2.4s linear infinite 320ms;
+}
+.issue-loading-logo-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  /* Only the side facing the viewer renders. As the wrapper
+     rotates past 90°, the front face hides and the back face
+     becomes visible. */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.issue-loading-logo-face-back {
+  /* Pre-rotate the back face 180° so that when the wrapper's
+     rotation reaches 180°, the back face's combined transform
+     lands at 360° (= 0°) — TLB upright and readable. Without
+     this the back face would appear mirrored. */
+  transform: rotateY(180deg);
 }
 @keyframes issue-loading-logo-in {
   0%   { opacity: 0; transform: scale(0.85); }

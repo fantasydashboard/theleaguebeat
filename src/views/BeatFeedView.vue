@@ -19,15 +19,21 @@
         <span class="beat-loading-bar-fill"></span>
       </div>
       <div class="beat-loading-stage">
-        <!-- Spinning TLB monogram — same treatment as the Issue's
-             loading state so the two surfaces feel like one
-             publication. The square favicon spins cleanly; the
-             wide lockup would look broken rotating. -->
-        <img
-          src="/tlb-favicon.png"
-          alt="The League Beat"
-          class="beat-loading-logo"
-        />
+        <!-- Two-face spinning TLB monogram. See IssueView for the
+             pre-rotated back-face rationale — keeps "TLB" readable
+             through every frame of the rotation. -->
+        <div class="beat-loading-logo" aria-hidden="true">
+          <img
+            src="/tlb-favicon.png"
+            alt=""
+            class="beat-loading-logo-face beat-loading-logo-face-front"
+          />
+          <img
+            src="/tlb-favicon.png"
+            alt=""
+            class="beat-loading-logo-face beat-loading-logo-face-back"
+          />
+        </div>
         <p class="beat-loading-title">{{ loadingTitle }}</p>
         <p class="beat-loading-sub">{{ loadingSubline }}</p>
       </div>
@@ -531,17 +537,27 @@ function collectUserIdentity() {
   perspective: 800px;
 }
 .beat-loading-logo {
+  position: relative;
   width: 88px;
   height: 88px;
   margin: 0 0 28px;
-  display: block;
-  border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
   transform-style: preserve-3d;
-  backface-visibility: visible;
   animation:
     beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
     beat-loading-spin 2.4s linear infinite 320ms;
+}
+.beat-loading-logo-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.beat-loading-logo-face-back {
+  transform: rotateY(180deg);
 }
 @keyframes beat-loading-logo-in {
   0%   { opacity: 0; transform: scale(0.85); }
