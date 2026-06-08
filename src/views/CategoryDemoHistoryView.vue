@@ -21,13 +21,9 @@
       Season one, in progress. The record book opens when the first champion is crowned.
     </div>
 
-    <!-- Chronicles breadcrumb — anchors this page as a deeper view
-         inside the Chronicles section, not a standalone surface. -->
-    <router-link
-      v-if="chroniclesBackLink"
-      :to="chroniclesBackLink"
-      class="chronicles-back"
-    >← Chronicles</router-link>
+    <!-- Chronicles is now the editorial archive directly — the
+         breadcrumb that used to link "back" to a hub page is gone
+         because the hub is gone. -->
 
     <!-- ─────────────────────────────────────────────────────────────
          SECTION 1 — PAGE HEAD
@@ -36,10 +32,10 @@
       <div class="page-head-copy">
         <p class="page-eyebrow">
           <span class="page-eyebrow-bar" aria-hidden="true"></span>
-          Chronicles · Seasons
+          Chronicles
         </p>
         <h1 id="page-headline" class="page-headline">{{ pageHeadline }}</h1>
-        <p class="page-sub">Champions, rivalries, and the record book.</p>
+        <p class="page-sub">Champions, eras, and the constants that survive across years.</p>
       </div>
       <ul class="page-context" role="list">
         <li class="page-context-pill"><span class="page-context-num">{{ pageContext.seasons }}</span><span class="page-context-lbl">Seasons</span></li>

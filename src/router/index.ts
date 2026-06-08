@@ -145,17 +145,22 @@ const router = createRouter({
           component: () => import('@/views/CategoryDemoDraftView.vue'),
         },
         {
-          // New Chronicles landing page — magazine spread for the
-          // multi-season archive. Sub-tabs (history, archive) remain
-          // as the deeper views beneath this index.
+          // Chronicles — the editorial archive. Year-Cards + The
+          // Eras + The Receipts. Previously this route hosted a
+          // separate "landing" hub page that just linked to two
+          // sub-pages, but the three-tab structure (Chronicles /
+          // Seasons / Records) created a circular UX where the
+          // CHRONICLES sub-tab was a hub for its siblings. Now
+          // Chronicles IS the editorial archive directly.
           path: 'chronicles',
           name: 'my-league-chronicles',
-          component: () => import('@/views/ChroniclesView.vue'),
+          component: () => import('@/views/CategoryDemoHistoryView.vue'),
         },
         {
+          // Backward-compatible alias for the old /history URL.
+          // External shares and old issue cross-links still resolve.
           path: 'history',
-          name: 'my-league-history',
-          component: () => import('@/views/CategoryDemoHistoryView.vue'),
+          redirect: (to) => `/leagues/${to.params.leagueId}/chronicles`,
         },
         {
           path: 'archive',

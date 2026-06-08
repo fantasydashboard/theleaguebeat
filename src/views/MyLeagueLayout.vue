@@ -224,10 +224,13 @@ const subNav = computed<Array<{ path: string; label: string }>>(() => {
     return []
   }
   if (activeSection.value === 'chronicles') {
+    // Two-tab structure: Chronicles IS the editorial archive
+    // (year-cards + eras + receipts), Past Issues is the issue
+    // library. The previous third tab (a hub linking to its own
+    // siblings) was circular UX.
     return [
       { path: 'chronicles', label: 'Chronicles' },
-      { path: 'history',    label: 'Seasons'    },
-      { path: 'archive',    label: 'Records'    },
+      { path: 'archive',    label: 'Past issues' },
     ]
   }
   return []
