@@ -1574,11 +1574,18 @@ function collectUserIdentity() {
   flex-direction: column;
   align-items: center;
   gap: 0;
+  /* Perspective so the logo's rotateY reads as 3D depth, not a
+     flat squash-and-stretch. ~800px gives a moderate sense of
+     dimensionality without making the rotation feel exaggerated. */
+  perspective: 800px;
 }
-/* Spinning TLB monogram — square favicon, continuous rotation.
-   Drives the "loading is happening" signal the previous static
-   lockup couldn't. 1.6s linear is the sweet spot: fast enough to
-   feel active, slow enough not to read as anxious or buzzy. */
+/* Spinning TLB monogram — square favicon, continuous rotation
+   around its vertical Y axis (like a sign on a spindle, not a
+   flat clockwise spin). 2.4s is the sweet spot: edge-on at 0.6s
+   and 1.8s creates a natural rhythm, slow enough to read as
+   deliberate rather than buzzy. preserve-3d + backface-visibility
+   make sure the back of the monogram is rendered identically as
+   it passes through. */
 .issue-loading-logo {
   width: 88px;
   height: 88px;
@@ -1586,20 +1593,19 @@ function collectUserIdentity() {
   display: block;
   border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
-  /* Compose two animations: enter (one-shot, ease-out) + spin
-     (continuous, linear). Both targeting transform so the GPU
-     can run them together without a layout pass. */
+  transform-style: preserve-3d;
+  backface-visibility: visible;
   animation:
     issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
-    issue-loading-spin 1.6s linear infinite 320ms;
+    issue-loading-spin 2.4s linear infinite 320ms;
 }
 @keyframes issue-loading-logo-in {
-  0%   { opacity: 0; transform: scale(0.85) rotate(0deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
 }
 @keyframes issue-loading-spin {
-  0%   { transform: scale(1) rotate(0deg); }
-  100% { transform: scale(1) rotate(360deg); }
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
 }
 .issue-loading-title {
   font-family: 'Barlow Condensed', sans-serif;

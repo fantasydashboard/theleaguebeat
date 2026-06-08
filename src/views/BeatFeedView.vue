@@ -526,6 +526,9 @@ function collectUserIdentity() {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* See IssueView for the perspective rationale — keeps the two
+     loading surfaces visually identical. */
+  perspective: 800px;
 }
 .beat-loading-logo {
   width: 88px;
@@ -534,17 +537,19 @@ function collectUserIdentity() {
   display: block;
   border-radius: 18px;
   filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+  transform-style: preserve-3d;
+  backface-visibility: visible;
   animation:
     beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
-    beat-loading-spin 1.6s linear infinite 320ms;
+    beat-loading-spin 2.4s linear infinite 320ms;
 }
 @keyframes beat-loading-logo-in {
-  0%   { opacity: 0; transform: scale(0.85) rotate(0deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
 }
 @keyframes beat-loading-spin {
-  0%   { transform: scale(1) rotate(0deg); }
-  100% { transform: scale(1) rotate(360deg); }
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
 }
 .beat-loading-title {
   font-family: 'Barlow Condensed', sans-serif;

@@ -438,26 +438,28 @@ export async function espnLeagueToCategoryData(
   //     is our only path.
   //
   //     CRITICAL: espnService.getLeague() only requests SETTINGS
-  //     + STATUS views, so league.teams[].roster.entries is empty
-  //     by default. Without rosters, every PlayerNight's
-  //     ownedByTeamIds was empty — silently dropping every
-  //     HUGE_GAME and BENCH_BLUNDER on ESPN. Pull rosters here
-  //     via the dedicated getTeamsWithRosters endpoint and stitch
-  //     them onto league.teams so the existing matchers work.
-  //     Non-fatal: a roster fetch failure logs a warning and
-  //     player events silently skip (rest of the page is fine).
+  //     + STATUS views, so league.teams is empty by default —
+  //     and even when it had IDs, there were no roster entries.
+  //     Without rosters, every PlayerNight's ownedByTeamIds came
+  //     back empty, silently dropping every HUGE_GAME and
+  //     BENCH_BLUNDER on ESPN.
+  //
+  //     Fix: pull teams WITH rosters via the dedicated endpoint
+  //     and REPLACE league.teams entirely (don't try to stitch
+  //     into an empty array — there's nothing to stitch into).
+  //     buildEspnPlayerNights, buildEspnRosterByName, and
+  //     buildEspnMyBench all read league.teams[].roster.entries,
+  //     so this single assignment fixes all three pathways.
+  //
+  //     Non-fatal: a roster-fetch failure logs a warning and
+  //     player events silently skip; rest of the page renders.
   try {
     const teamsWithRosters = await withCache(
       cacheKey(leagueId, 'teams-rosters', season),
       () => espnService.getTeamsWithRosters(sport, leagueId, season),
     )
-    const rosterById = new Map<number, any>()
-    for (const t of teamsWithRosters ?? []) {
-      if (t.roster) rosterById.set(Number(t.id), t.roster)
-    }
-    for (const t of league.teams ?? []) {
-      const roster = rosterById.get(Number(t.id))
-      if (roster) (t as any).roster = roster
+    if (teamsWithRosters && teamsWithRosters.length > 0) {
+      ;(league as any).teams = teamsWithRosters
     }
   } catch (err) {
     console.warn('[espnAdapter] roster fetch failed (player events will be silent):', err)
