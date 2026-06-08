@@ -19,20 +19,18 @@
         <span class="beat-loading-bar-fill"></span>
       </div>
       <div class="beat-loading-stage">
-        <!-- Two-face spinning TLB monogram. See IssueView for the
-             pre-rotated back-face rationale — keeps "TLB" readable
-             through every frame of the rotation. -->
-        <div class="beat-loading-logo" aria-hidden="true">
-          <img
-            src="/tlb-favicon.png"
-            alt=""
-            class="beat-loading-logo-face beat-loading-logo-face-front"
-          />
-          <img
-            src="/tlb-favicon.png"
-            alt=""
-            class="beat-loading-logo-face beat-loading-logo-face-back"
-          />
+        <!-- See IssueView for the shadow-wrapper / preserve-3d split
+             and the DIV-wrapped IMG rationale — same fix, same
+             outcome: "TLB" always readable through every rotation. -->
+        <div class="beat-loading-logo-shadow">
+          <div class="beat-loading-logo" aria-hidden="true">
+            <div class="beat-loading-logo-face beat-loading-logo-face-front">
+              <img src="/tlb-favicon.png" alt="" />
+            </div>
+            <div class="beat-loading-logo-face beat-loading-logo-face-back">
+              <img src="/tlb-favicon.png" alt="" />
+            </div>
+          </div>
         </div>
         <p class="beat-loading-title">{{ loadingTitle }}</p>
         <p class="beat-loading-sub">{{ loadingSubline }}</p>
@@ -545,12 +543,14 @@ function collectUserIdentity() {
      loading surfaces visually identical. */
   perspective: 800px;
 }
+.beat-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
 .beat-loading-logo {
   position: relative;
   width: 88px;
   height: 88px;
-  margin: 0 0 28px;
-  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
   transform-style: preserve-3d;
   animation:
     beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
@@ -559,11 +559,15 @@ function collectUserIdentity() {
 .beat-loading-logo-face {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
   border-radius: 18px;
+  overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+.beat-loading-logo-face img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .beat-loading-logo-face-back {
   transform: rotateY(180deg);

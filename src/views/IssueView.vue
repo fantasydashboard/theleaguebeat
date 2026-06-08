@@ -21,24 +21,24 @@
         <span class="issue-loading-bar-fill"></span>
       </div>
       <div class="issue-loading-stage">
-        <!-- Spinning TLB monogram with TWO faces. The wrapper rotates
-             continuously around its Y axis; each face has
-             `backface-visibility: hidden` so only the side facing the
-             viewer is rendered. The back face is pre-rotated 180°,
-             so when the wrapper is mid-spin the back face arrives
-             at the user's POV reading TLB the correct way — never
-             mirrored. -->
-        <div class="issue-loading-logo" aria-hidden="true">
-          <img
-            src="/tlb-favicon.png"
-            alt=""
-            class="issue-loading-logo-face issue-loading-logo-face-front"
-          />
-          <img
-            src="/tlb-favicon.png"
-            alt=""
-            class="issue-loading-logo-face issue-loading-logo-face-back"
-          />
+        <!-- Spinning TLB monogram. Critical: the drop-shadow MUST
+             live on an outer wrapper without preserve-3d. Putting
+             filter and preserve-3d on the same element makes the
+             filter create a stacking context that flattens the
+             3D children, silently breaking backface-visibility —
+             which produced the mirrored "BLT" on the back half of
+             the spin. The inner wrapper carries the 3D context; the
+             two faces (each a DIV wrapping the IMG, for cross-
+             browser backface-visibility consistency) flip cleanly. -->
+        <div class="issue-loading-logo-shadow">
+          <div class="issue-loading-logo" aria-hidden="true">
+            <div class="issue-loading-logo-face issue-loading-logo-face-front">
+              <img src="/tlb-favicon.png" alt="" />
+            </div>
+            <div class="issue-loading-logo-face issue-loading-logo-face-back">
+              <img src="/tlb-favicon.png" alt="" />
+            </div>
+          </div>
         </div>
         <p class="issue-loading-title">{{ loadingTitle }}</p>
         <p class="issue-loading-sub">{{ loadingSubline }}</p>
@@ -1596,17 +1596,22 @@ function collectUserIdentity() {
      dimensionality without making the rotation feel exaggerated. */
   perspective: 800px;
 }
-/* Spinning TLB monogram. The wrapper rotates around its vertical
-   Y axis; the front and back faces are pre-rotated so the text
-   ("TLB") always reads correctly to the viewer — never mirrored.
-   2.4s/rotation is the rhythm sweet spot: edge-on at 0.6s and
-   1.8s feels deliberate, not buzzy. */
+/* Outer wrapper carries the drop-shadow only. Filters create a
+   stacking context that flattens 3D children; keeping it off the
+   element with preserve-3d is what fixes the mirrored back-face. */
+.issue-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
+/* Inner wrapper: the 3D context + the rotation. The wrapper
+   rotates around its vertical Y axis; the front and back faces
+   are pre-rotated so "TLB" always reads correctly to the viewer
+   regardless of where in the rotation we are. 2.4s/rotation is
+   the rhythm sweet spot. */
 .issue-loading-logo {
   position: relative;
   width: 88px;
   height: 88px;
-  margin: 0 0 28px;
-  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
   transform-style: preserve-3d;
   animation:
     issue-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
@@ -1615,20 +1620,24 @@ function collectUserIdentity() {
 .issue-loading-logo-face {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
   border-radius: 18px;
-  /* Only the side facing the viewer renders. As the wrapper
-     rotates past 90°, the front face hides and the back face
-     becomes visible. */
+  overflow: hidden;
+  /* Each face is a DIV (not the IMG itself) — Safari + some
+     mobile browsers ignore backface-visibility on raw IMG elements
+     but honor it on the containing element. */
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
+.issue-loading-logo-face img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .issue-loading-logo-face-back {
-  /* Pre-rotate the back face 180° so that when the wrapper's
-     rotation reaches 180°, the back face's combined transform
-     lands at 360° (= 0°) — TLB upright and readable. Without
-     this the back face would appear mirrored. */
+  /* Pre-rotated 180° so that when the wrapper's rotation reaches
+     180°, the back face's combined transform lands at 360° (= 0°)
+     — TLB upright and readable. Without this the back face would
+     appear mirrored. */
   transform: rotateY(180deg);
 }
 @keyframes issue-loading-logo-in {
