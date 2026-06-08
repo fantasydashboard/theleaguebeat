@@ -753,9 +753,17 @@ function classifyNight(
   if (n.pitching) {
     const p = n.pitching
     if (p.noHitter || p.perfectGame) return { trigger: 'no-hitter', importance: 'high' }
+    // Complete games are rare enough in modern baseball to be
+    // headline-worthy on their own, even without a K threshold.
+    if (p.completeGame) return { trigger: 'big-k', importance: 'high' }
     if (p.strikeouts >= 13) return { trigger: 'big-k', importance: 'high' }
     if (p.strikeouts >= 10) return { trigger: 'big-k', importance: 'high' }
-    if (p.decision === 'S') return { trigger: 'big-sv', importance: 'med' }
+    // Saves were firing on every closer outing — a 1-IP / 1-K save is
+    // the closer's normal day, not a HUGE GAME. Tighten to multi-K
+    // dominant closes OR a multi-inning hold of the lead (rare).
+    if (p.decision === 'S' && (p.strikeouts >= 3 || p.inningsPitched >= 2)) {
+      return { trigger: 'big-sv', importance: 'med' }
+    }
     return null
   }
   if (n.hitting) {

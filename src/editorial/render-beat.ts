@@ -117,7 +117,11 @@ function categoryLabel(c: BeatCategory): string {
     case 'BRIEFING':      return 'Briefing'
     case 'LIVE':          return 'Live'
     case 'HUGE_GAME':     return 'Huge Game'
-    case 'BENCH_BLUNDER': return 'Bench Blunder'
+    // Shortened from "Bench Blunder" so the pill fits in the
+    // fixed 80px category column without overflowing into the
+    // headline. The viewer-side framing ("Your bench had…")
+    // already names the surface, so "Blunder" alone reads clear.
+    case 'BENCH_BLUNDER': return 'Blunder'
   }
 }
 

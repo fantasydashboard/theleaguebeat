@@ -3,6 +3,33 @@
     <!-- Live load banner (mirrors PR view pattern) -->
     <LiveLoadError v-if="liveError" :message="liveError" :platform-label="platformLabel" />
 
+    <!-- Loading guard. In strict live mode we MUST wait for the
+         adapter before rendering, otherwise the fixture team names
+         leak into the real league's wire (the page silently falls
+         back to `fixtureData` when `liveData` is null). Mirrors the
+         Issue's loading template so the two surfaces feel like the
+         same publication. -->
+    <div
+      v-if="isStrictLiveMode && !liveData && !liveError"
+      class="beat-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="beat-loading-bar" aria-hidden="true">
+        <span class="beat-loading-bar-fill"></span>
+      </div>
+      <div class="beat-loading-stage">
+        <img
+          src="/tlb-logo-primary.png"
+          alt="The League Beat"
+          class="beat-loading-logo"
+        />
+        <p class="beat-loading-title">{{ loadingTitle }}</p>
+        <p class="beat-loading-sub">{{ loadingSubline }}</p>
+      </div>
+    </div>
+
+    <template v-else>
     <header class="beat-head">
       <p class="beat-eyebrow">
         <span class="beat-eyebrow-bar" aria-hidden="true"></span>
@@ -167,11 +194,12 @@
         </li>
       </ol>
     </section>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { renderBeat, type RenderedBeat } from '@/editorial/render-beat'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
@@ -232,6 +260,15 @@ const platformLabel = computed(() => {
   if (p === 'espn') return 'ESPN'
   if (p === 'sleeper') return 'Sleeper'
   return 'your league'
+})
+
+/** Editorial-voice copy for the loading state. Same shape as
+ *  IssueView so the two surfaces feel like one publication. */
+const loadingTitle = computed(() => `Pulling the wire.`)
+const loadingSubline = computed(() => {
+  const league = strictLeagueRecord.value?.league_name
+  if (league) return `Pulling ${league} from ${platformLabel.value}.`
+  return `Pulling the day's events from ${platformLabel.value}.`
 })
 
 const activeData = computed<CategoryLeagueData>(
@@ -302,7 +339,7 @@ function formatTime(d: Date): string {
    LIVE DATA HYDRATION
 ───────────────────────────────────────────────────────────────── */
 
-onMounted(async () => {
+async function loadBeat() {
   if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
     try {
       await leaguesStore.fetchLeagues()
@@ -311,9 +348,25 @@ onMounted(async () => {
     }
   }
 
+  // Reset prior render state — when switching leagues the component
+  // instance is reused (same route component, different :leagueId
+  // param). Without clearing liveData here, the previous league's
+  // wire stays on screen until the new fetch resolves. Worse, when
+  // the new league has the same default render path the user can't
+  // tell the switch happened.
+  liveData.value = null
+  liveError.value = null
+
   const id = liveLeagueId.value
   const platform = livePlatform.value
   if (!id || (platform !== 'sleeper' && platform !== 'espn' && platform !== 'yahoo')) {
+    // In strict live mode an unresolved league record would leave
+    // the loading guard spinning forever. Surface as a friendly
+    // error so the user can refresh or reconnect.
+    if (isStrictLiveMode.value) {
+      liveError.value =
+        'This league couldn\'t be resolved. Try refreshing, or reconnect it from the home page.'
+    }
     return
   }
 
@@ -360,7 +413,26 @@ onMounted(async () => {
   } finally {
     liveLoading.value = false
   }
+}
+
+onMounted(() => {
+  void loadBeat()
 })
+
+// Watch for league-switcher navigation. BeatFeedView is the same
+// component on every `/leagues/:leagueId/the-beat` route, so the
+// component instance is reused — onMounted does NOT fire when the
+// user switches leagues from the global switcher. Without this
+// watcher, liveData stays stuck on the previous league's data
+// until a hard refresh. Re-running loadBeat resets state and
+// pulls the new league's events.
+watch(
+  () => route.params.leagueId,
+  (next, prev) => {
+    if (next === prev) return
+    void loadBeat()
+  },
+)
 
 function collectUserIdentity() {
   try {
@@ -385,6 +457,100 @@ function collectUserIdentity() {
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
   padding: 32px 0 80px;
+}
+
+/* ─── LOADING STATE ───────────────────────────────────────────── */
+/* Mirrors IssueView's loading treatment — the TLB lockup, indeterminate
+   progress bar at the top, soft brand glow. Keeps the two surfaces
+   feeling like the same publication. */
+.beat-loading {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background:
+    radial-gradient(
+      ellipse 600px 400px at 50% 35%,
+      oklch(0.66 0.22 0 / 0.10),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 700px 400px at 50% 95%,
+      oklch(0.78 0.18 92 / 0.06),
+      transparent 70%
+    );
+  animation: beat-loading-glow 4s ease-in-out infinite alternate;
+}
+@keyframes beat-loading-glow {
+  0%   { opacity: 0.85; }
+  100% { opacity: 1.00; }
+}
+.beat-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: oklch(0.18 0.015 90);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+}
+.beat-loading-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-primary) 50%,
+    transparent 100%
+  );
+  animation: beat-loading-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes beat-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.beat-loading-stage {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.beat-loading-logo {
+  width: 80%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 0 28px;
+  display: block;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+  animation: beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes beat-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.beat-loading-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+  color: var(--ink-1);
+  margin: 0 0 10px;
+}
+.beat-loading-sub {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 42ch;
 }
 
 /* ─── Header ──────────────────────────────────────────────────── */
