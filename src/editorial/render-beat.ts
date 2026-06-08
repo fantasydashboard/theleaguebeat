@@ -482,19 +482,22 @@ const HUGE_GAME_BODIES: VariantFn<HugeGamePayload>[] = [
    out, not the columnist writing a takedown.
 ───────────────────────────────────────────────────────────────── */
 
-// Viewer-side framing: in Phase 1, every BENCH_BLUNDER attaches to
-// the viewer's own team (myBenchedPlayers only resolves their bench).
-// So the copy reads in the second person — "you benched Bichette" —
-// not third person. This is the friend at the bar pointing it out,
-// not the columnist writing about someone else.
+// Third-person team-name framing, consistent with HUGE_GAME copy
+// ("Carson Benge ... for The Queens Bombers"). The earlier
+// second-person variants ("your bench had…") were the friend-at-bar
+// register, but mixing voices across categories made the wire feel
+// inconsistent. Phase 2's cross-league bench blunders will fire for
+// other teams too — keeping it third-person now means no rewrite
+// then. Phrasings avoid possessive 's to dodge plural team-name
+// awkwardness ("TittyWittys's", "Bombers's") without a helper.
 const BENCH_BLUNDER_HEADLINES: VariantFn<BenchBlunderPayload>[] = [
-  (p, _c) => `Tough bench: ${p.playerName} went ${p.benchedStats}.`,
-  (p, _c) => `${p.playerName} sat on your bench and went ${p.benchedStats}.`,
-  (p, _c) => `Your bench had ${p.playerName} for ${p.benchedStats}.`,
-  (p, _c) => `${p.playerName}, on your bench: ${p.benchedStats}.`,
+  (p, c) => `${c.teamName(p.fantasyTeamId)} benched ${p.playerName}: ${p.benchedStats}.`,
+  (p, c) => `${p.playerName} sat for ${c.teamName(p.fantasyTeamId)}: ${p.benchedStats}.`,
+  (p, c) => `${c.teamName(p.fantasyTeamId)} had ${p.playerName} on the bench: ${p.benchedStats}.`,
+  (p, c) => `Bench watch: ${p.playerName} went ${p.benchedStats} for ${c.teamName(p.fantasyTeamId)}.`,
   // Phase 2 variants — fire when the starter comparison data lands.
-  (p, _c) => p.startedPlayerName && p.startedStats
-    ? `Started ${p.startedPlayerName} (${p.startedStats}) over ${p.playerName} (${p.benchedStats}).`
+  (p, c) => p.startedPlayerName && p.startedStats
+    ? `${c.teamName(p.fantasyTeamId)} started ${p.startedPlayerName} (${p.startedStats}) over ${p.playerName} (${p.benchedStats}).`
     : null,
 ]
 
@@ -502,7 +505,7 @@ const BENCH_BLUNDER_BODIES: VariantFn<BenchBlunderPayload>[] = [
   (p, _c) => p.costSummary
     ? `${p.costSummary}. Sometimes it's like that.`
     : null,
-  (_p, _c) => `Sometimes the lineup decisions don't break your way.`,
+  (_p, _c) => `The kind of lineup decision that haunts the rest of the week.`,
   (p, _c) => p.startedPlayerName
     ? `${p.startedPlayerName} got the slot, the production stayed on the bench.`
     : null,

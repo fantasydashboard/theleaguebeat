@@ -19,17 +19,12 @@
         <span class="beat-loading-bar-fill"></span>
       </div>
       <div class="beat-loading-stage">
-        <!-- See IssueView for the shadow-wrapper / preserve-3d split
-             and the DIV-wrapped IMG rationale — same fix, same
-             outcome: "TLB" always readable through every rotation. -->
+        <!-- Wobble approach — see IssueView for the rationale.
+             The full Y rotation kept showing the back side mirrored;
+             the wobble swings ±50° so the back is never revealed. -->
         <div class="beat-loading-logo-shadow">
           <div class="beat-loading-logo" aria-hidden="true">
-            <div class="beat-loading-logo-face beat-loading-logo-face-front">
-              <img src="/tlb-favicon.png" alt="" />
-            </div>
-            <div class="beat-loading-logo-face beat-loading-logo-face-back">
-              <img src="/tlb-favicon.png" alt="" />
-            </div>
+            <img src="/tlb-favicon.png" alt="" />
           </div>
         </div>
         <p class="beat-loading-title">{{ loadingTitle }}</p>
@@ -551,34 +546,24 @@ function collectUserIdentity() {
   position: relative;
   width: 88px;
   height: 88px;
-  transform-style: preserve-3d;
-  animation:
-    beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
-    beat-loading-spin 2.4s linear infinite 320ms;
+  perspective: 800px;
 }
-.beat-loading-logo-face {
-  position: absolute;
-  inset: 0;
-  border-radius: 18px;
-  overflow: hidden;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.beat-loading-logo-face img {
+.beat-loading-logo img {
   width: 100%;
   height: 100%;
   display: block;
-}
-.beat-loading-logo-face-back {
-  transform: rotateY(180deg);
+  border-radius: 18px;
+  animation:
+    beat-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    beat-loading-spin 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite 320ms;
 }
 @keyframes beat-loading-logo-in {
   0%   { opacity: 0; transform: scale(0.85); }
   100% { opacity: 1; transform: scale(1); }
 }
 @keyframes beat-loading-spin {
-  0%   { transform: rotateY(0deg); }
-  100% { transform: rotateY(360deg); }
+  0%, 100% { transform: rotateY(-50deg); }
+  50%      { transform: rotateY( 50deg); }
 }
 .beat-loading-title {
   font-family: 'Barlow Condensed', sans-serif;
