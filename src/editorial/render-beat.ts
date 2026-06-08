@@ -619,7 +619,16 @@ function renderWidget(payload: BeatPayload): BeatWidget | undefined {
         teamIds: [payload.teamAId, payload.teamBId],
       }
     case 'ISSUE':
-      return undefined
+      // Show the cover-story team's avatar as the widget — same
+      // anchor the actual Issue's cover uses. Gives the ISSUE
+      // wire item a visual identity beyond a blank right column
+      // and previews the recap's editorial angle.
+      return payload.coverTeamId
+        ? {
+            kind: 'team-logo',
+            teamIds: [payload.coverTeamId],
+          }
+        : undefined
     case 'BRIEFING':
       // No widget. BRIEFING is a meta-summary of the day's slate,
       // not a matchup. Two team logos here implied the briefing was

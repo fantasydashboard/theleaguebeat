@@ -76,10 +76,23 @@
           v-for="item in day.items"
           :key="item.id"
           class="beat-item"
-          :class="{ 'beat-item-featured': item.isFeatured }"
+          :class="{
+            'beat-item-featured': item.isFeatured,
+            'beat-item-clickable': item.category === 'ISSUE' && !!routeLeagueId,
+          }"
           :data-importance="item.importance"
           :data-category="item.category"
         >
+          <!-- ISSUE items are clickable: tap anywhere on the row to
+               open the live issue. Absolute-positioned router-link
+               covers the whole li without changing the grid layout
+               or interfering with widget rendering. -->
+          <router-link
+            v-if="item.category === 'ISSUE' && routeLeagueId"
+            :to="`/leagues/${routeLeagueId}/the-issue`"
+            class="beat-item-link"
+            :aria-label="`Open ${item.headline}`"
+          />
           <!-- Featured items: lead-avatar block (left), then content stack.
                Player-photo widgets get a dedicated treatment so the
                player's face is the focal point, not the fantasy team. -->
@@ -241,6 +254,10 @@ const strictLeagueRecord = computed(() => {
   const uuid = route.params.leagueId
   if (typeof uuid !== 'string' || uuid.length === 0) return null
   return leaguesStore.leagues.find((l) => l.id === uuid) ?? null
+})
+const routeLeagueId = computed(() => {
+  const v = route.params.leagueId
+  return typeof v === 'string' && v.length > 0 ? v : null
 })
 const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
 
@@ -748,6 +765,32 @@ function collectUserIdentity() {
   position: relative;
 }
 .beat-item:last-child { border-bottom: 0; }
+
+/* Clickable items (currently ISSUE → /the-issue). The transparent
+   router-link covers the row; hover gives a subtle tint so the
+   affordance is felt. */
+.beat-item-link {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  /* Sit above all the grid columns so a click anywhere navigates,
+     but invisible so the existing content still reads through. */
+  border-radius: 8px;
+}
+.beat-item-clickable {
+  transition: background-color 200ms ease;
+  border-radius: 8px;
+}
+.beat-item-clickable:hover {
+  background-color: oklch(0.13 0.015 90);
+  cursor: pointer;
+}
+.beat-item-clickable .beat-item-headline {
+  transition: color 200ms ease;
+}
+.beat-item-clickable:hover .beat-item-headline {
+  color: var(--accent-secondary);
+}
 .beat-item[data-importance='high']:not(.beat-item-featured)::before {
   content: '';
   position: absolute;
