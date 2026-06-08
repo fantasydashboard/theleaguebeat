@@ -852,14 +852,24 @@ export function detectHugeGames(
 ): BeatItemSeed[] {
   const nights = data.playerNights
   if (!nights || nights.length === 0) return []
-  // Viewer context for dedupe — when a HUGE_GAME would fire for a
-  // player that's ALSO on the viewer's own bench, the BENCH_BLUNDER
-  // tells that story better (it's the more specific angle). Skip
-  // the duplicate HUGE_GAME so the wire doesn't carry both for the
-  // same player+day. Cross-team HUGE_GAMES (other managers' owned
-  // players) still fire as usual.
   const myTeamId = data.teams.find((t) => t.isMyTeam)?.id
   const benchedKeys = data.myBenchedPlayers
+  const dailyRosters = data.dailyRosters
+  // Phase 2 dedupe index: (teamId:day) → set of benched normalized
+  // names from the actual game day. This is the precise signal —
+  // a player benched yesterday by Team X covers Team X's HUGE_GAME
+  // for that night. The earlier code only checked today's
+  // myBenchedPlayers, which silently suppressed HUGE_GAMEs for
+  // players moved between bench-and-starter across days. Bug
+  // surface: Duran started yesterday but on viewer's bench today
+  // → no BLUNDER (started yesterday), no HUGE_GAME (suppressed by
+  // today's bench check). Both items lost.
+  const benchIndexByTeamDay = new Map<string, Set<string>>()
+  if (dailyRosters && dailyRosters.length > 0) {
+    for (const r of dailyRosters) {
+      benchIndexByTeamDay.set(`${r.teamId}:${r.day}`, new Set(r.benched))
+    }
+  }
   const out: BeatItemSeed[] = []
   for (const night of nights) {
     const verdict = classifyNight(night)
@@ -880,13 +890,27 @@ export function detectHugeGames(
     // multiple HUGE_GAMEs in one night don't stack at the same minute.
     const day = new Date(`${night.gameDate}T20:00:00`)
     const tsBase = isNaN(day.getTime()) ? now : day
-    const benchedThisNight =
-      myTeamId != null &&
-      benchedKeys != null &&
-      benchedKeys.has(normalizeName(night.name))
+    const nameKey = normalizeName(night.name)
     for (const teamId of night.ownedByTeamIds) {
-      // Dedupe: the viewer's bench-blunder covers this combo.
-      if (teamId === myTeamId && benchedThisNight) continue
+      // Dedup: if BENCH_BLUNDER will fire for this exact
+      // (team, player, night), skip the HUGE_GAME to avoid two
+      // items about the same story. Two paths:
+      //   - Phase 2 (cross-team): consult the precise per-team
+      //     per-day bench from dailyRosters.
+      //   - Phase 1 (viewer-only fallback): consult today's
+      //     myBenchedPlayers, restricted to the viewer's team.
+      let willFireBenchBlunder = false
+      if (benchIndexByTeamDay.size > 0) {
+        const benchSet = benchIndexByTeamDay.get(`${teamId}:${night.gameDate}`)
+        willFireBenchBlunder = benchSet?.has(nameKey) === true
+      } else if (
+        teamId === myTeamId &&
+        benchedKeys != null &&
+        benchedKeys.has(nameKey)
+      ) {
+        willFireBenchBlunder = true
+      }
+      if (willFireBenchBlunder) continue
       const offsetMinutes = hashStagger(`${night.mlbId}:${teamId}`, 0, 90)
       const ts = new Date(tsBase.getTime() - offsetMinutes * 60 * 1000)
       out.push({
