@@ -7,14 +7,31 @@
          a fixture-derived render as its initial value so the page
          stays visually populated during load.
     ────────────────────────────────────────────────────────────── -->
-    <div v-if="liveLoading" class="live-banner live-banner-loading" role="status" aria-live="polite">
-      <span class="live-banner-mark" aria-hidden="true">
-        <img src="/tlb-favicon.png" alt="" class="live-banner-mark-img" />
-      </span>
-      Loading your draft from {{ platformLabel }}. Hang tight.
+    <LiveLoadError v-if="liveError" :message="liveError" />
+    <div
+      v-if="isStrictLiveMode && !liveData && !liveError"
+      class="draft-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="draft-loading-bar" aria-hidden="true">
+        <span class="draft-loading-bar-fill"></span>
+      </div>
+      <div class="draft-loading-stage">
+        <div class="draft-loading-logo-shadow">
+          <div class="draft-loading-logo" aria-hidden="true">
+            <img src="/tlb-favicon.png" alt="" />
+          </div>
+        </div>
+        <p class="draft-loading-title">{{ loadingTitle }}</p>
+        <p class="draft-loading-sub">{{ loadingSubline }}</p>
+      </div>
     </div>
-    <LiveLoadError v-else-if="liveError" :message="liveError" />
-    <div v-else-if="liveData && !liveData.draft" class="live-banner live-banner-info" role="status">
+
+    <template v-else>
+    <!-- "No draft data" info banner — shown after data loads when the
+         platform doesn't expose draft picks for this format. -->
+    <div v-if="liveData && !liveData.draft" class="live-banner live-banner-info" role="status">
       <p class="live-banner-error-headline">No draft data available for this league.</p>
       <p class="live-banner-error-body">{{ platformLabel }} hasn't exposed it for this format. Showing the demo draft below.</p>
     </div>
@@ -56,7 +73,7 @@
     <section v-if="showAwardsSection" class="awards" aria-labelledby="awards-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="awards-heading">The awards</p>
-        <h2 class="section-headline">Three things you need to know.</h2>
+        <h2 class="section-headline">Three from the draft floor.</h2>
       </header>
 
       <div class="awards-grid">
@@ -655,11 +672,12 @@
       :pick-overall="pickModalOverall"
       @close="closePickModal"
     />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   teams,
@@ -684,6 +702,7 @@ import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import type { CategoryLeagueData } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
+import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
@@ -712,11 +731,28 @@ const liveDraftEditorial = shallowRef<RenderedDraftCopy>(
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
 
-const liveLeagueId = computed(() => {
+// Two ways to bind to a real league (mirrors the other live views):
+//   - Strict: /leagues/:leagueId/draft — leagueId is the Supabase UUID
+//   - Soft (legacy): /demo-categories/draft?leagueId=…&platform=…
+const leaguesStore = useLeaguesStore()
+const strictLeagueRecord = computed(() => {
+  const uuid = route.params.leagueId
+  if (typeof uuid !== 'string' || uuid.length === 0) return null
+  return leaguesStore.leagues.find((l) => l.id === uuid) ?? null
+})
+const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
+
+const liveLeagueId = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform_league_id ?? null
+  }
   const v = route.query.leagueId
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
-const livePlatform = computed(() => {
+const livePlatform = computed<string | null>(() => {
+  if (isStrictLiveMode.value) {
+    return strictLeagueRecord.value?.platform ?? null
+  }
   const v = route.query.platform
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
 })
@@ -732,7 +768,28 @@ const platformLabel = computed(() => {
   return 'your league'
 })
 
-onMounted(async () => {
+// Editorial-voice loading copy. Same shape as Beat / Issue / Chronicles
+// / Power Rankings / Matchups so all surfaces feel like one publication.
+const loadingTitle = computed(() => `Pulling the draft.`)
+const loadingSubline = computed(() => {
+  const league = strictLeagueRecord.value?.league_name
+  if (league) return `Reading ${league} picks from ${platformLabel.value}.`
+  return `Reading the picks from ${platformLabel.value}.`
+})
+
+async function loadDraft() {
+  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
+    try {
+      await leaguesStore.fetchLeagues()
+    } catch (err) {
+      console.warn('[CategoryDemoDraftView] fetchLeagues failed:', err)
+    }
+  }
+
+  // Reset prior render state — component is reused across leagues.
+  liveData.value = null
+  liveError.value = null
+
   const id = liveLeagueId.value
   const platform = livePlatform.value
   if (!id || (platform !== 'sleeper' && platform !== 'espn' && platform !== 'yahoo')) {
@@ -743,7 +800,9 @@ onMounted(async () => {
   liveError.value = null
   try {
     // See CategoryDemoHomeView for why we pass identity explicitly.
-    const opts = { userIdentity: collectUserIdentity() }
+    const leagueRowId =
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined
+    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)
@@ -752,6 +811,9 @@ onMounted(async () => {
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = data
     liveDraftEditorial.value = renderDraftPage(data)
+    if (leagueRowId && data.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+    }
   } catch (err) {
     const platformLabel =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
@@ -759,7 +821,20 @@ onMounted(async () => {
   } finally {
     liveLoading.value = false
   }
+}
+
+onMounted(() => {
+  void loadDraft()
 })
+
+// Watch for league-switcher navigation.
+watch(
+  () => route.params.leagueId,
+  (next, prev) => {
+    if (next === prev) return
+    void loadDraft()
+  },
+)
 
 /** See CategoryDemoHomeView.collectUserIdentity for the rationale. */
 function collectUserIdentity() {
@@ -1265,6 +1340,119 @@ function onOpenPickFromTeam(pickOverall: number) {
   color: var(--ink-1);
 }
 
+/* ─── LOADING STATE ───────────────────────────────────────────── */
+/* Mirrors Beat / Issue / Chronicles / Power Rankings / Matchups. */
+.draft-loading {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background:
+    radial-gradient(ellipse 600px 400px at 50% 35%, oklch(0.66 0.22 0 / 0.10), transparent 70%),
+    radial-gradient(ellipse 700px 400px at 50% 95%, oklch(0.78 0.18 92 / 0.06), transparent 70%);
+  animation: draft-loading-glow 4s ease-in-out infinite alternate;
+}
+@keyframes draft-loading-glow {
+  0%   { opacity: 0.85; }
+  100% { opacity: 1.00; }
+}
+.draft-loading-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: oklch(0.18 0.015 90);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+}
+.draft-loading-bar-fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-primary) 50%, transparent 100%);
+  animation: draft-loading-slide 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes draft-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.draft-loading-stage {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.draft-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
+.draft-loading-logo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  perspective: 800px;
+}
+.draft-loading-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 18px;
+  animation:
+    draft-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    draft-loading-spin 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite 320ms;
+}
+@keyframes draft-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes draft-loading-spin {
+  0%, 100% { transform: rotateY(-50deg); }
+  50%      { transform: rotateY( 50deg); }
+}
+.draft-loading-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+  color: var(--ink-1);
+  margin: 0 0 10px;
+  animation: draft-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 320ms both;
+}
+.draft-loading-sub {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 42ch;
+  animation: draft-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+@keyframes draft-loading-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── SECTION REVEAL STAGGER ──────────────────────────────────── */
+.catdraft > *:not(.draft-loading) {
+  animation: draft-section-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.catdraft > *:not(.draft-loading):nth-child(1) { animation-delay: 0ms; }
+.catdraft > *:not(.draft-loading):nth-child(2) { animation-delay: 60ms; }
+.catdraft > *:not(.draft-loading):nth-child(3) { animation-delay: 120ms; }
+.catdraft > *:not(.draft-loading):nth-child(4) { animation-delay: 180ms; }
+.catdraft > *:not(.draft-loading):nth-child(n+5) { animation-delay: 240ms; }
+@keyframes draft-section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .catdraft > *:not(.draft-loading) { animation: none; }
+}
+
 /* ─── Shared section heads ──────────────────────────────── */
 .section-head { margin-bottom: 18px; }
 .section-eyebrow {
@@ -1509,7 +1697,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   cursor: pointer;
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .award-best-cta:hover { transform: translateY(-1px); background: oklch(0.82 0.18 92); }
 }
 .award-best-cta:active { transform: scale(0.97); transition-duration: 100ms; }
@@ -1537,7 +1725,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   overflow: hidden;
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .award-steal:hover { transform: translateY(-1px); border-color: oklch(0.72 0.18 145 / 0.50); }
   .award-bust:hover  { transform: translateY(-1px); border-color: oklch(0.70 0.27 350 / 0.50); }
 }
@@ -1770,7 +1958,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   border: 1px solid oklch(0.20 0.015 90);
   background: oklch(0.11 0.015 90);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .podium-card:hover { transform: translateY(-2px); }
 }
 .podium-card:active { transform: scale(0.99); transition-duration: 100ms; }
@@ -1930,7 +2118,9 @@ function onOpenPickFromTeam(pickOverall: number) {
   cursor: pointer;
   transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.rest-row:hover { background: oklch(0.14 0.015 90); border-color: oklch(0.26 0.015 90); }
+@media (hover: hover) and (pointer: fine) {
+  .rest-row:hover { background: oklch(0.14 0.015 90); border-color: oklch(0.26 0.015 90); }
+}
 .rest-row:active { transform: scale(0.99); transition-duration: 100ms; }
 .rest-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .rest-row.is-my-team {
@@ -2072,7 +2262,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
   min-height: 70px;
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .board-cell:hover { transform: translateY(-1px); }
 }
 .board-cell:active { transform: scale(0.99); transition-duration: 100ms; }
@@ -2465,7 +2655,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   overflow: hidden;
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .king-card:hover { transform: translateY(-1px); }
 }
 .king-card:active { transform: scale(0.99); transition-duration: 100ms; }
@@ -2591,7 +2781,7 @@ function onOpenPickFromTeam(pickOverall: number) {
   align-items: center;
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .king-broken:hover { transform: translateY(-1px); border-color: oklch(0.70 0.27 350 / 0.50); }
 }
 .king-broken:active { transform: scale(0.99); transition-duration: 100ms; }

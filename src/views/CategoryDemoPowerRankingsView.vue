@@ -1,16 +1,33 @@
 <template>
   <div class="cat-rankings">
     <!-- ─────────────────────────────────────────────────────────────
-         LIVE LOAD STATUS — only renders when a leagueId is in the
-         URL and the live adapter is fetching or has errored.
+         LIVE LOAD STATUS — strict live mode shows the full-page
+         loading state until the adapter resolves. Mirrors Beat /
+         Issue / Chronicles so the four surfaces feel like one
+         publication.
     ────────────────────────────────────────────────────────────── -->
-    <div v-if="liveLoading" class="live-banner live-banner-loading" role="status" aria-live="polite">
-      <span class="live-banner-mark" aria-hidden="true">
-        <img src="/tlb-favicon.png" alt="" class="live-banner-mark-img" />
-      </span>
-      Loading your league from {{ platformLabel }}. Hang tight.
+    <LiveLoadError v-if="liveError" :message="liveError" />
+    <div
+      v-if="isStrictLiveMode && !liveData && !liveError"
+      class="pr-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="pr-loading-bar" aria-hidden="true">
+        <span class="pr-loading-bar-fill"></span>
+      </div>
+      <div class="pr-loading-stage">
+        <div class="pr-loading-logo-shadow">
+          <div class="pr-loading-logo" aria-hidden="true">
+            <img src="/tlb-favicon.png" alt="" />
+          </div>
+        </div>
+        <p class="pr-loading-title">{{ loadingTitle }}</p>
+        <p class="pr-loading-sub">{{ loadingSubline }}</p>
+      </div>
     </div>
-    <LiveLoadError v-else-if="liveError" :message="liveError" />
+
+    <template v-else>
 
     <!-- ─────────────────────────────────────────────────────────────
          1. PAGE HEADER — eyebrow + headline + sub + rank-shape stats
@@ -631,11 +648,12 @@
       @close="closeDetail"
       @open-signup="$emit('open-signup')"
     />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   teams,
@@ -793,7 +811,16 @@ const platformLabel = computed(() => {
   return 'your league'
 })
 
-onMounted(async () => {
+// Editorial-voice loading copy. Same shape as Beat / Issue / Chronicles
+// so the four surfaces feel like one publication.
+const loadingTitle = computed(() => `Reading the board.`)
+const loadingSubline = computed(() => {
+  const league = strictLeagueRecord.value?.league_name
+  if (league) return `Pulling ${league} from ${platformLabel.value}.`
+  return `Pulling the rankings from ${platformLabel.value}.`
+})
+
+async function loadRankings() {
   // Strict deep-link / refresh: hydrate the leagues store before we can
   // resolve the platform + platform_league_id for this league row.
   if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
@@ -803,6 +830,13 @@ onMounted(async () => {
       console.warn('[CategoryDemoPowerRankingsView] fetchLeagues failed:', err)
     }
   }
+
+  // Reset prior render state — component instance is reused across
+  // league-switcher navigation, so without this the previous league's
+  // board stays on screen until the new fetch resolves and the loading
+  // guard never appears.
+  liveData.value = null
+  liveError.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -829,6 +863,11 @@ onMounted(async () => {
         : await sleeperLeagueToCategoryData(id, opts)
     liveData.value = data
     livePR.value = renderPRPage(data)
+    // Backfill placeholder league_name once the real name resolves —
+    // mirrors Beat / Chronicles so the switcher chip stays in sync.
+    if (leagueRowId && data.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+    }
     // Publish issue context so the layout masthead shows the right
     // Vol/Week/Year here too — matching History instead of Vol 1.
     // Founded year: prefer the platform-API truth from seasonHistory
@@ -856,7 +895,23 @@ onMounted(async () => {
   } finally {
     liveLoading.value = false
   }
+}
+
+onMounted(() => {
+  void loadRankings()
 })
+
+// Watch for league-switcher navigation. Same component is reused on
+// every `/leagues/:leagueId/power-rankings` route, so onMounted does
+// NOT fire when the user switches leagues. Without this, the prior
+// league's board stays on screen until refresh.
+watch(
+  () => route.params.leagueId,
+  (next, prev) => {
+    if (next === prev) return
+    void loadRankings()
+  },
+)
 
 /** See CategoryDemoHomeView.collectUserIdentity for the rationale. */
 function collectUserIdentity() {
@@ -1387,7 +1442,7 @@ const trajectoryFocusTeams = computed(() =>
 const trajectoryDeck = computed<string>(() => {
   const hist = liveSeasonRankHistory.value
   if (hist.length < 3) {
-    return 'Every team\'s climb through the standings. The top seeds and your team run bright.'
+    return 'Every team\'s climb through the standings. The top seeds and the home team run bright.'
   }
   const lastWeek = hist[hist.length - 1]
   const teamCount = Object.keys(lastWeek.ranks).length || 10
@@ -1495,7 +1550,7 @@ const trajectoryDeck = computed<string>(() => {
     return `${name} has been at the bottom for most of the season. The chase is for the seats above.`
   }
   // Default — name the focused teams when no single shape stands out.
-  return `Every team's climb through the standings. The top seeds and your team run bright.`
+  return `Every team's climb through the standings. The top seeds and the home team run bright.`
 })
 
 /* ─── Editorial beats — fixture-driven visual data, live editorial copy ─── */
@@ -1701,6 +1756,137 @@ function formatPillLabel(label: string): string {
   gap: 64px;
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
+}
+
+/* ─── LOADING STATE ───────────────────────────────────────────── */
+/* Mirrors Beat / Issue / Chronicles loading treatment so the four
+   surfaces feel like one publication. */
+.pr-loading {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background:
+    radial-gradient(
+      ellipse 600px 400px at 50% 35%,
+      oklch(0.66 0.22 0 / 0.10),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 700px 400px at 50% 95%,
+      oklch(0.78 0.18 92 / 0.06),
+      transparent 70%
+    );
+  animation: pr-loading-glow 4s ease-in-out infinite alternate;
+}
+@keyframes pr-loading-glow {
+  0%   { opacity: 0.85; }
+  100% { opacity: 1.00; }
+}
+.pr-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: oklch(0.18 0.015 90);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+}
+.pr-loading-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-primary) 50%,
+    transparent 100%
+  );
+  animation: pr-loading-slide 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes pr-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.pr-loading-stage {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.pr-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
+.pr-loading-logo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  perspective: 800px;
+}
+.pr-loading-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 18px;
+  animation:
+    pr-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    pr-loading-spin 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite 320ms;
+}
+@keyframes pr-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes pr-loading-spin {
+  0%, 100% { transform: rotateY(-50deg); }
+  50%      { transform: rotateY( 50deg); }
+}
+.pr-loading-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+  color: var(--ink-1);
+  margin: 0 0 10px;
+  animation: pr-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 320ms both;
+}
+.pr-loading-sub {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 42ch;
+  animation: pr-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+@keyframes pr-loading-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── SECTION REVEAL STAGGER ──────────────────────────────────── */
+/* Direct children stagger in after the loading guard releases. */
+.cat-rankings > *:not(.pr-loading) {
+  animation: pr-section-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.cat-rankings > *:not(.pr-loading):nth-child(1) { animation-delay: 0ms; }
+.cat-rankings > *:not(.pr-loading):nth-child(2) { animation-delay: 60ms; }
+.cat-rankings > *:not(.pr-loading):nth-child(3) { animation-delay: 120ms; }
+.cat-rankings > *:not(.pr-loading):nth-child(4) { animation-delay: 180ms; }
+.cat-rankings > *:not(.pr-loading):nth-child(n+5) { animation-delay: 240ms; }
+@keyframes pr-section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-rankings > *:not(.pr-loading) { animation: none; }
 }
 
 /* ─── Live-data load + error banner (mirrors Home view) ───────── */

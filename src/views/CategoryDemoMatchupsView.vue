@@ -1,18 +1,33 @@
 <template>
   <div class="cmlist">
     <!-- ─────────────────────────────────────────────────────────────
-         LIVE LOAD STATUS — only renders when a leagueId is in the URL
-         and the live adapter is fetching or has errored. The
-         underlying editorial keeps a fixture-derived render as its
-         initial value, so the page remains visually populated.
+         LIVE LOAD STATUS — strict live mode shows the full-page loading
+         state until the adapter resolves. Mirrors Beat / Issue /
+         Chronicles / Power Rankings so the surfaces feel like one
+         publication.
     ────────────────────────────────────────────────────────────── -->
-    <div v-if="liveLoading" class="live-banner live-banner-loading" role="status" aria-live="polite">
-      <span class="live-banner-mark" aria-hidden="true">
-        <img src="/tlb-favicon.png" alt="" class="live-banner-mark-img" />
-      </span>
-      Loading your league from {{ platformLabel }}. Hang tight.
+    <LiveLoadError v-if="liveError" :message="liveError" />
+    <div
+      v-if="isStrictLiveMode && !liveData && !liveError"
+      class="matchups-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="matchups-loading-bar" aria-hidden="true">
+        <span class="matchups-loading-bar-fill"></span>
+      </div>
+      <div class="matchups-loading-stage">
+        <div class="matchups-loading-logo-shadow">
+          <div class="matchups-loading-logo" aria-hidden="true">
+            <img src="/tlb-favicon.png" alt="" />
+          </div>
+        </div>
+        <p class="matchups-loading-title">{{ loadingTitle }}</p>
+        <p class="matchups-loading-sub">{{ loadingSubline }}</p>
+      </div>
     </div>
-    <LiveLoadError v-else-if="liveError" :message="liveError" />
+
+    <template v-else>
 
     <!-- ─────────────────────────────────────────────────────────────
          1. PAGE HEADER
@@ -403,11 +418,12 @@
       @close="closeDetail"
       @open-signup="$emit('open-signup')"
     />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type {
   CategoryLeagueData,
@@ -505,7 +521,16 @@ const platformLabel = computed(() => {
 
 const currentWeek = computed(() => data.value.currentWeek)
 
-onMounted(async () => {
+// Editorial-voice loading copy. Same shape as Beat / Issue / Chronicles
+// / Power Rankings so the surfaces feel like one publication.
+const loadingTitle = computed(() => `Catching the games.`)
+const loadingSubline = computed(() => {
+  const league = strictLeagueRecord.value?.league_name
+  if (league) return `Pulling ${league} from ${platformLabel.value}.`
+  return `Pulling this week's matchups from ${platformLabel.value}.`
+})
+
+async function loadMatchups() {
   // Strict deep-link / refresh: hydrate the leagues store first so we
   // can resolve the platform + platform_league_id for the URL UUID.
   if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
@@ -515,6 +540,12 @@ onMounted(async () => {
       console.warn('[CategoryDemoMatchupsView] fetchLeagues failed:', err)
     }
   }
+
+  // Reset prior render state — component is reused across leagues,
+  // so without this the previous league's matchups stay on screen
+  // until the new fetch resolves and the loading guard never appears.
+  liveData.value = null
+  liveError.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -533,6 +564,11 @@ onMounted(async () => {
       :                        await sleeperLeagueToCategoryData(id, opts)
     liveData.value = fetched
     liveEditorial.value = renderMatchupsPage(fetched)
+    // Backfill placeholder league_name once the real name resolves —
+    // mirrors Beat / Chronicles so the switcher chip stays in sync.
+    if (leagueRowId && fetched.leagueName) {
+      void leaguesStore.maybeBackfillLeagueName(leagueRowId, fetched.leagueName)
+    }
   } catch (err) {
     const labelFor =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
@@ -540,7 +576,22 @@ onMounted(async () => {
   } finally {
     liveLoading.value = false
   }
+}
+
+onMounted(() => {
+  void loadMatchups()
 })
+
+// Watch for league-switcher navigation. Same component is reused on
+// every `/leagues/:leagueId/matchups` route, so onMounted does NOT
+// fire on switcher navigation.
+watch(
+  () => route.params.leagueId,
+  (next, prev) => {
+    if (next === prev) return
+    void loadMatchups()
+  },
+)
 
 function collectUserIdentity() {
   try {
@@ -1161,6 +1212,119 @@ const heroNowX = computed(() => {
   gap: 40px;
   color: var(--ink-1);
   font-family: 'Barlow', sans-serif;
+}
+
+/* ─── LOADING STATE ───────────────────────────────────────────── */
+/* Mirrors Beat / Issue / Chronicles / Power Rankings. */
+.matchups-loading {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background:
+    radial-gradient(ellipse 600px 400px at 50% 35%, oklch(0.66 0.22 0 / 0.10), transparent 70%),
+    radial-gradient(ellipse 700px 400px at 50% 95%, oklch(0.78 0.18 92 / 0.06), transparent 70%);
+  animation: matchups-loading-glow 4s ease-in-out infinite alternate;
+}
+@keyframes matchups-loading-glow {
+  0%   { opacity: 0.85; }
+  100% { opacity: 1.00; }
+}
+.matchups-loading-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: oklch(0.18 0.015 90);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+}
+.matchups-loading-bar-fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-primary) 50%, transparent 100%);
+  animation: matchups-loading-slide 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes matchups-loading-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.matchups-loading-stage {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.matchups-loading-logo-shadow {
+  margin: 0 0 28px;
+  filter: drop-shadow(0 12px 32px oklch(0 0 0 / 0.45));
+}
+.matchups-loading-logo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  perspective: 800px;
+}
+.matchups-loading-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 18px;
+  animation:
+    matchups-loading-logo-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both,
+    matchups-loading-spin 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite 320ms;
+}
+@keyframes matchups-loading-logo-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes matchups-loading-spin {
+  0%, 100% { transform: rotateY(-50deg); }
+  50%      { transform: rotateY( 50deg); }
+}
+.matchups-loading-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.014em;
+  color: var(--ink-1);
+  margin: 0 0 10px;
+  animation: matchups-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 320ms both;
+}
+.matchups-loading-sub {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 42ch;
+  animation: matchups-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+@keyframes matchups-loading-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── SECTION REVEAL STAGGER ──────────────────────────────────── */
+.cmlist > *:not(.matchups-loading) {
+  animation: matchups-section-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.cmlist > *:not(.matchups-loading):nth-child(1) { animation-delay: 0ms; }
+.cmlist > *:not(.matchups-loading):nth-child(2) { animation-delay: 60ms; }
+.cmlist > *:not(.matchups-loading):nth-child(3) { animation-delay: 120ms; }
+.cmlist > *:not(.matchups-loading):nth-child(4) { animation-delay: 180ms; }
+.cmlist > *:not(.matchups-loading):nth-child(n+5) { animation-delay: 240ms; }
+@keyframes matchups-section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmlist > *:not(.matchups-loading) { animation: none; }
 }
 .avatar-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
@@ -1874,7 +2038,7 @@ const heroNowX = computed(() => {
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
               background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .hero-cta:hover { transform: translateY(-1px); }
 }
 .hero-cta:active {
@@ -1907,7 +2071,7 @@ const heroNowX = computed(() => {
               border-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .feed-card:hover { transform: translateY(-1px); }
 }
 .feed-card:active {
@@ -2068,7 +2232,9 @@ const heroNowX = computed(() => {
   transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1),
               border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.feed-share:hover { color: var(--ink-1); border-color: oklch(0.36 0.015 90); }
+@media (hover: hover) and (pointer: fine) {
+  .feed-share:hover { color: var(--ink-1); border-color: oklch(0.36 0.015 90); }
+}
 .feed-share:active {
   transform: scale(0.97);
   transition-duration: 100ms;

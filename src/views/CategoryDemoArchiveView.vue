@@ -1,25 +1,23 @@
 <template>
   <div class="archive">
-    <router-link
-      v-if="chroniclesBackLink"
-      :to="chroniclesBackLink"
-      class="chronicles-back"
-    >← Chronicles</router-link>
+    <!-- Chronicles is a sibling tab in the sub-nav now, not a parent.
+         The old "← Chronicles" breadcrumb pointed at a hub that no
+         longer exists, so it's gone. -->
     <header class="archive-head">
       <p class="archive-eyebrow">
         <span class="archive-eyebrow-dot" aria-hidden="true"></span>
-        Chronicles · Records
+        Chronicles · Past issues
       </p>
-      <h1 class="archive-headline">Every issue you've held.</h1>
+      <h1 class="archive-headline">The issues on the shelf.</h1>
       <p class="archive-deck">
-        Every week you visit during an issue's run, that issue joins your shelf.
-        Miss a week and the slot stays empty.
+        Each weekly visit during an issue's run earns a slot on the shelf.
+        Missed weeks stay empty.
       </p>
 
       <div v-if="coverCount > 0" class="archive-counts">
         <span class="archive-count">
           <strong>{{ coverCount }}</strong>
-          {{ coverCount === 1 ? 'issue' : 'issues' }} in your collection
+          {{ coverCount === 1 ? 'issue' : 'issues' }} collected
         </span>
         <span v-if="leagueCount > 1" class="archive-count archive-count-dim">
           across <strong>{{ leagueCount }}</strong> leagues
@@ -27,7 +25,10 @@
       </div>
     </header>
 
-    <!-- Empty state — no issues collected on any league yet. -->
+    <!-- Empty state — no issues collected on any league yet. Direct
+         second-person framing acceptable here for clarity (a single
+         "you" beats arch detachment when the user is being told what
+         to do next). -->
     <div v-if="coverCount === 0" class="archive-empty">
       <div class="archive-empty-mark" aria-hidden="true">
         <svg width="40" height="48" viewBox="0 0 40 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -39,8 +40,8 @@
       </div>
       <h2 class="archive-empty-headline">No issues yet.</h2>
       <p class="archive-empty-body">
-        Your collection starts when you visit during an issue's live week.
-        Come back next Monday for the new issue.
+        The shelf starts filling once you visit during an issue's live week.
+        Next Monday is the next issue.
       </p>
     </div>
 
@@ -110,14 +111,8 @@ const route = useRoute()
 const leaguesStore = useLeaguesStore()
 const issueStore = useIssueStore()
 
-/** Breadcrumb back to the Chronicles landing page when this view was
- *  opened from /chronicles. Anchors /archive as a deeper view inside
- *  Chronicles rather than a standalone surface. */
-const chroniclesBackLink = computed<string | null>(() => {
-  const leagueId = route.params.leagueId
-  if (typeof leagueId !== 'string' || leagueId.length === 0) return null
-  return `/leagues/${leagueId}/chronicles`
-})
+// `chroniclesBackLink` removed — Chronicles is a sibling tab now, not
+// a parent surface.
 
 /** The league whose page we're on (the one the user is "in"). Null on
  *  the demo route. Drives ordering (active first) + "Live now". */
@@ -273,20 +268,29 @@ function platformLabel(p?: string): string {
   color: oklch(0.97 0.005 90);
 }
 
-.chronicles-back {
-  display: inline-block;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent-tertiary);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  margin: -8px 0 16px;
-  transition: border-color 200ms ease;
+/* ─── SECTION REVEAL STAGGER ──────────────────────────────────── */
+/* Matches Beat / Issue / Chronicles / Power Rankings / Matchups /
+   Draft. Archive doesn't have a live-data loading guard (the
+   collection comes from a local store), but the stagger on
+   first-paint still helps the shelf assemble rather than slam. */
+.archive > * {
+  animation: archive-section-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
-.chronicles-back:hover { border-bottom-color: currentColor; }
+.archive > *:nth-child(1) { animation-delay: 0ms; }
+.archive > *:nth-child(2) { animation-delay: 70ms; }
+.archive > *:nth-child(3) { animation-delay: 140ms; }
+.archive > *:nth-child(4) { animation-delay: 210ms; }
+.archive > *:nth-child(n+5) { animation-delay: 280ms; }
+@keyframes archive-section-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive > * { animation: none; }
+}
+
+/* `.chronicles-back` style removed — the breadcrumb pointed at a hub
+   page that no longer exists after the three-tab collapse. */
 
 .archive-head {
   display: flex;
