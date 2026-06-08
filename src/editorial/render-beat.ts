@@ -310,6 +310,10 @@ const RACE_HEADLINES: VariantFn<RacePayload>[] = [
 // rows apart on THE BOARD (which is power-sorted). Body lines name
 // the playoff stake so the reader doesn't have to translate.
 const RACE_BODIES: VariantFn<RacePayload>[] = [
+  // Tied at the seam — the most dramatic race + playoff stakes.
+  (p, _c) => p.gap === 0 && p.distanceFromCutline <= 0.5 ? `Tied in the standings — and on the playoff line.` : null,
+  (p, _c) => p.gap === 0 && p.distanceFromCutline <= 1.5 ? `Tied in the standings, a seat from the cutoff.` : null,
+  (p, _c) => p.gap === 0 ? `Dead even in the standings.` : null,
   // Right at the cutline — the playoff seam itself.
   (p, _c) => p.distanceFromCutline <= 0.5 ? `Adjacent in the standings — and on the playoff line.` : null,
   (p, _c) => p.distanceFromCutline <= 0.5 ? `The seam at the playoff cutoff.` : null,
@@ -352,6 +356,21 @@ const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', '
 // reads stale if the reader visits at 2 PM after games have started.
 // New variants describe state without implying a time anchor.
 const BRIEFING_HEADLINES: VariantFn<BriefingPayload>[] = [
+  // Monday-morning kickoff variants — fire when the week's slate
+  // exists but nothing's live yet. Gives the wire a real opening
+  // headline instead of nothing on the slow-start day. Gated on
+  // weekday === 1 (Monday) AND liveCount === 0 so they don't leak
+  // into mid-week states.
+  (p, _c) => p.weekday === 1 && p.liveCount === 0
+    ? `The slate is set for the week.`
+    : null,
+  (p, _c) => p.weekday === 1 && p.liveCount === 0
+    ? `New week, new scoreboard.`
+    : null,
+  (p, _c) => p.weekday === 1 && p.liveCount === 0
+    ? `Monday: the wire opens on a fresh slate.`
+    : null,
+  // Active-day variants (live games in progress).
   (p, _c) => p.coinFlipCount >= 3
     ? `${p.coinFlipCount} coin flips on the ${WEEKDAY_NAMES[p.weekday]} slate.`
     : null,
@@ -361,8 +380,8 @@ const BRIEFING_HEADLINES: VariantFn<BriefingPayload>[] = [
   (p, _c) => p.coinFlipCount === 1
     ? `One coin flip on the ${WEEKDAY_NAMES[p.weekday]} slate.`
     : null,
-  (p, _c) => `${p.liveCount} matchups in motion today.`,
-  (p, _c) => `${WEEKDAY_NAMES[p.weekday]}'s slate: ${p.liveCount} live, ${p.coinFlipCount} on the bubble.`,
+  (p, _c) => p.liveCount > 0 ? `${p.liveCount} matchups in motion today.` : null,
+  (p, _c) => p.liveCount > 0 ? `${WEEKDAY_NAMES[p.weekday]}'s slate: ${p.liveCount} live, ${p.coinFlipCount} on the bubble.` : null,
 ]
 
 const BRIEFING_BODIES: VariantFn<BriefingPayload>[] = [
@@ -371,6 +390,13 @@ const BRIEFING_BODIES: VariantFn<BriefingPayload>[] = [
   // were multi-word.
   (p, c) => p.marqueeHomeTeamId && p.marqueeAwayTeamId
     ? `${c.teamName(p.marqueeHomeTeamId)} vs ${c.teamName(p.marqueeAwayTeamId)} is the closest one to watch.`
+    : null,
+  // Monday body variants — anchor the slate-set framing.
+  (p, _c) => p.weekday === 1 && p.liveCount === 0
+    ? `Six days of category trading ahead.`
+    : null,
+  (p, _c) => p.weekday === 1 && p.liveCount === 0
+    ? `Lineups locking in. Final cuts at first pitch.`
     : null,
   (p, _c) => p.weekday === 0
     ? `Last day of the scoring week.`
@@ -606,8 +632,23 @@ function groupByDay(items: BeatItem[], now: Date): BeatDay[] {
  */
 function markFeaturedPerDay(items: BeatItem[]): BeatItem[] {
   if (items.length === 0) return items
-  const importanceWeight = (i: BeatItem) =>
-    i.importance === 'high' ? 3 : i.importance === 'med' ? 2 : 1
+  // Editorial weight = importance band × 10 + category bonus.
+  // Player events (a 3-HR game, a bench blunder) lead the day at
+  // the same importance as a sweep FINAL because they're the
+  // memorable single-name stories. A magazine cover doesn't lead
+  // with "Team X beat Team Y 16-4"; it leads with "Player Z did
+  // something rare." The +2 bonus puts HUGE_GAME / BENCH_BLUNDER
+  // ahead of FINAL when both are 'high'. THRONE gets +1 — it's a
+  // named story too but less personal.
+  const importanceWeight = (i: BeatItem) => {
+    const base = i.importance === 'high' ? 30 : i.importance === 'med' ? 20 : 10
+    const bonus =
+      i.category === 'HUGE_GAME' ? 2
+      : i.category === 'BENCH_BLUNDER' ? 2
+      : i.category === 'THRONE' ? 1
+      : 0
+    return base + bonus
+  }
   let leader = items[0]
   let leaderWeight = importanceWeight(leader)
   for (const item of items.slice(1)) {

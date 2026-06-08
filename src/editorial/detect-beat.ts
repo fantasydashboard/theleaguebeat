@@ -576,19 +576,20 @@ export function detectBriefing(
 ): BeatItemSeed[] {
   const current = data.matchupsCurrentWeek
   if (!current || current.length === 0) return []
-  // Brief at 7:00 AM today. Skip if it's still pre-briefing morning,
-  // or if today is Monday (heavy day already).
+  // Brief at 7:00 AM today. Skip if it's still pre-briefing morning.
   const ts = new Date(now)
   ts.setHours(7, 0, 0, 0)
   if (ts.getTime() > now.getTime()) return []
-  if (ts.getDay() === 1) return []
-  // Count the live and coin-flip matchups.
+  const isMondayMorning = ts.getDay() === 1
+  // Count live, coin-flip, and upcoming matchups.
   let liveCount = 0
   let coinFlipCount = 0
+  let upcomingCount = 0
   let closestMatchup: typeof current[number] | null = null
   let closestDistance = Infinity
   for (const m of current) {
     if (m.status === 'live' || m.status === 'coasting') liveCount++
+    if (m.status === 'upcoming') upcomingCount++
     const prob = m.homeWinProb
     if (typeof prob === 'number') {
       const dist = Math.abs(prob - 0.5)
@@ -603,14 +604,25 @@ export function detectBriefing(
       if (margin <= 1 && m.status !== 'final') coinFlipCount++
     }
   }
-  // Only fire if there's something to brief about. An empty wire would
-  // be worse than no item.
-  if (liveCount === 0 && coinFlipCount === 0) return []
+  // Decide whether to fire:
+  //   - Monday morning with an upcoming slate → fire the "slate is
+  //     set" briefing (gives the wire a real opening item on slow-
+  //     start days instead of just STREAK/CELLAR carryover).
+  //   - Any weekday with live or coin-flip matchups → existing
+  //     live-action briefing.
+  //   - Otherwise nothing to brief about — silent.
+  const fireMondaySlate = isMondayMorning && upcomingCount > 0 && liveCount === 0
+  const fireLive = liveCount > 0 || coinFlipCount > 0
+  if (!fireMondaySlate && !fireLive) return []
+  // Importance: live action with multiple coin flips bumps to med;
+  // everything else stays low so it sits below the editorial items.
+  const importance: BeatImportance =
+    coinFlipCount >= 3 ? 'med' : 'low'
   return [{
     id: `BRIEFING:${dayKeyForBriefing(ts)}`,
     category: 'BRIEFING',
     timestamp: ts,
-    importance: coinFlipCount >= 3 ? 'med' : 'low',
+    importance,
     payload: {
       category: 'BRIEFING',
       weekday: ts.getDay(),
@@ -619,7 +631,7 @@ export function detectBriefing(
       marqueeHomeTeamId: closestMatchup?.homeTeamId,
       marqueeAwayTeamId: closestMatchup?.awayTeamId,
     },
-    signal: `briefing: ${liveCount} live, ${coinFlipCount} coin flips, marquee ${closestMatchup?.id ?? 'none'}`,
+    signal: `briefing: ${liveCount} live, ${coinFlipCount} coin flips, ${upcomingCount} upcoming, marquee ${closestMatchup?.id ?? 'none'}`,
   }]
 }
 

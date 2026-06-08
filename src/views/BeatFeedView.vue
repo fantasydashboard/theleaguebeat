@@ -124,6 +124,7 @@
           <div
             v-else-if="item.isFeatured && item.widget && item.widget.teamIds && item.widget.teamIds.length > 0"
             class="beat-feature-portrait"
+            :class="{ 'beat-feature-portrait-vs': item.category === 'RACE' || item.category === 'LIVE' }"
             aria-hidden="true"
           >
             <span
@@ -798,6 +799,26 @@ function collectUserIdentity() {
   left: 38px;
   opacity: 0.78;
   z-index: -1;
+}
+
+/* RACE / LIVE variant — both teams are equal subjects (a race
+   has no winner, a live game has no result yet), so the stacked
+   "primary / secondary" treatment misreads. Render them side by
+   side at equal size; both deserve the same visual weight. */
+.beat-feature-portrait-vs .beat-feature-avatar {
+  width: 42px;
+  height: 42px;
+  top: 23px;
+  left: 0;
+  border-radius: 10px;
+}
+.beat-feature-portrait-vs .beat-feature-avatar-back {
+  width: 42px;
+  height: 42px;
+  top: 23px;
+  left: 46px;
+  opacity: 1;
+  z-index: 0;
 }
 .beat-feature-portrait-player {
   position: relative;
