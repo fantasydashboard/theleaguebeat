@@ -911,6 +911,10 @@ function collectUserIdentity() {
 .beat-category-pill[data-category='LIVE']          { color: var(--accent-tertiary); }
 .beat-category-pill[data-category='HUGE_GAME']     { color: oklch(0.78 0.18 92); }
 .beat-category-pill[data-category='BENCH_BLUNDER'] { color: var(--accent-secondary); }
+/* WIRE — waiver-wire heads-up. Distinct cyan/teal so it doesn't
+   compete with HUGE_GAME's amber or BENCH_BLUNDER's pink. Lower
+   chroma than RACE so the two cyan items don't sit identical. */
+.beat-category-pill[data-category='FREE_AGENT']    { color: oklch(0.78 0.14 200); }
 
 .beat-content {
   display: flex;

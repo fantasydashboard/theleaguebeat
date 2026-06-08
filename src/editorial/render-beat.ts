@@ -28,6 +28,7 @@ import type {
   LivePayload,
   HugeGamePayload,
   BenchBlunderPayload,
+  FreeAgentPayload,
 } from './detect-beat.ts'
 import { detectBeat } from './detect-beat.ts'
 import { stripEmojiForEditorial } from './detect-lede.ts'
@@ -122,6 +123,10 @@ function categoryLabel(c: BeatCategory): string {
     // headline. The viewer-side framing ("Your bench had…")
     // already names the surface, so "Blunder" alone reads clear.
     case 'BENCH_BLUNDER': return 'Blunder'
+    // "Wire" — short, editorial ("the waiver wire"), fits the
+    // 80px pill column. "Free Agent" / "FA" both alternatives
+    // but "Wire" reads more publication-voice.
+    case 'FREE_AGENT':    return 'Wire'
   }
 }
 
@@ -154,6 +159,7 @@ function renderHeadline(payload: BeatPayload, ctx: RenderCtx): string {
     case 'LIVE':          return pickStable(ctx.seed.id, LIVE_HEADLINES, payload, ctx)
     case 'HUGE_GAME':     return pickStable(ctx.seed.id, HUGE_GAME_HEADLINES, payload, ctx)
     case 'BENCH_BLUNDER': return pickStable(ctx.seed.id, BENCH_BLUNDER_HEADLINES, payload, ctx)
+    case 'FREE_AGENT':    return pickStable(ctx.seed.id, FREE_AGENT_HEADLINES, payload, ctx)
   }
 }
 
@@ -169,6 +175,7 @@ function renderBody(payload: BeatPayload, ctx: RenderCtx): string | undefined {
     case 'LIVE':          return pickStableOptional(ctx.seed.id + ':body', LIVE_BODIES, payload, ctx)
     case 'HUGE_GAME':     return pickStableOptional(ctx.seed.id + ':body', HUGE_GAME_BODIES, payload, ctx)
     case 'BENCH_BLUNDER': return pickStableOptional(ctx.seed.id + ':body', BENCH_BLUNDER_BODIES, payload, ctx)
+    case 'FREE_AGENT':    return pickStableOptional(ctx.seed.id + ':body', FREE_AGENT_BODIES, payload, ctx)
   }
 }
 
@@ -502,6 +509,50 @@ const BENCH_BLUNDER_BODIES: VariantFn<BenchBlunderPayload>[] = [
   (_p, _c) => null,
 ]
 
+/* ─────────────────────────────────────────────────────────────────
+   FREE AGENT — waiver-wire heads-up. An unowned player cleared a
+   HIGH-importance threshold. Tone is editorial / informational —
+   "here's a story, here's the opportunity." Not breathless.
+───────────────────────────────────────────────────────────────── */
+
+const FREE_AGENT_HEADLINES: VariantFn<FreeAgentPayload>[] = [
+  // No-hitter is the rarest possible story — leads with the act.
+  (p, _c) => p.trigger === 'no-hitter'
+    ? `No-hitter on waivers: ${p.playerName}. ${p.headlineStats}.`
+    : null,
+  // Multi-cat (2+ HR + 5+ RBI) — cross-category windfall.
+  (p, _c) => p.trigger === 'multi-cat'
+    ? `Free agent went off: ${p.playerName}, ${p.headlineStats}.`
+    : null,
+  // Multi-HR (3+ HR).
+  (p, _c) => p.trigger === 'multi-hr'
+    ? `Multi-HR on waivers: ${p.playerName}, ${p.headlineStats}.`
+    : null,
+  // Big K (10+ K start).
+  (p, _c) => p.trigger === 'big-k'
+    ? `Free agent K-fest: ${p.playerName}, ${p.headlineStats}.`
+    : null,
+  // Generic FA framings — pool-bottom defaults.
+  (p, _c) => `On waivers: ${p.playerName} went ${p.headlineStats}.`,
+  (p, _c) => `Free agent watch: ${p.playerName}, ${p.headlineStats}.`,
+  (p, _c) => `Sitting on waivers: ${p.playerName}, ${p.headlineStats}.`,
+]
+
+const FREE_AGENT_BODIES: VariantFn<FreeAgentPayload>[] = [
+  (p, _c) => p.trigger === 'no-hitter'
+    ? `One of the rarest stat lines in baseball — and currently unowned.`
+    : null,
+  (p, _c) => p.trigger === 'multi-cat' || p.trigger === 'multi-hr'
+    ? `Pickup-of-the-week material.`
+    : null,
+  (p, _c) => p.trigger === 'big-k'
+    ? `Streamer-of-the-week material.`
+    : null,
+  (_p, _c) => `Available in your league.`,
+  (_p, _c) => `Unowned across the league this week.`,
+  (_p, _c) => null,
+]
+
 const LIVE_BODIES: VariantFn<LivePayload>[] = [
   (p, _c) => typeof p.homeWinProb === 'number' && p.homeWinProb >= 0.6 && p.homeWinProb < 0.75
     ? `Projection has it ${Math.round(p.homeWinProb * 100)}-${Math.round((1 - p.homeWinProb) * 100)}.`
@@ -590,6 +641,18 @@ function renderWidget(payload: BeatPayload): BeatWidget | undefined {
         playerName: payload.playerName,
         photoUrl: payload.photoUrl,
         statLine: payload.benchedStats,
+      }
+    case 'FREE_AGENT':
+      // No team attribution — the player has no owner. teamIds is
+      // left empty so the view's featured + non-featured layouts
+      // skip the owning-team avatar block (both branches gate on
+      // teamIds.length > 0).
+      return {
+        kind: 'player-photo',
+        teamIds: [],
+        playerName: payload.playerName,
+        photoUrl: payload.photoUrl,
+        statLine: payload.headlineStats,
       }
   }
 }

@@ -37,6 +37,7 @@ export type BeatCategory =
   | 'LIVE'          // in-progress close matchup tracker
   | 'HUGE_GAME'     // single player's standout day cleared a threshold
   | 'BENCH_BLUNDER' // benched player would have qualified as HUGE_GAME
+  | 'FREE_AGENT'    // unowned player cleared a HIGH threshold — waiver-wire heads-up
 
 export type BeatImportance = 'high' | 'med' | 'low'
 
@@ -80,6 +81,7 @@ export type BeatPayload =
   | LivePayload
   | HugeGamePayload
   | BenchBlunderPayload
+  | FreeAgentPayload
 
 export interface FinalPayload {
   category: 'FINAL'
@@ -197,6 +199,20 @@ export interface HugeGamePayload {
   /** Display-ready stat line ("4-for-5, 2 HR, 6 RBI"). */
   headlineStats: string
   /** Raw stats for fine-grained body lines. */
+  stats: Record<string, number>
+}
+
+export interface FreeAgentPayload {
+  category: 'FREE_AGENT'
+  playerId: string
+  playerName: string
+  position?: string
+  mlbTeam?: string
+  photoUrl?: string
+  /** Same trigger taxonomy as HugeGame — drives variant copy. */
+  trigger: HugeGamePayload['trigger']
+  day: string
+  headlineStats: string
   stats: Record<string, number>
 }
 
@@ -899,6 +915,75 @@ export function detectHugeGames(
 }
 
 /**
+ * FREE AGENT — fires per UNOWNED PlayerNight that clears the HIGH
+ * importance threshold (3+ HR, 12+ K, no-hitter, multi-cat). The
+ * editorial story is "a guy on waivers just did something rare —
+ * heads up." We deliberately keep the bar high so the wire doesn't
+ * drown in routine FA notable nights (4-hit games, single saves).
+ *
+ * Silent when no playerNights are present. No team attribution
+ * (fantasyTeamId is omitted) — the widget renders just the player
+ * photo with no owning-team avatar.
+ */
+export function detectFreeAgents(
+  data: CategoryLeagueData,
+  now: Date = new Date(),
+): BeatItemSeed[] {
+  const nights = data.playerNights
+  if (!nights || nights.length === 0) return []
+  const out: BeatItemSeed[] = []
+  for (const night of nights) {
+    // Owned players go through HUGE_GAME / BENCH_BLUNDER. Free
+    // agents only reach this path.
+    if (night.ownedByTeamIds.length > 0) continue
+    const verdict = classifyNight(night)
+    if (!verdict) continue
+    // Strict gate: only HIGH importance gets a FREE_AGENT item.
+    // That keeps the bar at no-hitters, 3+ HR games, 12+ K starts,
+    // and the 2 HR + 5 RBI multi-cat lines. A 4-hit FA day stays
+    // off the wire — those happen too often to be news.
+    if (verdict.importance !== 'high') continue
+    const stats = nightToStatRecord(night)
+    const headlineStats = formatNightStats(night)
+    const photoUrl = playerHeadshotUrl({
+      platform: 'espn', // MLB branch in playerHeadshotUrl ignores platform
+      sport: 'mlb',
+      playerId: night.mlbId,
+    }) ?? undefined
+    // 8 PM local on the game day, hash-staggered per player so
+    // multiple FA stories on the same night don't clump.
+    const day = new Date(`${night.gameDate}T20:00:00`)
+    const tsBase = isNaN(day.getTime()) ? now : day
+    const offsetMinutes = hashStagger(`fa:${night.mlbId}`, 0, 90)
+    const ts = new Date(tsBase.getTime() - offsetMinutes * 60 * 1000)
+    out.push({
+      id: `FREE_AGENT:${night.mlbId}:${night.gameDate}`,
+      category: 'FREE_AGENT',
+      timestamp: ts,
+      // Cap at 'med' — even a no-hitter by a FA is news, not a
+      // story about anyone's team. Keeps FA items out of the
+      // day's featured-lead slot (reserved for owned-player drama
+      // and decisive matchups).
+      importance: 'med',
+      payload: {
+        category: 'FREE_AGENT',
+        playerId: String(night.mlbId),
+        playerName: night.name,
+        position: night.position,
+        mlbTeam: night.mlbTeam,
+        photoUrl,
+        trigger: verdict.trigger,
+        day: night.gameDate,
+        headlineStats,
+        stats,
+      },
+      signal: `free agent: ${night.name} (${verdict.trigger})`,
+    })
+  }
+  return out
+}
+
+/**
  * BENCH BLUNDER — Phase 1: VIEWER-SIDE ONLY.
  *
  * Fires when a player on the viewer's own bench had a HUGE_GAME-tier
@@ -1019,6 +1104,7 @@ export function detectBeat(
     ...detectLive(data, now),
     ...detectHugeGames(data, now),
     ...detectBenchBlunders(data, now),
+    ...detectFreeAgents(data, now),
   ]
   return all.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 }
