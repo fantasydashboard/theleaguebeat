@@ -1519,6 +1519,27 @@ function collectUserIdentity() {
   padding: 0 0 80px;
 }
 
+/* ─── SECTION REVEAL STAGGER ──────────────────────────────────── */
+/* Once the loading guard releases, direct children stagger in so the
+   magazine assembles rather than slamming on screen. Skips the
+   loading guard (which has its own entrance via the glow). */
+.issue > *:not(.issue-loading) {
+  animation: issue-section-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.issue > *:not(.issue-loading):nth-child(1) { animation-delay: 0ms; }
+.issue > *:not(.issue-loading):nth-child(2) { animation-delay: 60ms; }
+.issue > *:not(.issue-loading):nth-child(3) { animation-delay: 120ms; }
+.issue > *:not(.issue-loading):nth-child(4) { animation-delay: 180ms; }
+.issue > *:not(.issue-loading):nth-child(5) { animation-delay: 240ms; }
+.issue > *:not(.issue-loading):nth-child(n+6) { animation-delay: 300ms; }
+@keyframes issue-section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .issue > *:not(.issue-loading) { animation: none; }
+}
+
 /* ─── LOADING STATE ───────────────────────────────────────────── */
 .issue-loading {
   position: relative;
@@ -1573,7 +1594,7 @@ function collectUserIdentity() {
     var(--accent-primary) 50%,
     transparent 100%
   );
-  animation: issue-loading-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: issue-loading-slide 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 @keyframes issue-loading-slide {
   0%   { transform: translateX(-100%); }
@@ -1586,10 +1607,6 @@ function collectUserIdentity() {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  /* Perspective so the logo's rotateY reads as 3D depth, not a
-     flat squash-and-stretch. ~800px gives a moderate sense of
-     dimensionality without making the rotation feel exaggerated. */
-  perspective: 800px;
 }
 /* Outer wrapper: drop-shadow only. */
 .issue-loading-logo-shadow {
@@ -1633,6 +1650,7 @@ function collectUserIdentity() {
   letter-spacing: -0.014em;
   color: var(--ink-1);
   margin: 0 0 10px;
+  animation: issue-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 320ms both;
 }
 .issue-loading-sub {
   font-size: 1rem;
@@ -1640,6 +1658,11 @@ function collectUserIdentity() {
   color: var(--ink-3);
   margin: 0;
   max-width: 42ch;
+  animation: issue-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+@keyframes issue-loading-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ─── MASTHEAD ────────────────────────────────────────────────── */
@@ -1838,9 +1861,11 @@ function collectUserIdentity() {
   color: var(--ink-1);
   text-decoration: none;
   border-bottom: 1px solid transparent;
-  transition: border-color 200ms ease;
+  transition: border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.issue-toc-list a:hover { border-bottom-color: var(--accent-secondary); }
+@media (hover: hover) and (pointer: fine) {
+  .issue-toc-list a:hover { border-bottom-color: var(--accent-secondary); }
+}
 
 /* ─── SECTIONS ────────────────────────────────────────────────── */
 .section {
@@ -2328,6 +2353,20 @@ function collectUserIdentity() {
   color: var(--accent-tertiary);
   text-decoration: none;
   border-bottom: 1px solid currentColor;
+  transition:
+    color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-bottom-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.chronicles-tease-link:active {
+  transform: scale(0.98);
+  transition-duration: 100ms;
+}
+@media (hover: hover) and (pointer: fine) {
+  .chronicles-tease-link:hover {
+    color: var(--ink-1);
+    border-bottom-color: var(--accent-secondary);
+  }
 }
 
 /* ─── FOOTER ─────────────────────────────────────────────────── */
@@ -2385,11 +2424,20 @@ function collectUserIdentity() {
   letter-spacing: 0.06em;
   cursor: pointer;
   text-decoration: none;
-  transition: border-color 200ms ease, color 200ms ease;
+  transition:
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.issue-footer-archive-btn:hover {
-  border-color: var(--accent-secondary);
-  color: var(--ink-1);
+.issue-footer-archive-btn:active {
+  transform: scale(0.97);
+  transition-duration: 100ms;
+}
+@media (hover: hover) and (pointer: fine) {
+  .issue-footer-archive-btn:hover {
+    border-color: var(--accent-secondary);
+    color: var(--ink-1);
+  }
 }
 .issue-footer-archive-btn-disabled {
   opacity: 0.42;

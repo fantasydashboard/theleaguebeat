@@ -616,7 +616,7 @@ function collectUserIdentity() {
     var(--accent-primary) 50%,
     transparent 100%
   );
-  animation: beat-loading-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: beat-loading-slide 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 @keyframes beat-loading-slide {
   0%   { transform: translateX(-100%); }
@@ -628,9 +628,6 @@ function collectUserIdentity() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* See IssueView for the perspective rationale — keeps the two
-     loading surfaces visually identical. */
-  perspective: 800px;
 }
 .beat-loading-logo-shadow {
   margin: 0 0 28px;
@@ -667,6 +664,10 @@ function collectUserIdentity() {
   letter-spacing: -0.014em;
   color: var(--ink-1);
   margin: 0 0 10px;
+  /* Lag the masthead 80ms behind the logo-in so the title reads
+     as "set after the lockup lands" rather than dropping in
+     simultaneously. */
+  animation: beat-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 320ms both;
 }
 .beat-loading-sub {
   font-size: 1rem;
@@ -674,6 +675,11 @@ function collectUserIdentity() {
   color: var(--ink-3);
   margin: 0;
   max-width: 42ch;
+  animation: beat-loading-text-in 360ms cubic-bezier(0.23, 1, 0.32, 1) 400ms both;
+}
+@keyframes beat-loading-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ─── Header ──────────────────────────────────────────────────── */
@@ -748,6 +754,20 @@ function collectUserIdentity() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Stagger the day groups when the loading guard releases. Reads as
+     "stories landing on the desk" instead of one paint frame dump.
+     Capped at the 4th day so the cascade doesn't feel laggy. */
+  animation: beat-day-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.beat-feed > .beat-day:nth-of-type(2) { animation-delay: 70ms; }
+.beat-feed > .beat-day:nth-of-type(3) { animation-delay: 140ms; }
+.beat-feed > .beat-day:nth-of-type(n+4) { animation-delay: 210ms; }
+@keyframes beat-day-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .beat-day { animation: none; }
 }
 .beat-day-label {
   font-family: 'Barlow Condensed', sans-serif;
@@ -799,18 +819,30 @@ function collectUserIdentity() {
   border-radius: 8px;
 }
 .beat-item-clickable {
-  transition: background-color 200ms ease;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
   border-radius: 8px;
-}
-.beat-item-clickable:hover {
-  background-color: oklch(0.13 0.015 90);
   cursor: pointer;
 }
 .beat-item-clickable .beat-item-headline {
-  transition: color 200ms ease;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.beat-item-clickable:hover .beat-item-headline {
-  color: var(--accent-secondary);
+/* Press feedback — these rows are full-width tappable cards. Without
+   a subtle scale on :active, taps feel like they're going into a void. */
+.beat-item-clickable:active {
+  transform: scale(0.997);
+  transition-duration: 100ms;
+}
+/* Touch devices trigger :hover on tap and the highlight stays sticky
+   until the next interaction — gate it behind hover-capable pointers. */
+@media (hover: hover) and (pointer: fine) {
+  .beat-item-clickable:hover {
+    background-color: oklch(0.13 0.015 90);
+  }
+  .beat-item-clickable:hover .beat-item-headline {
+    color: var(--accent-secondary);
+  }
 }
 .beat-item[data-importance='high']:not(.beat-item-featured)::before {
   content: '';
