@@ -20,6 +20,7 @@ import type {
   CategoryLeagueDataStanding,
 } from './types.ts'
 import { normalizeName } from './players/buildPlayerNights.ts'
+import { playerHeadshotUrl } from '@/utils/playerHeadshot'
 
 /* ─────────────────────────────────────────────────────────────────
    PUBLIC TYPES
@@ -823,6 +824,14 @@ export function detectHugeGames(
 ): BeatItemSeed[] {
   const nights = data.playerNights
   if (!nights || nights.length === 0) return []
+  // Viewer context for dedupe — when a HUGE_GAME would fire for a
+  // player that's ALSO on the viewer's own bench, the BENCH_BLUNDER
+  // tells that story better (it's the more specific angle). Skip
+  // the duplicate HUGE_GAME so the wire doesn't carry both for the
+  // same player+day. Cross-team HUGE_GAMES (other managers' owned
+  // players) still fire as usual.
+  const myTeamId = data.teams.find((t) => t.isMyTeam)?.id
+  const benchedKeys = data.myBenchedPlayers
   const out: BeatItemSeed[] = []
   for (const night of nights) {
     const verdict = classifyNight(night)
@@ -834,11 +843,22 @@ export function detectHugeGames(
     if (night.ownedByTeamIds.length === 0) continue
     const stats = nightToStatRecord(night)
     const headlineStats = formatNightStats(night)
+    const photoUrl = playerHeadshotUrl({
+      platform: 'espn', // MLB branch in playerHeadshotUrl ignores platform
+      sport: 'mlb',
+      playerId: night.mlbId,
+    }) ?? undefined
     // 8 PM local on the game day, hash-staggered per (player,team) so
     // multiple HUGE_GAMEs in one night don't stack at the same minute.
     const day = new Date(`${night.gameDate}T20:00:00`)
     const tsBase = isNaN(day.getTime()) ? now : day
+    const benchedThisNight =
+      myTeamId != null &&
+      benchedKeys != null &&
+      benchedKeys.has(normalizeName(night.name))
     for (const teamId of night.ownedByTeamIds) {
+      // Dedupe: the viewer's bench-blunder covers this combo.
+      if (teamId === myTeamId && benchedThisNight) continue
       const offsetMinutes = hashStagger(`${night.mlbId}:${teamId}`, 0, 90)
       const ts = new Date(tsBase.getTime() - offsetMinutes * 60 * 1000)
       out.push({
@@ -852,9 +872,7 @@ export function detectHugeGames(
           playerName: night.name,
           position: night.position,
           mlbTeam: night.mlbTeam,
-          // PlayerNight doesn't carry a photoUrl today. The widget
-          // falls back to player initials when undefined — safe.
-          photoUrl: undefined,
+          photoUrl,
           fantasyTeamId: teamId,
           trigger: verdict.trigger,
           day: night.gameDate,
@@ -915,6 +933,11 @@ export function detectBenchBlunders(
         : 'med'
     const day = new Date(`${night.gameDate}T22:00:00`)
     const ts = isNaN(day.getTime()) ? new Date() : day
+    const photoUrl = playerHeadshotUrl({
+      platform: 'espn', // MLB branch in playerHeadshotUrl ignores platform
+      sport: 'mlb',
+      playerId: night.mlbId,
+    }) ?? undefined
     out.push({
       id: `BENCH_BLUNDER:${myTeamId}:${night.mlbId}:${night.gameDate}`,
       category: 'BENCH_BLUNDER',
@@ -926,7 +949,7 @@ export function detectBenchBlunders(
         playerName: night.name,
         position: night.position,
         mlbTeam: night.mlbTeam,
-        photoUrl: undefined,
+        photoUrl,
         fantasyTeamId: myTeamId,
         day: night.gameDate,
         benchedStats,
