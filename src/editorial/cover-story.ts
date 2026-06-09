@@ -24,7 +24,7 @@
  * eyebrow + headline + body + stat chips.
  */
 
-import type { CategoryLeagueData } from './types.ts'
+import type { CategoryLeagueData, LeagueDataH2HPoints } from './types.ts'
 import { stripEmojiForEditorial } from './detect-lede.ts'
 
 export type CoverStoryKind =
@@ -55,24 +55,52 @@ export interface CoverStoryCandidate {
    PUBLIC ENTRY
 ───────────────────────────────────────────────────────────────── */
 
-export function detectCoverStory(data: CategoryLeagueData): CoverStoryCandidate | null {
-  const candidates: CoverStoryCandidate[] = []
-  const t = detectThroneChange(data)
-  if (t) candidates.push(t)
-  const w = detectWildArc(data)
-  if (w) candidates.push(w)
-  const c = detectCellarLock(data)
-  if (c) candidates.push(c)
-  const r = detectRaceFinale(data)
-  if (r) candidates.push(r)
-  const d = detectDynastyLock(data)
-  if (d) candidates.push(d)
-  const h = detectLeaderHold(data)
-  if (h) candidates.push(h)
+type CoverDetector = (data: CategoryLeagueData) => CoverStoryCandidate | null
 
+/** Run a set of detectors and return the highest-weight candidate. */
+function pickFrom(data: CategoryLeagueData, detectors: CoverDetector[]): CoverStoryCandidate | null {
+  const candidates = detectors
+    .map((d) => d(data))
+    .filter((c): c is CoverStoryCandidate => c != null)
   if (candidates.length === 0) return null
   candidates.sort((a, b) => b.weight - a.weight)
   return candidates[0]
+}
+
+export function detectCoverStory(data: CategoryLeagueData): CoverStoryCandidate | null {
+  return pickFrom(data, [
+    detectThroneChange,
+    detectWildArc,
+    detectCellarLock,
+    detectRaceFinale,
+    detectDynastyLock,
+    detectLeaderHold,
+  ])
+}
+
+/**
+ * Points-league cover story. Only the rank-movement arcs port cleanly:
+ * THRONE_CHANGE, DYNASTY_LOCK, WILD_ARC speak in weeks-at-#1 / season-arc /
+ * reign language with no category vocabulary. RACE_FINALE and LEADER_HOLD
+ * say "cats" (and CELLAR_LOCK needs per-category `ownsCount`), so they're
+ * excluded — a points league with no arc returns null here and the Issue
+ * falls back to its matchup-of-the-week hero.
+ *
+ * The detectors read only teams / standings / seasonRankHistory /
+ * currentWeek, all of which the points contract now carries; the cast
+ * exposes exactly that subset under the shared `CategoryLeagueData` shape.
+ */
+export function detectPointsCoverStory(points: LeagueDataH2HPoints): CoverStoryCandidate | null {
+  if (!points.standings?.length || !points.seasonRankHistory?.length) return null
+  const view = {
+    teams: points.teams,
+    standings: points.standings,
+    seasonRankHistory: points.seasonRankHistory,
+    currentWeek: points.currentWeek,
+    playoffCutoff: points.playoffCutoff,
+    regularSeasonEndWeek: points.regularSeasonEndWeek,
+  } as unknown as CategoryLeagueData
+  return pickFrom(view, [detectThroneChange, detectWildArc, detectDynastyLock])
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -228,42 +256,79 @@ function detectDynastyLock(data: CategoryLeagueData): CoverStoryCandidate | null
   }
 }
 
-function detectWildArc(data: CategoryLeagueData): CoverStoryCandidate | null {
+export function detectWildArc(data: CategoryLeagueData): CoverStoryCandidate | null {
   const hist = data.seasonRankHistory
   if (hist.length < 5) return null
   const teamCount = data.teams.length || 10
-  let widest: { teamId: string; range: number; min: number; max: number } | null = null
+
+  // Find the team with the widest rank range this season, tracking its
+  // chronological start and end ranks (not just min/max). The end rank
+  // is what the team IS now; rendering min → max as if it were a
+  // trajectory misreads as a fall for a team that actually climbed.
+  let widest:
+    | { teamId: string; range: number; min: number; max: number; start: number; end: number }
+    | null = null
   for (const team of data.teams) {
-    let min = Infinity, max = -Infinity
+    const series: number[] = []
     for (const w of hist) {
       const r = w.ranks[team.id]
-      if (r == null) continue
-      if (r < min) min = r
-      if (r > max) max = r
+      if (r != null) series.push(r)
     }
-    if (!isFinite(min) || !isFinite(max)) continue
+    if (series.length === 0) continue
+    const min = Math.min(...series)
+    const max = Math.max(...series)
     const range = max - min
-    if (!widest || range > widest.range) widest = { teamId: team.id, range, min, max }
+    if (!widest || range > widest.range) {
+      widest = { teamId: team.id, range, min, max, start: series[0], end: series[series.length - 1] }
+    }
   }
   if (!widest) return null
-  // Wild arc only counts when range >= 60% of teamCount — half the
+  // Only counts when the range spans >= 60% of the league — half the
   // standings is "lived the arc" territory.
   if (widest.range < Math.ceil(teamCount * 0.6)) return null
+
+  const { start, end, min, max } = widest
   const name = teamName(data, widest.teamId)
   const standing = standingFor(data, widest.teamId)
+
+  // Classify the shape. A team that ended at (or next to) its best rank
+  // climbed; one that ended at its worst slid; anything that went out and
+  // came back is a genuine arc. Direction is chronological start → end.
+  const climbed = start - end // positive = moved up the board
+  let eyebrow: string
+  let headline: string
+  let body: string
+  let arcLabel: string
+  if (climbed > 0 && end <= min + 1) {
+    eyebrow = 'THE CLIMB'
+    headline = end <= 1 ? `${name} climbed to the top.` : `${name} is the climber of the season.`
+    body = `From #${start} to #${end} this season. The biggest rise on the board.`
+    arcLabel = 'CLIMBED'
+  } else if (climbed < 0 && end >= max - 1) {
+    eyebrow = 'THE SLIDE'
+    headline = `${name} slid down the board.`
+    body = `From #${start} to #${end} this season. The hardest fall on the board.`
+    arcLabel = 'SLID'
+  } else {
+    eyebrow = 'THE WILDEST ARC'
+    headline = `${name} lived the whole season.`
+    body = `Ranged from #${min} to #${max} this season, now #${end}. A parabola with ${possessive(name)} name on it.`
+    arcLabel = 'SEASON ARC'
+  }
+
   return {
     kind: 'WILD_ARC',
     weight: 70 + Math.min(15, widest.range),
     teamId: widest.teamId,
-    eyebrow: 'THE WILDEST ARC',
-    headline: `${name} lived the whole season.`,
-    body: `From #${widest.min} to #${widest.max} this season. The standings have a parabola, and it has ${possessive(name)} name on it.`,
+    eyebrow,
+    headline,
+    body,
     chips: [
-      [`#${widest.min} → #${widest.max}`, 'SEASON ARC'],
+      [`#${start} → #${end}`, arcLabel],
       [standing && standing.streak.type !== 'T' ? `${standing.streak.type}${standing.streak.length}` : '—', 'STREAK'],
       [fmtRecord(standing), 'THIS SEASON'],
     ],
-    signal: `wild arc: ${widest.teamId} #${widest.min}-#${widest.max} (range ${widest.range})`,
+    signal: `wild arc: ${widest.teamId} #${start}→#${end} (range ${widest.range}, min ${min}, max ${max})`,
   }
 }
 

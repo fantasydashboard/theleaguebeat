@@ -59,6 +59,7 @@ import type {
 } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
+import { buildPointsStandings } from './pointsStandings'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta, hydrateMatchupDailyTrends } from '../snapshots'
@@ -242,13 +243,15 @@ async function buildYahooLeagueData(
   // format checks); they'll get progressively wired up in
   // Phase 2 → 5.
   if (isPoints) {
-    const [pointsTeams, pointsSettingsRaw, pointsMatchupsRaw, pointsPrevMatchupsRaw] = await Promise.all([
+    // Phase 2: also pull every completed week so we can build standings
+    // + season rank history (the cover-story arc detectors need them).
+    // The previous week is derived from this same map, so there's no
+    // separate prev-week fetch.
+    const [pointsTeams, pointsSettingsRaw, pointsMatchupsRaw, allPointsWeeks] = await Promise.all([
       yahooService.getTeams(leagueKey).catch(() => [] as any[]),
       yahooService.getLeagueSettings(leagueKey).catch(() => null),
       yahooService.getMatchups(leagueKey, currentWeek).catch(() => [] as any[]),
-      currentWeek > 1
-        ? yahooService.getMatchups(leagueKey, currentWeek - 1).catch(() => [] as any[])
-        : Promise.resolve([] as any[]),
+      fetchAllPointsMatchups(leagueKey, currentWeek - 1),
     ])
     const myGuid = opts?.userIdentity?.yahooGuid?.trim() || null
     const teamList: CategoryLeagueDataTeam[] = pointsTeams.map((t: any) => ({
@@ -262,7 +265,7 @@ async function buildYahooLeagueData(
     }))
 
     const currentWeekMatchups = mapYahooPointsMatchups(pointsMatchupsRaw, /*isFinal=*/ false)
-    const previousWeekMatchups = mapYahooPointsMatchups(pointsPrevMatchupsRaw, /*isFinal=*/ true)
+    const previousWeekMatchups = allPointsWeeks.get(currentWeek - 1) ?? []
 
     // Derive league average from previous week's finalized scores
     // when available (current week is mid-stream and biased toward
@@ -270,6 +273,8 @@ async function buildYahooLeagueData(
     const weeklyPointsAverage = previousWeekMatchups.length > 0
       ? avgPointsAcrossMatchups(previousWeekMatchups)
       : undefined
+
+    const { standings, seasonRankHistory } = buildPointsStandings(teamList, allPointsWeeks)
 
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
@@ -281,6 +286,8 @@ async function buildYahooLeagueData(
       currentWeekMatchups,
       previousWeekMatchups,
       weeklyPointsAverage,
+      standings,
+      seasonRankHistory,
     }
     return out
   }
@@ -857,6 +864,42 @@ async function fetchAllCategoryMatchups(
   const results = await Promise.all(tasks)
   for (const { week, data } of results) {
     if (Array.isArray(data) && data.length > 0) out.set(week, data)
+  }
+  return out
+}
+
+/** Fetch every completed week's points matchups (weeks 1..upToWeek) and
+ *  map them to the neutral `LeagueDataPointsMatchup` shape, marked final.
+ *  Mirrors `fetchAllCategoryMatchups` but for the points scoreboard
+ *  endpoint. Drives points standings + season rank history. */
+async function fetchAllPointsMatchups(
+  leagueKey: string,
+  upToWeek: number,
+): Promise<Map<number, LeagueDataPointsMatchup[]>> {
+  const out = new Map<number, LeagueDataPointsMatchup[]>()
+  if (upToWeek < 1) return out
+
+  const tasks: Promise<{ week: number; data: LeagueDataPointsMatchup[] }>[] = []
+  for (let w = 1; w <= upToWeek; w++) {
+    tasks.push(
+      yahooService
+        .getMatchups(leagueKey, w)
+        .then((raw) => ({
+          week: w,
+          data: mapYahooPointsMatchups((raw as any[]) ?? [], /*forceFinal=*/ true),
+        }))
+        .catch((err: unknown) => {
+          console.warn(
+            `[yahooAdapter] failed to fetch points matchups for week ${w}:`,
+            err,
+          )
+          return { week: w, data: [] as LeagueDataPointsMatchup[] }
+        }),
+    )
+  }
+  const results = await Promise.all(tasks)
+  for (const { week, data } of results) {
+    if (data.length > 0) out.set(week, data)
   }
   return out
 }

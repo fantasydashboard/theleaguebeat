@@ -58,6 +58,7 @@ import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
+import { buildPointsStandings } from './pointsStandings'
 import { teamColorHash } from './colorHash'
 import {
   computeProjectionFromPerCat,
@@ -332,22 +333,34 @@ export async function espnLeagueToCategoryData(
   if (league.scoringType === 'H2H_POINTS') {
     const teamsOutMinimal = buildTeams(teams, members, opts?.userIdentity?.espnSwid)
 
-    const [currentRaw, prevRaw] = await Promise.all([
+    // Phase 2: also pull every completed week so we can build standings
+    // + season rank history for the cover-story arc detectors. The
+    // previous week is derived from this map (no separate prev fetch).
+    const [currentRaw, allWeeksRaw] = await Promise.all([
       withCache(cacheKey(leagueId, 'matchups-cur', season, currentWeek), () =>
         espnService.getMatchups(sport, leagueId, season, currentWeek),
       ).catch(() => [] as any[]),
-      currentWeek > 1
-        ? withCache(cacheKey(leagueId, 'matchups-prev', season, currentWeek - 1), () =>
-            espnService.getMatchups(sport, leagueId, season, currentWeek - 1),
-          ).catch(() => [] as any[])
-        : Promise.resolve([] as any[]),
+      withCache(cacheKey(leagueId, 'matchups-all', season), () =>
+        espnService.getAllMatchups(sport, leagueId, season),
+      ).catch(() => new Map<number, any[]>()),
     ])
 
+    // Completed weeks only (strictly before the live current week),
+    // mapped to the neutral points shape and marked final.
+    const allPointsWeeks = new Map<number, LeagueDataPointsMatchup[]>()
+    for (const [week, rawWeek] of allWeeksRaw) {
+      if (week >= currentWeek) continue
+      const mapped = mapEspnPointsMatchups(rawWeek as any[], teamsOutMinimal, /*forceFinal=*/ true)
+      if (mapped.length > 0) allPointsWeeks.set(week, mapped)
+    }
+
     const currentWeekMatchups = mapEspnPointsMatchups(currentRaw, teamsOutMinimal, /*forceFinal=*/ false)
-    const previousWeekMatchups = mapEspnPointsMatchups(prevRaw, teamsOutMinimal, /*forceFinal=*/ true)
+    const previousWeekMatchups = allPointsWeeks.get(currentWeek - 1) ?? []
     const weeklyPointsAverage = previousWeekMatchups.length > 0
       ? avgPointsAcrossPointsMatchups(previousWeekMatchups)
       : undefined
+
+    const { standings, seasonRankHistory } = buildPointsStandings(teamsOutMinimal, allPointsWeeks)
 
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
@@ -359,6 +372,8 @@ export async function espnLeagueToCategoryData(
       currentWeekMatchups,
       previousWeekMatchups,
       weeklyPointsAverage,
+      standings,
+      seasonRankHistory,
     }
     return out
   }

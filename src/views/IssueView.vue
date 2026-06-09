@@ -72,52 +72,140 @@
           <span class="issue-title-meta">· Week {{ livePointsData.currentWeek }} · {{ livePointsData.currentSeason }}</span>
         </h1>
         <p class="issue-sub">
-          Published Monday morning. The recap of the week in
-          {{ strictLeagueRecord?.league_name ?? livePointsData.leagueName }}, chronicled.
+          This week in
+          {{ strictLeagueRecord?.league_name ?? livePointsData.leagueName }}, chronicled as it unfolds.
         </p>
       </header>
 
-      <!-- Cover: built from the hero matchup the editorial layer
-           already picked. Reuses the cover-* classes for visual
-           parity with category mode. -->
+      <!-- Cover: a season arc (throne change / wild arc / dynasty) when
+           one is detected, otherwise the matchup of the week. Reuses the
+           cover-* classes for visual parity with category mode. -->
       <section
-        v-if="livePointsEditorial.matchupOfWeek"
+        v-if="pointsCover"
         class="cover"
         aria-labelledby="points-cover-headline"
       >
-        <div class="cover-portrait" v-if="pointsCoverTeam">
+        <div class="cover-portrait" v-if="pointsCoverTeamResolved">
           <div
             class="cover-portrait-frame"
-            :style="{ background: `linear-gradient(155deg, ${pointsCoverTeam.avatarColor})` }"
+            :style="{ background: `linear-gradient(155deg, ${pointsCoverTeamResolved.avatarColor})` }"
           >
             <img
-              v-if="pointsCoverTeam.avatarUrl"
-              :src="pointsCoverTeam.avatarUrl"
+              v-if="pointsCoverTeamResolved.avatarUrl"
+              :src="pointsCoverTeamResolved.avatarUrl"
               class="avatar-image"
               alt=""
             />
-            <span v-else class="cover-portrait-initials">{{ pointsCoverTeam.ownerInitials }}</span>
+            <span v-else class="cover-portrait-initials">{{ pointsCoverTeamResolved.ownerInitials }}</span>
           </div>
         </div>
 
         <div class="cover-copy">
           <p class="cover-eyebrow">
             <span class="cover-eyebrow-bar" aria-hidden="true"></span>
-            {{ livePointsEditorial.matchupOfWeek.eyebrow }}
+            {{ pointsCover.eyebrow }}
           </p>
           <h2 class="cover-headline" id="points-cover-headline">
-            {{ livePointsEditorial.matchupOfWeek.headline }}
+            {{ pointsCover.headline }}
           </h2>
-          <p class="cover-body">{{ livePointsEditorial.matchupOfWeek.body }}</p>
-          <p class="cover-sub">{{ livePointsEditorial.matchupOfWeek.subContext }}</p>
+          <p class="cover-body">{{ pointsCover.body }}</p>
+
+          <ul v-if="pointsCover.statChips.length" class="cover-stats" role="list">
+            <li
+              v-for="(chip, i) in pointsCover.statChips"
+              :key="`points-cover-stat-${i}`"
+              class="cover-stat"
+            >
+              <span class="cover-stat-num">{{ chip.value }}</span>
+              <span class="cover-stat-label">{{ chip.label }}</span>
+            </li>
+          </ul>
+          <p v-else-if="pointsCover.subContext" class="cover-sub">{{ pointsCover.subContext }}</p>
         </div>
       </section>
 
-      <!-- Matchups section. Numbering held until Power Rankings +
-           Departments file (then "01 — Matchups" / "02 — ..." etc.). -->
+      <!-- Table of contents — only once there are real sections to list. -->
+      <nav v-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
+        <p class="issue-toc-label">In this issue</p>
+        <ol class="issue-toc-list" role="list">
+          <li><a href="#points-section-power">01 — Power Rankings</a></li>
+          <li><a href="#section-matchups">02 — Matchups</a></li>
+          <li v-if="pointsQuickReads.length"><a href="#points-section-departments">03 — Departments</a></li>
+        </ol>
+      </nav>
+
+      <!-- ─── 01 — POWER RANKINGS ──────────────────────────────────
+           The ladder from points records (a "win" is the higher weekly
+           score), with the cellar callout. All record / wins language,
+           never "cats". -->
+      <section v-if="hasPointsPR" id="points-section-power" class="section" aria-labelledby="points-power-heading">
+        <header class="section-head">
+          <p class="section-eyebrow">01 — Power Rankings</p>
+          <h2 class="section-headline" id="points-power-heading">
+            {{ pointsStandingsSorted.length }} teams. One ladder.
+          </h2>
+          <p v-if="pointsPrLede" class="section-lede">{{ pointsPrLede }}</p>
+          <p class="section-sub">Ranked by record (win percentage). Points-for breaks ties.</p>
+        </header>
+
+        <ol class="standings" role="list">
+          <li
+            v-for="(s, idx) in pointsStandingsSorted"
+            :key="s.teamId"
+            class="standings-row"
+            :class="{ 'standings-row-leader': idx === 0 }"
+          >
+            <span class="standings-rank">{{ s.rank }}</span>
+            <span
+              class="standings-avatar"
+              :style="{ background: `linear-gradient(135deg, ${pointsTeamLookup(s.teamId).avatarColor})` }"
+            >
+              <img v-if="pointsTeamLookup(s.teamId).avatarUrl" :src="pointsTeamLookup(s.teamId).avatarUrl" class="avatar-image" alt="" />
+              <span v-else>{{ pointsTeamLookup(s.teamId).ownerInitials }}</span>
+            </span>
+            <span class="standings-name">{{ pointsTeamLookup(s.teamId).name }}</span>
+            <span class="standings-record">{{ s.catWins }}-{{ s.catLosses }}{{ s.catTies > 0 ? `-${s.catTies}` : '' }}</span>
+            <span
+              class="standings-streak"
+              :data-tone="s.streak.type === 'W' ? 'win' : s.streak.type === 'L' ? 'loss' : 'neutral'"
+            >{{ s.streak.type !== 'T' ? `${s.streak.type}${s.streak.length}` : '—' }}</span>
+          </li>
+        </ol>
+
+        <aside
+          v-if="pointsCellarTeam && pointsCellarStanding"
+          class="cellar-callout"
+          aria-label="Cellar watch"
+        >
+          <span class="cellar-eyebrow">The cellar</span>
+          <div class="cellar-body">
+            <div
+              class="cellar-avatar"
+              :style="{ background: `linear-gradient(135deg, ${pointsCellarTeam.avatarColor})` }"
+            >
+              <img v-if="pointsCellarTeam.avatarUrl" :src="pointsCellarTeam.avatarUrl" class="avatar-image" alt="" />
+              <span v-else>{{ pointsCellarTeam.ownerInitials }}</span>
+            </div>
+            <div class="cellar-text">
+              <p class="cellar-caption">
+                <strong>{{ pointsCellarTeam.name }}</strong> sits at the bottom.
+                <span v-if="pointsCellarStanding.streak.type === 'L' && pointsCellarStanding.streak.length >= 3">
+                  {{ pointsCellarStanding.streak.length }} weeks deep in the cold.
+                </span>
+              </p>
+              <ul class="cellar-meta" role="list">
+                <li><span class="cellar-meta-num">{{ pointsCellarStanding.streak.type !== 'T' ? `${pointsCellarStanding.streak.type}${pointsCellarStanding.streak.length}` : '—' }}</span><span class="cellar-meta-lbl">streak</span></li>
+                <li><span class="cellar-meta-num">{{ pointsCellarStanding.catWins }}-{{ pointsCellarStanding.catLosses }}{{ pointsCellarStanding.catTies > 0 ? `-${pointsCellarStanding.catTies}` : '' }}</span><span class="cellar-meta-lbl">record</span></li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <!-- ─── 02 — MATCHUPS ──────────────────────────────────────── -->
       <section id="section-matchups" class="section" aria-labelledby="points-matchups-heading">
         <header class="section-head">
-          <p class="section-eyebrow">Matchups</p>
+          <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
           <h2 class="section-headline" id="points-matchups-heading">
             {{ (livePointsData.currentWeekMatchups ?? []).length }} matchups. Week {{ livePointsData.currentWeek }}.
           </h2>
@@ -162,12 +250,34 @@
         </ol>
       </section>
 
+      <!-- ─── 03 — DEPARTMENTS ─────────────────────────────────────
+           Quick reads derived from standings + rank history. -->
+      <section
+        v-if="pointsQuickReads.length"
+        id="points-section-departments"
+        class="section"
+        aria-labelledby="points-departments-heading"
+      >
+        <header class="section-head">
+          <p class="section-eyebrow">03 — Departments</p>
+          <h2 class="section-headline" id="points-departments-heading">Quick reads.</h2>
+        </header>
+        <div class="departments-grid" role="list">
+          <article
+            v-for="card in pointsQuickReads"
+            :key="card.key"
+            class="department-card"
+            role="listitem"
+          >
+            <p class="department-label">{{ card.label }}</p>
+            <p class="department-value">{{ card.value }}</p>
+          </article>
+        </div>
+      </section>
+
       <footer class="issue-footer">
         <p class="issue-footer-end">End of Issue {{ livePointsData.currentWeek }}</p>
         <p class="issue-footer-tagline">Your league story, chronicled.</p>
-        <p class="issue-footer-reconstructed">
-          Power Rankings file next. Departments after that. The masthead is expanding the points beat.
-        </p>
       </footer>
     </template>
 
@@ -543,7 +653,7 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { renderPRPage, type RenderedPRCopy } from '@/editorial/render-pr'
-import { detectCoverStory } from '@/editorial/cover-story'
+import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -613,10 +723,10 @@ function pointsLine(id: string) {
   )
 }
 
-/** Team that drives the cover portrait — the leader of the hero
- *  matchup (or the away team when scoreline is tied). Null when
+/** Team that drives the matchup-of-week cover portrait — the leader of
+ *  the hero matchup (or the away team when scoreline is tied). Null when
  *  the editorial layer didn't pick a hero (no matchups yet, league
- *  hasn't started). */
+ *  hasn't started). Used only by the matchup-of-week fallback cover. */
 const pointsCoverTeam = computed(() => {
   const hero = livePointsEditorial.value?.matchupOfWeek
   const data = livePointsData.value
@@ -625,6 +735,172 @@ const pointsCoverTeam = computed(() => {
   if (!m) return null
   const leaderId = m.homePoints >= m.awayPoints ? m.homeTeamId : m.awayTeamId
   return data.teams.find((t) => t.id === leaderId) ?? null
+})
+
+/** Season-arc cover story for points leagues (THRONE_CHANGE / WILD_ARC /
+ *  DYNASTY_LOCK). Null when there's no arc to tell — the cover then falls
+ *  back to the matchup of the week. */
+const pointsCoverStory = computed(() => {
+  const d = livePointsData.value
+  if (!d) return null
+  return detectPointsCoverStory(d)
+})
+
+/** Unified points cover: prefers the season arc (with stat chips) and
+ *  falls back to the matchup of the week (with a score sub-line). */
+const pointsCover = computed(() => {
+  const arc = pointsCoverStory.value
+  if (arc) {
+    return {
+      eyebrow: arc.eyebrow,
+      headline: arc.headline,
+      body: arc.body,
+      statChips: arc.chips.map(([value, label]) => ({ value, label })),
+      portraitTeamId: arc.teamId,
+      subContext: '',
+    }
+  }
+  const m = livePointsEditorial.value?.matchupOfWeek
+  if (!m) return null
+  return {
+    eyebrow: m.eyebrow,
+    headline: m.headline,
+    body: m.body,
+    statChips: [] as { value: string; label: string }[],
+    portraitTeamId: pointsCoverTeam.value?.id ?? null,
+    subContext: m.subContext,
+  }
+})
+
+/** Resolves the cover portrait team from whichever cover won. */
+const pointsCoverTeamResolved = computed(() => {
+  const id = pointsCover.value?.portraitTeamId
+  if (!id) return null
+  return livePointsData.value?.teams.find((t) => t.id === id) ?? null
+})
+
+/* ─────────────────────────────────────────────────────────────────
+   POINTS POWER RANKINGS + DEPARTMENTS (Phase 2)
+   Now that the adapter populates standings + seasonRankHistory, the
+   points Issue gets the same two sections the category Issue has. All
+   copy stays in record / wins / spots language — no "cats".
+───────────────────────────────────────────────────────────────── */
+
+const pointsStandingsSorted = computed(() => {
+  const s = livePointsData.value?.standings ?? []
+  return [...s].sort((a, b) => a.rank - b.rank)
+})
+
+/** Whether the points Issue has a ladder to show. Gates the Power
+ *  Rankings + Departments sections, the table of contents, and the
+ *  matchups section numbering. */
+const hasPointsPR = computed(() => pointsStandingsSorted.value.length > 0)
+
+/** One-paragraph lede over the points ladder: leader separation and
+ *  the cellar gap, in wins. Null for tiny or tied tables. */
+const pointsPrLede = computed<string | null>(() => {
+  const sorted = pointsStandingsSorted.value
+  if (sorted.length < 4) return null
+  const leader = sorted[0]
+  const second = sorted[1]
+  const cellar = sorted[sorted.length - 1]
+  const secondToLast = sorted[sorted.length - 2]
+  const leaderName = pointsTeamLookup(leader.teamId).name
+  const cellarName = pointsTeamLookup(cellar.teamId).name
+  const leaderLead = leader.catWins - second.catWins
+  const cellarGap = secondToLast.catWins - cellar.catWins
+  const parts: string[] = []
+  if (leaderLead >= 4) parts.push(`${leaderName} leads by ${leaderLead} wins, clear at the top.`)
+  else if (leaderLead >= 2) parts.push(`${leaderName} holds the top by ${leaderLead}.`)
+  else if (leaderLead >= 1) parts.push(`${leaderName} leads by a single win.`)
+  else parts.push(`The top is a coin flip.`)
+  if (cellarGap >= 3) parts.push(`${cellarName} sits ${cellarGap} back at the bottom.`)
+  return parts.join(' ')
+})
+
+const pointsCellarStanding = computed(() => {
+  const sorted = pointsStandingsSorted.value
+  return sorted.length >= 4 ? sorted[sorted.length - 1] : null
+})
+const pointsCellarTeam = computed(() => {
+  const id = pointsCellarStanding.value?.teamId
+  return id ? pointsTeamLookup(id) : null
+})
+
+interface PointsDeptCard { key: string; label: string; value: string }
+
+/** Four quick reads for the points Departments grid, derived from
+ *  standings + rank history. Each only fires when it has real data. */
+const pointsQuickReads = computed<PointsDeptCard[]>(() => {
+  const standings = pointsStandingsSorted.value
+  const hist = livePointsData.value?.seasonRankHistory ?? []
+  const teams = livePointsData.value?.teams ?? []
+  const nameOf = (id: string) => pointsTeamLookup(id).name
+  const cards: PointsDeptCard[] = []
+
+  // Tightest race — smallest adjacent gap in the ladder.
+  if (standings.length >= 2) {
+    let best: { a: string; b: string; gap: number } | null = null
+    for (let i = 0; i < standings.length - 1; i++) {
+      const gap = Math.abs(standings[i].catWins - standings[i + 1].catWins)
+      if (!best || gap < best.gap) best = { a: standings[i].teamId, b: standings[i + 1].teamId, gap }
+    }
+    if (best) {
+      cards.push({
+        key: 'tightest',
+        label: 'Tightest race',
+        value: best.gap === 0
+          ? `${nameOf(best.a)} and ${nameOf(best.b)}, dead even.`
+          : `${nameOf(best.a)} by ${best.gap} over ${nameOf(best.b)}.`,
+      })
+    }
+  }
+
+  // Biggest jump / longest fall — rank movement, week 1 to latest.
+  if (hist.length >= 2) {
+    const first = hist[0].ranks
+    const last = hist[hist.length - 1].ranks
+    let climber: { id: string; delta: number } | null = null
+    let faller: { id: string; delta: number } | null = null
+    for (const t of teams) {
+      const f = first[t.id]
+      const l = last[t.id]
+      if (f == null || l == null) continue
+      const delta = f - l // positive = climbed (rank number fell)
+      if (delta > 0 && (!climber || delta > climber.delta)) climber = { id: t.id, delta }
+      if (delta < 0 && (!faller || delta < faller.delta)) faller = { id: t.id, delta }
+    }
+    if (climber) {
+      cards.push({
+        key: 'jump',
+        label: 'Biggest jump',
+        value: `${nameOf(climber.id)} climbed ${climber.delta} ${climber.delta === 1 ? 'spot' : 'spots'} since week 1.`,
+      })
+    }
+    if (faller) {
+      const d = Math.abs(faller.delta)
+      cards.push({
+        key: 'fall',
+        label: 'Longest fall',
+        value: `${nameOf(faller.id)} dropped ${d} ${d === 1 ? 'spot' : 'spots'} since week 1.`,
+      })
+    }
+  }
+
+  // Longest streak — the longest active run, win or loss.
+  if (standings.length) {
+    let top = standings[0]
+    for (const s of standings) if (s.streak.length > top.streak.length) top = s
+    if (top.streak.type !== 'T' && top.streak.length >= 2) {
+      cards.push({
+        key: 'streak',
+        label: 'Longest streak',
+        value: `${nameOf(top.teamId)}: ${top.streak.length} straight ${top.streak.type === 'W' ? 'wins' : 'losses'}.`,
+      })
+    }
+  }
+
+  return cards.slice(0, 4)
 })
 
 const routeLeagueId = computed(
@@ -2495,7 +2771,7 @@ function collectUserIdentity() {
   border-radius: 14px;
   background: oklch(0.09 0.013 90);
   border: 1px solid oklch(0.18 0.015 90);
-  border-left: 3px solid var(--accent-tertiary);
+  /* Accent is carried by the teal label, not a side-stripe. */
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2531,7 +2807,7 @@ function collectUserIdentity() {
     radial-gradient(120% 180% at 0% 0%, oklch(0.72 0.18 195 / 0.06), transparent 60%),
     oklch(0.09 0.013 90);
   border: 1px solid oklch(0.18 0.015 90);
-  border-left: 3px solid var(--accent-tertiary);
+  /* Accent is carried by the teal eyebrow, not a side-stripe. */
   display: flex;
   flex-direction: column;
   gap: 8px;

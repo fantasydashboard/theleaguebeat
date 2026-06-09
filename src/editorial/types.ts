@@ -547,6 +547,19 @@ export interface LeagueDataH2HPoints {
   /** League-wide average weekly points scored — drives "averaging
    *  N points over the field" framing. Optional. */
   weeklyPointsAverage?: number
+
+  /** Season standings derived from weekly points matchups (a "win" is
+   *  the higher weekly score). Populated in Phase 2 so the cover-story
+   *  arc detectors can run on points leagues. Reuses the category
+   *  standing shape; `ownsCount` / `bleedingCount` are always 0 because
+   *  points leagues have no per-category data. Optional so adapters
+   *  that can't build it degrade gracefully. */
+  standings?: CategoryLeagueDataStanding[]
+
+  /** Per-week rank snapshots from cumulative points records. Includes
+   *  only completed weeks (the live current week is excluded, matching
+   *  the category contract). Drives WILD_ARC / THRONE_CHANGE. */
+  seasonRankHistory?: CategoryLeagueDataWeeklyRanks[]
 }
 
 /* ─────────────────────────────────────────────────────────────────
