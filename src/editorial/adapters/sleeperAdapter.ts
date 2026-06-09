@@ -307,7 +307,11 @@ export async function sleeperLeagueToCategoryData(
   //     before today so the overnight-delta detectors can emit
   //     "since your last visit" Wire stories. Skipped when no
   //     Supabase row id is provided (demo route, anonymous viewer).
+  // Sleeper doesn't offer H2H points baseball; we always stamp
+  // h2h-category. If Sleeper ever expands to points baseball,
+  // detection branches here the same way Yahoo / ESPN do.
   const partialData: CategoryLeagueData = {
+    format: 'h2h-category',
     leagueId,
     leagueName: league.name || 'Sleeper League',
     currentWeek,

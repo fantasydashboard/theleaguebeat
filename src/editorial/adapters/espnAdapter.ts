@@ -35,6 +35,9 @@ import type {
 } from '@/services/espn'
 import type {
   CategoryLeagueData,
+  LeagueData,
+  LeagueDataH2HPoints,
+  LeagueDataPointsMatchup,
   CategoryLeagueDataCategory,
   CategoryLeagueDataCategoryRank,
   CategoryLeagueDataDraft,
@@ -237,7 +240,7 @@ export interface AdapterOptions {
 export async function espnLeagueToCategoryData(
   leagueId: string,
   opts?: AdapterOptions,
-): Promise<CategoryLeagueData> {
+): Promise<LeagueData> {
   // 0. Credentials are mandatory for ESPN's proxy path — even public
   //    leagues hit the auth-required Supabase edge function.
   const hasCreds = await ensureEspnCredentials()
@@ -320,6 +323,44 @@ export async function espnLeagueToCategoryData(
     throw new Error(
       `ESPN league ${leagueId} returned no teams — league may be unavailable for ${season}`,
     )
+  }
+
+  // ── H2H Points: Phase 1 — Matchups points-mode ─────────────────
+  // Fetches teams + current-week matchups so the Matchups page can
+  // render real editorial content. Other pages still route to the
+  // UnsupportedFormatPanel via the page-level format gates.
+  if (league.scoringType === 'H2H_POINTS') {
+    const teamsOutMinimal = buildTeams(teams, members, opts?.userIdentity?.espnSwid)
+
+    const [currentRaw, prevRaw] = await Promise.all([
+      withCache(cacheKey(leagueId, 'matchups-cur', season, currentWeek), () =>
+        espnService.getMatchups(sport, leagueId, season, currentWeek),
+      ).catch(() => [] as any[]),
+      currentWeek > 1
+        ? withCache(cacheKey(leagueId, 'matchups-prev', season, currentWeek - 1), () =>
+            espnService.getMatchups(sport, leagueId, season, currentWeek - 1),
+          ).catch(() => [] as any[])
+        : Promise.resolve([] as any[]),
+    ])
+
+    const currentWeekMatchups = mapEspnPointsMatchups(currentRaw, teamsOutMinimal, /*forceFinal=*/ false)
+    const previousWeekMatchups = mapEspnPointsMatchups(prevRaw, teamsOutMinimal, /*forceFinal=*/ true)
+    const weeklyPointsAverage = previousWeekMatchups.length > 0
+      ? avgPointsAcrossPointsMatchups(previousWeekMatchups)
+      : undefined
+
+    const out: LeagueDataH2HPoints = {
+      format: 'h2h-points',
+      leagueId: String(league.id),
+      leagueName: league.name || `ESPN League ${leagueId}`,
+      currentWeek,
+      currentSeason: season,
+      teams: teamsOutMinimal,
+      currentWeekMatchups,
+      previousWeekMatchups,
+      weeklyPointsAverage,
+    }
+    return out
   }
 
   // 3. All matchups for the season (per-week map).
@@ -479,6 +520,7 @@ export async function espnLeagueToCategoryData(
   // 18. Snapshot delta — save today's snapshot (idempotent) and
   //     diff against the previous snapshot for overnight stories.
   const partialData: CategoryLeagueData = {
+    format: 'h2h-category',
     leagueId,
     leagueName: league.name || `ESPN League ${leagueId}`,
     currentWeek,
@@ -685,6 +727,60 @@ function resolveCategories(
 /* ─────────────────────────────────────────────────────────────────
    STEP 6 — TEAMS
 ─────────────────────────────────────────────────────────────────*/
+
+/** Map ESPN matchups (already typed at the service layer) to the
+ *  editorial-side LeagueDataPointsMatchup shape. ESPN's `winner`
+ *  field carries the decision state directly:
+ *    'UNDECIDED' → live
+ *    'HOME' | 'AWAY' | 'TIE' → final
+ *  `forceFinal` overrides the winner field for previous-week reads
+ *  where mid-week snapshots are no longer relevant. */
+function mapEspnPointsMatchups(
+  raw: any[],
+  teamsOut: CategoryLeagueDataTeam[],
+  forceFinal: boolean,
+): LeagueDataPointsMatchup[] {
+  if (!raw || raw.length === 0) return []
+  const teamIds = new Set(teamsOut.map((t) => t.id))
+  const out: LeagueDataPointsMatchup[] = []
+  for (const m of raw) {
+    const homeId = String(m.homeTeamId ?? '')
+    const awayId = String(m.awayTeamId ?? '')
+    if (!homeId || !awayId) continue
+    // Skip bye-week / placeholder matchups where one side isn't a
+    // real team in the league (consolation rounds, etc.).
+    if (!teamIds.has(homeId) || !teamIds.has(awayId)) continue
+    const decided = forceFinal || m.winner !== 'UNDECIDED'
+    out.push({
+      id: String(m.id ?? `${homeId}-${awayId}-${m.matchupPeriodId}`),
+      homeTeamId: homeId,
+      awayTeamId: awayId,
+      status: decided ? 'final' : 'live',
+      homePoints: Number(m.homeScore ?? 0),
+      awayPoints: Number(m.awayScore ?? 0),
+      homeProjected: Number.isFinite(m.homeProjectedPoints)
+        ? Number(m.homeProjectedPoints)
+        : undefined,
+      awayProjected: Number.isFinite(m.awayProjectedPoints)
+        ? Number(m.awayProjectedPoints)
+        : undefined,
+    })
+  }
+  return out
+}
+
+/** Mean of every team's points across an array of matchups. */
+function avgPointsAcrossPointsMatchups(
+  matchups: LeagueDataPointsMatchup[],
+): number | undefined {
+  const all: number[] = []
+  for (const m of matchups) {
+    if (Number.isFinite(m.homePoints)) all.push(m.homePoints)
+    if (Number.isFinite(m.awayPoints)) all.push(m.awayPoints)
+  }
+  if (all.length === 0) return undefined
+  return all.reduce((a, b) => a + b, 0) / all.length
+}
 
 function buildTeams(
   teams: EspnTeam[],

@@ -1,14 +1,27 @@
 /**
  * Editorial pipeline — universal data contract.
  *
- * `CategoryLeagueData` is the shape every platform adapter
- * (Sleeper / Yahoo / ESPN) must produce. Detection + rendering only
- * read this shape, so swapping the source of truth never touches
- * the editorial layer.
+ * `LeagueData` is the shape every platform adapter (Sleeper / Yahoo
+ * / ESPN) must produce. Detection + rendering only read this shape,
+ * so swapping the source of truth never touches the editorial layer.
  *
- * Scope: only the fields the current `categoriesLeague` fixture
- * already exposes. Speculative fields belong in a follow-up — the
- * pipeline ships when the fixture proves it end-to-end.
+ * `LeagueData` is a discriminated union on `format`:
+ *   - 'h2h-category' — H2H category leagues (the original surface)
+ *   - 'h2h-points'   — H2H points leagues (Phase 0+ scope)
+ *
+ * Category-only fields (categories, categoryRanks, h2hMatrix,
+ * weeklyCatsWon, weeklyLeagueAverage) live only on the category
+ * variant. Points-only fields (weeklyPointsTotals,
+ * projectedRemainingByTeam, topContributorsByDay) live only on
+ * the points variant. The discriminator lets TypeScript narrow at
+ * every detection / render site so the wrong fields can't be
+ * accidentally read.
+ *
+ * Naming note: every existing interface keeps the `CategoryLeagueData*`
+ * prefix because those types describe category-specific shapes (the
+ * "Category" in the name is literal, not legacy). Only the root
+ * envelope was renamed. A back-compat alias `CategoryLeagueData`
+ * remains for one PR cycle so external code keeps compiling.
  */
 
 /* ─────────────────────────────────────────────────────────────────
@@ -281,7 +294,13 @@ export interface CategoryLeagueDataDraft {
   picks: CategoryLeagueDataDraftPick[]
 }
 
-export interface CategoryLeagueData {
+export interface LeagueDataH2HCategory {
+  /** Discriminator literal — narrowing every consumer that handles
+   *  the union form (`LeagueData`). For category-shape consumers the
+   *  back-compat alias `CategoryLeagueData` points at this interface
+   *  directly, so existing code keeps compiling without narrowing. */
+  format: 'h2h-category'
+
   // Meta
   leagueId: string
   leagueName: string
@@ -450,6 +469,121 @@ export interface CategoryLeagueData {
    *  sequential period numbering. Set by the ESPN adapter from
    *  league.scoringPeriodId. Other platforms ignore it. */
   espnTodayScoringPeriodId?: number
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   H2H POINTS VARIANT
+
+   Phase 0 stub carried only meta + teams (the unsupported panel).
+   Phase 1 (Matchups points-mode) adds the matchup shape + projection
+   fields so the Matchups page can render real editorial content.
+───────────────────────────────────────────────────────────────── */
+
+/** Status of a points matchup — same vocabulary as category so
+ *  cross-format detection helpers stay symmetric. */
+export type PointsMatchupStatus = 'live' | 'coasting' | 'final' | 'upcoming'
+
+/** A single H2H points matchup. Carries current totals + platform
+ *  projection so the Matchups page can label "coin flip" vs
+ *  "sealed" based on margin vs projected remaining. */
+export interface LeagueDataPointsMatchup {
+  id: string
+  homeTeamId: string
+  awayTeamId: string
+  status: PointsMatchupStatus
+
+  /** Current accumulated points for each side. Live during the
+   *  week; final once status === 'final'. */
+  homePoints: number
+  awayPoints: number
+
+  /** Total projected points for the week — platform-supplied. For
+   *  upcoming/early-week matchups this is "what the side is
+   *  expected to score across the whole week"; for live matchups
+   *  this is the platform's updated projection given games already
+   *  played. Undefined when the platform doesn't expose a
+   *  projection for this matchup. */
+  homeProjected?: number
+  awayProjected?: number
+
+  /** Editorial-grade win probability (0..1). Computed from
+   *  current margin vs projected remaining via the same binomial
+   *  approach the category side uses. Undefined when projections
+   *  aren't available. */
+  homeWinProb?: number
+  awayWinProb?: number
+}
+
+export interface LeagueDataH2HPoints {
+  /** Discriminator literal — what makes a points league a points
+   *  league. Every consumer can narrow against this. */
+  format: 'h2h-points'
+
+  // Meta (mirrors the category variant so the panel + masthead can
+  // reuse the same fields).
+  leagueId: string
+  leagueName: string
+  currentWeek: number
+  currentSeason: number
+  playoffCutoff?: number
+  regularSeasonEndWeek?: number
+  synthesized?: boolean
+
+  // Teams (universal).
+  teams: CategoryLeagueDataTeam[]
+  divisions?: CategoryLeagueDataDivision[]
+
+  /** Current week's matchups. Phase 1 — populated by Yahoo / ESPN
+   *  adapters when the league is h2h-points. Optional so adapters
+   *  that can't yet build them (or platforms that don't expose
+   *  them) degrade gracefully to the unsupported panel pattern. */
+  currentWeekMatchups?: LeagueDataPointsMatchup[]
+
+  /** Previous week's matchups in finalized state. Drives Monday-
+   *  morning recap framing on the Matchups page; absent on early-
+   *  season visits. */
+  previousWeekMatchups?: LeagueDataPointsMatchup[]
+
+  /** League-wide average weekly points scored — drives "averaging
+   *  N points over the field" framing. Optional. */
+  weeklyPointsAverage?: number
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   UNION + BACK-COMPAT ALIAS + TYPE GUARDS
+
+   `LeagueData` is the universal envelope every adapter returns and
+   every page receives. The discriminated union lets TypeScript
+   narrow to either variant once code checks `data.format`.
+
+   `CategoryLeagueData` is kept as an alias pointing at the
+   h2h-category variant so the existing detection / render /
+   page code keeps compiling unchanged. New code should prefer
+   `LeagueData` (when handling either format) or
+   `LeagueDataH2HCategory` / `LeagueDataH2HPoints` (when committed
+   to one).
+───────────────────────────────────────────────────────────────── */
+
+export type LeagueData = LeagueDataH2HCategory | LeagueDataH2HPoints
+
+/** Back-compat alias for code written before the format split. New
+ *  code should prefer the explicit variant or the union. Removable
+ *  in a follow-up once every consumer has narrowed explicitly. */
+export type CategoryLeagueData = LeagueDataH2HCategory
+
+/** Narrowing helper for the h2h-category variant. Use at the page
+ *  boundary so the rest of the page can read category-only fields. */
+export function isH2HCategory(
+  d: LeagueData | null | undefined,
+): d is LeagueDataH2HCategory {
+  return d?.format === 'h2h-category'
+}
+
+/** Narrowing helper for the h2h-points variant. */
+export function isH2HPoints(
+  d: LeagueData | null | undefined,
+): d is LeagueDataH2HPoints {
+  return d?.format === 'h2h-points'
 }
 
 /* ─────────────────────────────────────────────────────────────────

@@ -3,6 +3,16 @@
     <!-- Live load banner (mirrors PR view pattern) -->
     <LiveLoadError v-if="liveError" :message="liveError" :platform-label="platformLabel" />
 
+    <!-- Unsupported-format gate. Routes h2h-points (Phase 0 scope)
+         and any other detected non-category format to the editorial
+         panel instead of falling through to fixture-derived content. -->
+    <UnsupportedFormatPanel
+      v-if="unsupportedFormat"
+      :format="unsupportedFormat"
+      :league-name="unsupportedLeagueName ?? undefined"
+      :platform="livePlatform ?? undefined"
+    />
+
     <!-- Loading guard. In strict live mode we MUST wait for the
          adapter before rendering, otherwise the fixture team names
          leak into the real league's wire (the page silently falls
@@ -10,7 +20,7 @@
          Issue's loading template so the two surfaces feel like the
          same publication. -->
     <div
-      v-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !liveError"
       class="beat-loading"
       role="status"
       aria-live="polite"
@@ -231,6 +241,7 @@ import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
+import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
 import { getTeam } from '@/fixtures/categoriesLeague'
 
 defineEmits<{ (e: 'open-signup'): void }>()
@@ -249,6 +260,12 @@ const liveData = shallowRef<CategoryLeagueData | null>(null)
 const fixtureData = categoriesFixtureToLeagueData()
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
+// Set when the adapter resolves to a non-category format (Phase 0:
+// h2h-points). Drives the UnsupportedFormatPanel so the page reads
+// as "we know you're here, we just don't write for this format yet"
+// instead of falling silently to fixture data.
+const unsupportedFormat = ref<string | null>(null)
+const unsupportedLeagueName = ref<string | null>(null)
 const renderedAt = ref<Date>(new Date())
 
 const strictLeagueRecord = computed(() => {
@@ -379,6 +396,8 @@ async function loadBeat() {
   // tell the switch happened.
   liveData.value = null
   liveError.value = null
+  unsupportedFormat.value = null
+  unsupportedLeagueName.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -408,6 +427,20 @@ async function loadBeat() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
+    // Format gate — Phase 0 routes any non-category league to the
+    // UnsupportedFormatPanel. We DON'T assign liveData here because
+    // the rest of this page's render expects the category variant;
+    // the panel takes the page body entirely.
+    if (data.format !== 'h2h-category') {
+      unsupportedFormat.value = data.format
+      unsupportedLeagueName.value = data.leagueName
+      // Backfill the league name on the row even when we can't render
+      // editorial — the switcher chip still benefits from the real name.
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
     liveData.value = data
     renderedAt.value = new Date()
     // Backfill a stale ESPN placeholder league_name once the real

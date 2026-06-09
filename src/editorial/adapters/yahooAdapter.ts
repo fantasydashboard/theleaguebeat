@@ -33,6 +33,9 @@
 import { yahooService } from '@/services/yahoo'
 import type {
   CategoryLeagueData,
+  LeagueData,
+  LeagueDataH2HPoints,
+  LeagueDataPointsMatchup,
   CategoryLeagueDataCatLine,
   CategoryLeagueDataCategory,
   CategoryLeagueDataCategoryRank,
@@ -144,7 +147,7 @@ function buildStatIdLookup(): Map<string, YahooCatDef> {
    page session can reuse one snapshot.
 ─────────────────────────────────────────────────────────────────── */
 
-const adapterCache = new Map<string, Promise<CategoryLeagueData>>()
+const adapterCache = new Map<string, Promise<LeagueData>>()
 
 /** Manually invalidate the adapter cache for a league. */
 export function invalidateYahooAdapterCache(leagueKey?: string): void {
@@ -179,7 +182,7 @@ export interface AdapterOptions {
 export async function yahooLeagueToCategoryData(
   leagueKey: string,
   opts?: AdapterOptions,
-): Promise<CategoryLeagueData> {
+): Promise<LeagueData> {
   if (!leagueKey || typeof leagueKey !== 'string') {
     throw new Error('Yahoo league key is required (format: "<gameKey>.l.<leagueId>")')
   }
@@ -208,7 +211,7 @@ export async function yahooLeagueToCategoryData(
 async function buildYahooLeagueData(
   leagueKey: string,
   opts?: AdapterOptions,
-): Promise<CategoryLeagueData> {
+): Promise<LeagueData> {
   // Yahoo proxy throws "Not authenticated" when no Supabase session is
   // present. Translate that into a clearer signal for the caller's UI.
   let metadata: Awaited<ReturnType<typeof yahooService.getLeagueMetadata>>
@@ -228,8 +231,59 @@ async function buildYahooLeagueData(
 
   const currentSeason = parseInt(metadata.season || '', 10) || new Date().getFullYear()
   const currentWeek = clampWeek(metadata.currentWeek || 1)
-  const scoringType: string = metadata.scoring_type || 'head'   // 'head' = H2H cats; 'roto' = rotisserie
+  const scoringType: string = metadata.scoring_type || 'head'   // 'head' = H2H cats; 'roto' = rotisserie; 'headpoint'/'point' = points
   const isRoto = scoringType === 'roto'
+  const isPoints = scoringType === 'headpoint' || scoringType === 'point'
+
+  // ── H2H Points: Phase 1 — Matchups points-mode ────────────────
+  // Fetches teams + settings + current-week matchups so the Matchups
+  // page can render real editorial content. Other pages still route
+  // to the UnsupportedFormatPanel (gated by the seven page-level
+  // format checks); they'll get progressively wired up in
+  // Phase 2 → 5.
+  if (isPoints) {
+    const [pointsTeams, pointsSettingsRaw, pointsMatchupsRaw, pointsPrevMatchupsRaw] = await Promise.all([
+      yahooService.getTeams(leagueKey).catch(() => [] as any[]),
+      yahooService.getLeagueSettings(leagueKey).catch(() => null),
+      yahooService.getMatchups(leagueKey, currentWeek).catch(() => [] as any[]),
+      currentWeek > 1
+        ? yahooService.getMatchups(leagueKey, currentWeek - 1).catch(() => [] as any[])
+        : Promise.resolve([] as any[]),
+    ])
+    const myGuid = opts?.userIdentity?.yahooGuid?.trim() || null
+    const teamList: CategoryLeagueDataTeam[] = pointsTeams.map((t: any) => ({
+      id: t.team_key,
+      name: t.name || `Team ${t.team_id}`,
+      ownerName: t.manager_nickname || '',
+      ownerInitials: initialsOf(t.manager_nickname || t.name || '?'),
+      avatarUrl: t.logo_url || undefined,
+      avatarColor: 'oklch(0.62 0.18 200), oklch(0.42 0.18 220)',
+      isMyTeam: myGuid != null && t.manager_guid === myGuid,
+    }))
+
+    const currentWeekMatchups = mapYahooPointsMatchups(pointsMatchupsRaw, /*isFinal=*/ false)
+    const previousWeekMatchups = mapYahooPointsMatchups(pointsPrevMatchupsRaw, /*isFinal=*/ true)
+
+    // Derive league average from previous week's finalized scores
+    // when available (current week is mid-stream and biased toward
+    // teams that have played more games already).
+    const weeklyPointsAverage = previousWeekMatchups.length > 0
+      ? avgPointsAcrossMatchups(previousWeekMatchups)
+      : undefined
+
+    const out: LeagueDataH2HPoints = {
+      format: 'h2h-points',
+      leagueId: leagueKey,
+      leagueName: deriveLeagueName(pointsSettingsRaw, leagueKey),
+      currentWeek,
+      currentSeason,
+      teams: teamList,
+      currentWeekMatchups,
+      previousWeekMatchups,
+      weeklyPointsAverage,
+    }
+    return out
+  }
 
   // Parallelize the three independent fetches.
   const [scoringSettings, leagueSettingsRaw, rawStandings, teams] = await Promise.all([
@@ -462,6 +516,7 @@ async function buildYahooLeagueData(
   ])
 
   const partialData: CategoryLeagueData = {
+    format: 'h2h-category',
     leagueId: leagueKey,
     leagueName: deriveLeagueName(leagueSettingsRaw, leagueKey),
     currentWeek,
@@ -704,6 +759,57 @@ function readRegularSeasonEndWeek(rawSettings: any, endWeek: number): number {
 /* ─────────────────────────────────────────────────────────────────
    LEAGUE NAME
 ─────────────────────────────────────────────────────────────────── */
+
+/** Map Yahoo's matchup payload (YahooMatchup[]) to the editorial-side
+ *  LeagueDataPointsMatchup shape. Status detection:
+ *  - 'final'    when winner_team_key is present (matchup decided)
+ *  - 'live'     when forceFinal is false and no winner yet
+ *  Yahoo doesn't distinguish 'upcoming' vs 'live' on a points
+ *  scoreboard read; we treat any non-winner matchup as live during
+ *  the current week. Past weeks are forced to 'final'. */
+function mapYahooPointsMatchups(raw: any[], forceFinal: boolean): LeagueDataPointsMatchup[] {
+  if (!raw || raw.length === 0) return []
+  const out: LeagueDataPointsMatchup[] = []
+  for (const m of raw) {
+    const teams = m?.teams ?? []
+    if (teams.length < 2) continue
+    const home = teams[0]
+    const away = teams[1]
+    const decided = !!m.winner_team_key || forceFinal
+    const homePoints = Number(home.points ?? 0)
+    const awayPoints = Number(away.points ?? 0)
+    const homeProjected = Number.isFinite(home.projected_points)
+      ? Number(home.projected_points)
+      : undefined
+    const awayProjected = Number.isFinite(away.projected_points)
+      ? Number(away.projected_points)
+      : undefined
+    out.push({
+      id: String(m.matchup_id ?? `${home.team_key}-${away.team_key}-${m.week}`),
+      homeTeamId: home.team_key,
+      awayTeamId: away.team_key,
+      status: decided ? 'final' : 'live',
+      homePoints,
+      awayPoints,
+      homeProjected,
+      awayProjected,
+    })
+  }
+  return out
+}
+
+/** Mean of every team's points across an array of matchups. Drives
+ *  the league-average editorial framing ("averaging X over the
+ *  field"). Returns undefined when there's no signal. */
+function avgPointsAcrossMatchups(matchups: LeagueDataPointsMatchup[]): number | undefined {
+  const all: number[] = []
+  for (const m of matchups) {
+    if (Number.isFinite(m.homePoints)) all.push(m.homePoints)
+    if (Number.isFinite(m.awayPoints)) all.push(m.awayPoints)
+  }
+  if (all.length === 0) return undefined
+  return all.reduce((a, b) => a + b, 0) / all.length
+}
 
 function deriveLeagueName(rawSettings: any, leagueKey: string): string {
   // getLeagueSettings doesn't reliably return the league name — Yahoo

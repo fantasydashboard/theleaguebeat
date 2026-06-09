@@ -7,8 +7,14 @@
          publication.
     ────────────────────────────────────────────────────────────── -->
     <LiveLoadError v-if="liveError" :message="liveError" />
+    <UnsupportedFormatPanel
+      v-if="unsupportedFormat"
+      :format="unsupportedFormat"
+      :league-name="unsupportedLeagueName ?? undefined"
+      :platform="livePlatform ?? undefined"
+    />
     <div
-      v-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !liveError"
       class="pr-loading"
       role="status"
       aria-live="polite"
@@ -687,6 +693,7 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
+import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -732,6 +739,10 @@ const livePR = shallowRef<RenderedPRCopy>(
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
+// Set when the adapter resolves to a non-category format (Phase 0:
+// h2h-points). Drives the UnsupportedFormatPanel.
+const unsupportedFormat = ref<string | null>(null)
+const unsupportedLeagueName = ref<string | null>(null)
 // Strict route (/leagues/:leagueId/power-rankings) resolves the league
 // via the leagues store; soft mode (?leagueId=&platform=) reads the
 // query. Without the strict path, a live league silently falls back to
@@ -837,6 +848,8 @@ async function loadRankings() {
   // guard never appears.
   liveData.value = null
   liveError.value = null
+  unsupportedFormat.value = null
+  unsupportedLeagueName.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -861,6 +874,15 @@ async function loadRankings() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
+    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    if (data.format !== 'h2h-category') {
+      unsupportedFormat.value = data.format
+      unsupportedLeagueName.value = data.leagueName
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
     liveData.value = data
     livePR.value = renderPRPage(data)
     // Backfill placeholder league_name once the real name resolves —

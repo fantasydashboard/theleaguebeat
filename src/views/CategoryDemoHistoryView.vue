@@ -9,8 +9,14 @@
          like one publication.
     ────────────────────────────────────────────────────────────── -->
     <LiveLoadError v-if="liveError" :message="liveError" />
+    <UnsupportedFormatPanel
+      v-if="unsupportedFormat"
+      :format="unsupportedFormat"
+      :league-name="unsupportedLeagueName ?? undefined"
+      :platform="livePlatform ?? undefined"
+    />
     <div
-      v-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !liveError"
       class="cathist-loading"
       role="status"
       aria-live="polite"
@@ -282,6 +288,7 @@ import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/typ
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
+import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -312,6 +319,10 @@ const liveEditorial = shallowRef<RenderedHistoryCopy>(
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
+// Set when the adapter resolves to a non-category format (Phase 0:
+// h2h-points). Drives the UnsupportedFormatPanel.
+const unsupportedFormat = ref<string | null>(null)
+const unsupportedLeagueName = ref<string | null>(null)
 
 /** Live-aware team lookup. Prefers the connected league's teams, falls
  *  back to the fixture (demo + transitional renders), then a synthesized
@@ -478,6 +489,8 @@ async function loadChronicles() {
   // loading guard never appears.
   liveData.value = null
   liveError.value = null
+  unsupportedFormat.value = null
+  unsupportedLeagueName.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -503,6 +516,15 @@ async function loadChronicles() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
+    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    if (data.format !== 'h2h-category') {
+      unsupportedFormat.value = data.format
+      unsupportedLeagueName.value = data.leagueName
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
     liveData.value = data
     liveEditorial.value = renderHistoryPage(data)
     // Backfill a stale ESPN placeholder league_name once the real name

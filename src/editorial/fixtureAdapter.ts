@@ -51,6 +51,7 @@ import type {
  */
 export function categoriesFixtureToLeagueData(): CategoryLeagueData {
   return {
+    format: 'h2h-category',
     leagueId: 'demo-categories-2026',
     leagueName: 'Diamond Cuts',
     currentWeek,

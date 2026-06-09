@@ -7,8 +7,14 @@
          publication.
     ────────────────────────────────────────────────────────────── -->
     <LiveLoadError v-if="liveError" :message="liveError" />
+    <UnsupportedFormatPanel
+      v-if="unsupportedFormat"
+      :format="unsupportedFormat"
+      :league-name="unsupportedLeagueName ?? undefined"
+      :platform="livePlatform ?? undefined"
+    />
     <div
-      v-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !livePointsData && !liveError"
       class="matchups-loading"
       role="status"
       aria-live="polite"
@@ -26,6 +32,86 @@
         <p class="matchups-loading-sub">{{ loadingSubline }}</p>
       </div>
     </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         POINTS-MODE — H2H points leagues (Phase 1). Page header,
+         hero matchup, matchup list. Smaller surface than category
+         mode for Phase 1; "Today's beats" and per-matchup detail
+         modal land in Phase 2+.
+    ────────────────────────────────────────────────────────────── -->
+    <template v-else-if="livePointsData && livePointsEditorial">
+      <header class="page-head">
+        <div class="page-head-copy">
+          <p class="page-eyebrow">
+            <span class="page-eyebrow-bar" aria-hidden="true"></span>
+            Week {{ livePointsData.currentWeek }}
+          </p>
+          <h1 class="page-headline">{{ pointsHeadline }}</h1>
+          <p class="page-sub">{{ livePointsEditorial.subHeadline }}</p>
+        </div>
+        <ul v-if="livePointsEditorial.quickReads.length" class="page-status" role="list" aria-label="This week's status">
+          <template v-for="(q, idx) in livePointsEditorial.quickReads" :key="q.label">
+            <li class="page-status-sep" v-if="idx > 0" aria-hidden="true"></li>
+            <li class="page-status-item">
+              <span class="page-status-num">{{ q.value }}</span>
+              <span class="page-status-label">{{ q.label }}</span>
+            </li>
+          </template>
+        </ul>
+      </header>
+
+      <!-- Hero matchup -->
+      <section
+        v-if="livePointsEditorial.matchupOfWeek"
+        class="points-hero"
+        :aria-labelledby="`points-hero-${livePointsEditorial.matchupOfWeek.matchupId}`"
+      >
+        <p class="points-hero-eyebrow">{{ livePointsEditorial.matchupOfWeek.eyebrow }}</p>
+        <h2 class="points-hero-headline" :id="`points-hero-${livePointsEditorial.matchupOfWeek.matchupId}`">
+          {{ livePointsEditorial.matchupOfWeek.headline }}
+        </h2>
+        <p class="points-hero-body">{{ livePointsEditorial.matchupOfWeek.body }}</p>
+        <p class="points-hero-sub">{{ livePointsEditorial.matchupOfWeek.subContext }}</p>
+      </section>
+
+      <!-- Matchup list -->
+      <ol class="points-matchups" role="list">
+        <li
+          v-for="m in livePointsData.currentWeekMatchups ?? []"
+          :key="m.id"
+          class="points-matchup"
+          :data-status="m.status"
+        >
+          <div class="points-matchup-eyebrow">
+            <span class="points-matchup-eyebrow-text">{{ pointsLine(m.id).eyebrow }}</span>
+          </div>
+          <div class="points-matchup-row">
+            <div class="points-matchup-side points-matchup-home">
+              <div class="points-matchup-avatar" :style="{ background: `linear-gradient(135deg, ${pointsTeam(m.homeTeamId).avatarColor})` }">
+                <img v-if="pointsTeam(m.homeTeamId).avatarUrl" :src="pointsTeam(m.homeTeamId).avatarUrl" alt="" />
+                <span v-else>{{ pointsTeam(m.homeTeamId).ownerInitials }}</span>
+              </div>
+              <div class="points-matchup-id">
+                <p class="points-matchup-name">{{ pointsTeam(m.homeTeamId).name }}</p>
+                <p class="points-matchup-score">{{ m.homePoints.toFixed(1) }}</p>
+              </div>
+            </div>
+            <span class="points-matchup-vs" aria-hidden="true">vs</span>
+            <div class="points-matchup-side points-matchup-away">
+              <div class="points-matchup-id points-matchup-id-away">
+                <p class="points-matchup-name">{{ pointsTeam(m.awayTeamId).name }}</p>
+                <p class="points-matchup-score">{{ m.awayPoints.toFixed(1) }}</p>
+              </div>
+              <div class="points-matchup-avatar" :style="{ background: `linear-gradient(135deg, ${pointsTeam(m.awayTeamId).avatarColor})` }">
+                <img v-if="pointsTeam(m.awayTeamId).avatarUrl" :src="pointsTeam(m.awayTeamId).avatarUrl" alt="" />
+                <span v-else>{{ pointsTeam(m.awayTeamId).ownerInitials }}</span>
+              </div>
+            </div>
+          </div>
+          <p class="points-matchup-status">{{ pointsLine(m.id).status }}</p>
+        </li>
+      </ol>
+    </template>
 
     <template v-else>
 
@@ -431,6 +517,7 @@ import type {
   CategoryLeagueDataCatLine,
   CategoryLeagueDataTeam,
   CategoryLeagueDataStanding,
+  LeagueDataH2HPoints,
 } from '@/editorial/types'
 import CategoryMatchupDetailModal from '@/components/demo/CategoryMatchupDetailModal.vue'
 // Hard left/right binary for per-cat signals (cat-tile leaders, margin
@@ -446,6 +533,10 @@ import {
   renderMatchupsPage,
   type RenderedMatchupsCopy,
 } from '@/editorial/render-matchups'
+import {
+  renderPointsMatchupsPage,
+  type RenderedPointsMatchupsCopy,
+} from '@/editorial/render-matchups-points'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -459,6 +550,7 @@ import {
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
+import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -482,6 +574,41 @@ const data = computed<CategoryLeagueData>(() => liveData.value ?? demoData)
 const liveEditorial = shallowRef<RenderedMatchupsCopy>(renderMatchupsPage(demoData))
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
+// Set when the adapter resolves to a non-category format. Phase 1
+// graduates h2h-points to a real points-mode render below; only
+// truly unsupported formats (h2h-roto, total-points) flow here.
+const unsupportedFormat = ref<string | null>(null)
+const unsupportedLeagueName = ref<string | null>(null)
+// H2H points data + editorial — populated when format === 'h2h-points'.
+const livePointsData = shallowRef<LeagueDataH2HPoints | null>(null)
+const livePointsEditorial = shallowRef<RenderedPointsMatchupsCopy | null>(null)
+
+// Points-mode helpers — keep parity with category-mode lookups so
+// the template reads symmetric across formats.
+const pointsHeadline = computed(() => {
+  const d = livePointsData.value
+  if (!d) return ''
+  return `Week ${d.currentWeek}.`
+})
+function pointsTeam(id: string): CategoryLeagueDataTeam {
+  const t = livePointsData.value?.teams.find((x) => x.id === id)
+  if (t) return t
+  return {
+    id,
+    name: `Team ${id}`,
+    ownerName: '',
+    ownerInitials: (id || '?').slice(0, 2).toUpperCase(),
+    avatarUrl: undefined,
+    avatarColor: 'oklch(0.40 0.05 90), oklch(0.25 0.05 90)',
+    isMyTeam: false,
+  }
+}
+function pointsLine(id: string) {
+  return (
+    livePointsEditorial.value?.matchupCopy[id]
+    ?? { eyebrow: '', status: '' }
+  )
+}
 
 // Strict route (`/leagues/:leagueId/matchups`) resolves the league via
 // the leagues store; soft mode (`?leagueId=&platform=`) reads the query
@@ -546,6 +673,10 @@ async function loadMatchups() {
   // until the new fetch resolves and the loading guard never appears.
   liveData.value = null
   liveError.value = null
+  unsupportedFormat.value = null
+  unsupportedLeagueName.value = null
+  livePointsData.value = null
+  livePointsEditorial.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -562,6 +693,27 @@ async function loadMatchups() {
       platform === 'espn'   ? await espnLeagueToCategoryData(id, opts)
       : platform === 'yahoo' ? await yahooLeagueToCategoryData(id, opts)
       :                        await sleeperLeagueToCategoryData(id, opts)
+    // Format gate.
+    //   h2h-category → render the category Matchups page (existing path)
+    //   h2h-points   → render the points Matchups page (Phase 1 graduates
+    //                  off the UnsupportedFormatPanel)
+    //   anything else → UnsupportedFormatPanel
+    if (fetched.format === 'h2h-points') {
+      livePointsData.value = fetched
+      livePointsEditorial.value = renderPointsMatchupsPage(fetched)
+      if (leagueRowId && fetched.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, fetched.leagueName)
+      }
+      return
+    }
+    if (fetched.format !== 'h2h-category') {
+      unsupportedFormat.value = fetched.format
+      unsupportedLeagueName.value = fetched.leagueName
+      if (leagueRowId && fetched.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, fetched.leagueName)
+      }
+      return
+    }
     liveData.value = fetched
     liveEditorial.value = renderMatchupsPage(fetched)
     // Backfill placeholder league_name once the real name resolves —
@@ -2322,5 +2474,158 @@ const heroNowX = computed(() => {
   .feed-center { gap: 3px; }
 
   .pills { grid-template-columns: 1fr; }
+}
+
+/* ─── POINTS-MODE (Phase 1) ─────────────────────────────────────
+   H2H points Matchups page. Shares the page-head class with the
+   category mode above so the two formats feel like one publication. */
+
+.points-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 32px;
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at top, oklch(0.78 0.18 92 / 0.10), transparent 60%),
+    linear-gradient(180deg, oklch(0.13 0.015 90), oklch(0.08 0.014 90));
+}
+.points-hero-eyebrow {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+}
+.points-hero-headline {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  line-height: 1.05;
+  color: var(--ink-1);
+}
+.points-hero-body {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 60ch;
+}
+.points-hero-sub {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-3);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.points-matchups {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  /* 280px minimum so 4 matchups land as 2×2 on wide screens
+     instead of 3+1 with an awkward orphan card. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.points-matchup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid oklch(0.20 0.015 90);
+  border-radius: 14px;
+  background: oklch(0.11 0.015 90);
+}
+.points-matchup[data-status='live'] {
+  border-color: oklch(0.50 0.16 145 / 0.45);
+}
+.points-matchup-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.points-matchup[data-status='live'] .points-matchup-eyebrow {
+  color: oklch(0.78 0.16 145);
+}
+.points-matchup-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.points-matchup-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.points-matchup-away {
+  justify-content: flex-end;
+}
+.points-matchup-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  color: oklch(0.12 0.012 90);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.points-matchup-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.points-matchup-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.points-matchup-id-away {
+  text-align: right;
+}
+.points-matchup-name {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--ink-1);
+  line-height: 1.1;
+}
+.points-matchup-score {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.points-matchup-vs {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4, var(--ink-3));
+}
+.points-matchup-status {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-3);
+  line-height: 1.4;
 }
 </style>

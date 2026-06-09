@@ -8,8 +8,14 @@
          stays visually populated during load.
     ────────────────────────────────────────────────────────────── -->
     <LiveLoadError v-if="liveError" :message="liveError" />
+    <UnsupportedFormatPanel
+      v-if="unsupportedFormat"
+      :format="unsupportedFormat"
+      :league-name="unsupportedLeagueName ?? undefined"
+      :platform="livePlatform ?? undefined"
+    />
     <div
-      v-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !liveError"
       class="draft-loading"
       role="status"
       aria-live="polite"
@@ -704,6 +710,7 @@ import type { CategoryLeagueData } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
+import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -730,6 +737,10 @@ const liveDraftEditorial = shallowRef<RenderedDraftCopy>(
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
+// Set when the adapter resolves to a non-category format (Phase 0:
+// h2h-points). Drives the UnsupportedFormatPanel.
+const unsupportedFormat = ref<string | null>(null)
+const unsupportedLeagueName = ref<string | null>(null)
 
 // Two ways to bind to a real league (mirrors the other live views):
 //   - Strict: /leagues/:leagueId/draft — leagueId is the Supabase UUID
@@ -789,6 +800,8 @@ async function loadDraft() {
   // Reset prior render state — component is reused across leagues.
   liveData.value = null
   liveError.value = null
+  unsupportedFormat.value = null
+  unsupportedLeagueName.value = null
 
   const id = liveLeagueId.value
   const platform = livePlatform.value
@@ -809,6 +822,15 @@ async function loadDraft() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
+    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    if (data.format !== 'h2h-category') {
+      unsupportedFormat.value = data.format
+      unsupportedLeagueName.value = data.leagueName
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
     liveData.value = data
     liveDraftEditorial.value = renderDraftPage(data)
     if (leagueRowId && data.leagueName) {

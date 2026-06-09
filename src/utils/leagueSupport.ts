@@ -1,13 +1,22 @@
 /**
  * Which league types The League Beat covers today.
  *
- * The product is sharply focused on **H2H Categories Baseball** for
- * launch. Football H2H Points lands in September 2026; everything
- * else is on hold until there's paying demand. Trying to render the
- * matchups / hero / beats pipeline on unsupported types produces
- * broken editorial (no cats, no matchups, wrong cadence), so the
- * `<MyLeagueLayout>` gates with a "not yet" notice before any view
- * renders.
+ * Supported (full or partial coverage):
+ *   - H2H Categories Baseball — full pipeline (every page)
+ *   - H2H Points     Baseball — partial pipeline (Phase 1: The Issue
+ *                                 + Matchups page; other pages still
+ *                                 surface UnsupportedFormatPanel from
+ *                                 their own format check)
+ *
+ * Not supported yet:
+ *   - Rotisserie baseball
+ *   - Football (any format)
+ *   - Other sports (basketball, hockey, soccer)
+ *
+ * The layout gate stays conservative — when in doubt, surface the
+ * UnsupportedLeagueNotice rather than render half-broken pages. The
+ * page-level Phase 0 format gate (UnsupportedFormatPanel) is a second
+ * line of defense for pages that haven't been graduated yet.
  */
 
 export type SupportStatus =
@@ -55,9 +64,21 @@ export function classifyLeagueSupport(league: LeagueLike | null | undefined): Su
     return { ok: false, kind: 'roto', sport, scoringType: league?.scoring_type ?? null }
   }
 
-  // H2H Points leagues are coming after football. Yahoo flags these
-  // as `point` or `headpoint`; Sleeper uses 'ppr' / 'standard'. Catch
-  // any scoring_type that contains 'point' or known points keywords.
+  // H2H Points baseball — Phase 1 graduates coverage on The Issue
+  // (matchups section) and the Matchups page directly. Other pages
+  // surface UnsupportedFormatPanel via their own format checks until
+  // Phase 2+ wires them up. Yahoo flags points as `point` /
+  // `headpoint` and ESPN as `h2h_points`; we keep the football-only
+  // keys ('ppr', 'standard', 'half') on the unsupported path because
+  // they're football scoring schemes, not baseball.
+  if (
+    scoringType === 'point' ||
+    scoringType === 'headpoint' ||
+    scoringType === 'h2h_points' ||
+    scoringType === 'h2hpoints'
+  ) {
+    return { ok: true }
+  }
   if (
     scoringType.includes('point') ||
     scoringType === 'ppr' ||
