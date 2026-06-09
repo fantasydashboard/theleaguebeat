@@ -678,7 +678,7 @@ function renderWidget(payload: BeatPayload): BeatWidget | undefined {
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function groupByDay(items: BeatItem[], now: Date): BeatDay[] {
+export function groupByDay(items: BeatItem[], now: Date): BeatDay[] {
   const buckets = new Map<string, BeatItem[]>()
   for (const item of items) {
     const key = dayKey(item.timestamp)

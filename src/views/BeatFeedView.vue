@@ -20,7 +20,7 @@
          Issue's loading template so the two surfaces feel like the
          same publication. -->
     <div
-      v-else-if="isStrictLiveMode && !liveData && !liveError"
+      v-else-if="isStrictLiveMode && !liveData && !livePointsData && !liveError"
       class="beat-loading"
       role="status"
       aria-live="polite"
@@ -229,13 +229,14 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { renderBeat, type RenderedBeat } from '@/editorial/render-beat'
+import { renderBeatPoints } from '@/editorial/render-beat-points'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { hydrateYahooDailyRosters } from '@/services/dailyRosterHydrator'
 import { hydrateEspnDailyRosters } from '@/services/espnDailyRosterHydrator'
-import type { CategoryLeagueData } from '@/editorial/types'
+import type { CategoryLeagueData, LeagueDataH2HPoints } from '@/editorial/types'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
@@ -257,6 +258,10 @@ const issueStore = useIssueStore()
 ───────────────────────────────────────────────────────────────── */
 
 const liveData = shallowRef<CategoryLeagueData | null>(null)
+// H2H points data — populated when the adapter resolves a points league.
+// The points Beat renders from this instead of routing to the
+// unsupported panel.
+const livePointsData = shallowRef<LeagueDataH2HPoints | null>(null)
 const fixtureData = categoriesFixtureToLeagueData()
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
@@ -320,8 +325,10 @@ const activeData = computed<CategoryLeagueData>(
    pure; we re-run it whenever activeData changes.
 ───────────────────────────────────────────────────────────────── */
 
-const beat = computed<RenderedBeat>(
-  () => renderBeat(activeData.value, renderedAt.value),
+const beat = computed<RenderedBeat>(() =>
+  livePointsData.value
+    ? renderBeatPoints(livePointsData.value, renderedAt.value)
+    : renderBeat(activeData.value, renderedAt.value),
 )
 
 /* ─────────────────────────────────────────────────────────────────
@@ -342,7 +349,9 @@ const lastUpdatedLabel = computed(() => {
 })
 
 function lookupTeam(teamId: string) {
-  const t = liveData.value?.teams.find((x) => x.id === teamId)
+  const t =
+    liveData.value?.teams.find((x) => x.id === teamId) ??
+    livePointsData.value?.teams.find((x) => x.id === teamId)
   if (t) return t
   try {
     return getTeam(teamId)
@@ -395,6 +404,7 @@ async function loadBeat() {
   // the new league has the same default render path the user can't
   // tell the switch happened.
   liveData.value = null
+  livePointsData.value = null
   liveError.value = null
   unsupportedFormat.value = null
   unsupportedLeagueName.value = null
@@ -427,10 +437,28 @@ async function loadBeat() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
-    // Format gate — Phase 0 routes any non-category league to the
-    // UnsupportedFormatPanel. We DON'T assign liveData here because
-    // the rest of this page's render expects the category variant;
-    // the panel takes the page body entirely.
+    // Points leagues render their own Beat (matchup / standings / rank
+    // driven). The shared template consumes the same RenderedBeat shape.
+    if (data.format === 'h2h-points') {
+      livePointsData.value = data
+      renderedAt.value = new Date()
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      issueStore.setIssue({
+        currentWeek: data.currentWeek,
+        currentSeason: data.currentSeason,
+        regularSeasonEndWeek: data.regularSeasonEndWeek,
+        seasonStage: deriveSeasonStage(data.currentWeek, data.regularSeasonEndWeek),
+        leagueFoundedSeason: data.currentSeason,
+        lastUpdated: new Date(),
+      })
+      return
+    }
+    // Format gate — any remaining non-category format routes to the
+    // UnsupportedFormatPanel. We DON'T assign liveData here because the
+    // rest of this page's render expects the category variant; the panel
+    // takes the page body entirely.
     if (data.format !== 'h2h-category') {
       unsupportedFormat.value = data.format
       unsupportedLeagueName.value = data.leagueName
