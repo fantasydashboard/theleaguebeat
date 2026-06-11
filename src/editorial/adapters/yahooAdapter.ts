@@ -244,14 +244,23 @@ async function buildYahooLeagueData(
   // Phase 2 → 5.
   if (isPoints) {
     // Phase 2: also pull every completed week so we can build standings
-    // + season rank history (the cover-story arc detectors need them).
-    // The previous week is derived from this same map, so there's no
-    // separate prev-week fetch.
-    const [pointsTeams, pointsSettingsRaw, pointsMatchupsRaw, allPointsWeeks] = await Promise.all([
+    // + season rank history. The previous week is derived from this same
+    // map, so there's no separate prev-week fetch. raw standings +
+    // prior seasons feed Chronicles (season history + manager legacy):
+    // both builders read final-standings W/L/T + rank, which is the
+    // matchup record in a points league, so they're reused as-is.
+    const pointsPriorKeys = Array.from(
+      new Set((opts?.priorSeasonKeys ?? []).filter((k) => k && k !== leagueKey)),
+    )
+    const [pointsTeams, pointsSettingsRaw, pointsMatchupsRaw, allPointsWeeks, pointsRawStandings, pointsPriorSeasons] = await Promise.all([
       yahooService.getTeams(leagueKey).catch(() => [] as any[]),
       yahooService.getLeagueSettings(leagueKey).catch(() => null),
       yahooService.getMatchups(leagueKey, currentWeek).catch(() => [] as any[]),
       fetchAllPointsMatchups(leagueKey, currentWeek - 1),
+      yahooService.getStandings(leagueKey).catch(() => [] as any[]),
+      pointsPriorKeys.length
+        ? fetchPriorSeasons(pointsPriorKeys, leagueKey)
+        : Promise.resolve([] as PriorSeasonData[]),
     ])
     const myGuid = opts?.userIdentity?.yahooGuid?.trim() || null
     const teamList: CategoryLeagueDataTeam[] = pointsTeams.map((t: any) => ({
@@ -276,18 +285,40 @@ async function buildYahooLeagueData(
 
     const { standings, seasonRankHistory } = buildPointsStandings(teamList, allPointsWeeks)
 
+    // Chronicles: champions + all-time manager legacy. The category
+    // builders are format-agnostic (champion = final rank 1; legacy sums
+    // standings W/L/T, which is the matchup record for points).
+    const playoffCutoff = readPlayoffCutoff(pointsSettingsRaw, teamList.length)
+    const seasonHistory = await buildSeasonHistory(
+      metadata,
+      leagueKey,
+      pointsPriorSeasons,
+      pointsPriorKeys.length > 0,
+    )
+    const managerLegacy = buildManagerLegacy(
+      metadata,
+      pointsRawStandings,
+      teamList,
+      playoffCutoff,
+      myGuid,
+      pointsPriorSeasons,
+    )
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: leagueKey,
       leagueName: deriveLeagueName(pointsSettingsRaw, leagueKey),
       currentWeek,
       currentSeason,
+      playoffCutoff,
       teams: teamList,
       currentWeekMatchups,
       previousWeekMatchups,
       weeklyPointsAverage,
       standings,
       seasonRankHistory,
+      seasonHistory,
+      managerLegacy,
     }
     return out
   }

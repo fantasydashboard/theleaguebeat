@@ -42,7 +42,7 @@
     <!-- Season-one info banner — shown after data loads in strict
          live mode when the league has no completed seasons yet. -->
     <div
-      v-if="liveData && displaySeasonCount <= 1"
+      v-if="liveData && displaySeasonCount === 0"
       class="live-banner live-banner-info"
       role="status"
     >
@@ -516,7 +516,23 @@ async function loadChronicles() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
-    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    // Points leagues render the format-agnostic Chronicles sections
+    // (champions / eras / receipts / record watch) from the same
+    // computeds: seasonHistory + managerLegacy + standings + teams all
+    // exist on the points contract now. The category-only sections
+    // (rivalries / category crowns) are already stripped from this view,
+    // so no per-section guards are needed. `liveEditorial`
+    // (renderHistoryPage) is category-only and unused by the visible
+    // template, so it's skipped. The cast is safe: every field the
+    // visible computeds read is present on the points shape.
+    if (data.format === 'h2h-points') {
+      liveData.value = data as unknown as CategoryLeagueData
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
+    // Format gate — any remaining non-category format routes to the panel.
     if (data.format !== 'h2h-category') {
       unsupportedFormat.value = data.format
       unsupportedLeagueName.value = data.leagueName
@@ -577,7 +593,10 @@ function collectUserIdentity() {
 const pageHeadline = computed(() => {
   const n = displaySeasonCount.value
   if (n <= 0) return 'A fresh ledger.'
-  if (n === 1) return 'Season one, in progress.'
+  // n counts COMPLETED seasons. One completed season means a champion is
+  // already on the books and the current season is the second, so it's
+  // not "season one, in progress" (that's n === 0).
+  if (n === 1) return 'One year on the books.'
   return `${numberToWord(n)} years of receipts.`
 })
 function numberToWord(n: number): string {
@@ -623,6 +642,9 @@ const recordWatch = computed<WatchItem[]>(() => {
   const d = liveData.value
   const live = d?.managerLegacy
   if (!d || !live || live.length === 0) return []
+  // Points leagues carry matchup wins in the cat-named fields, so the
+  // unit reads as "win" not "cat".
+  const unit = (d.format as string) === 'h2h-points' ? 'win' : 'cat'
   const items: WatchItem[] = []
   // Self-contained avatar bits from a manager (works for departed
   // managers too — they carry their own logo on the legacy record).
@@ -643,7 +665,7 @@ const recordWatch = computed<WatchItem[]>(() => {
     items.push({
       label: 'Milestone watch',
       ...mgr(milestone.m),
-      text: `${milestone.m.name} is ${milestone.gap} cat${milestone.gap === 1 ? '' : 's'} from ${milestone.target} all-time.`,
+      text: `${milestone.m.name} is ${milestone.gap} ${unit}${milestone.gap === 1 ? '' : 's'} from ${milestone.target} all-time.`,
       anchor: `legacy-${milestone.m.managerGuid}`,
     })
   }
@@ -661,7 +683,7 @@ const recordWatch = computed<WatchItem[]>(() => {
         logoUrl: chase.avatarUrl, avatarColor: chase.avatarColor, ownerInitials: chase.ownerInitials,
         text: gap <= 0
           ? `${chase.name} is dead even with ${lead.name} atop ${d.currentSeason}.`
-          : `${chase.name} trails ${lead.name} by ${gap} cat${gap === 1 ? '' : 's'} for the ${d.currentSeason} lead.`,
+          : `${chase.name} trails ${lead.name} by ${gap} ${unit}${gap === 1 ? '' : 's'} for the ${d.currentSeason} lead.`,
         route: liveHomeHref(),
       })
     }

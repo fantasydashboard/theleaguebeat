@@ -560,6 +560,19 @@ export interface LeagueDataH2HPoints {
    *  only completed weeks (the live current week is excluded, matching
    *  the category contract). Drives WILD_ARC / THRONE_CHANGE. */
   seasonRankHistory?: CategoryLeagueDataWeeklyRanks[]
+
+  /** Multi-season champions history. Champion = a past season's final
+   *  rank 1, which is format-agnostic, so the category `buildSeasonHistory`
+   *  is reused as-is. Empty for first-season leagues. Drives the
+   *  Chronicles Hall of Champions / Eras / Receipts. */
+  seasonHistory?: CategoryLeagueDataSeasonHistory[]
+
+  /** All-time per-manager legacy across connected seasons, on the
+   *  matchup-record basis (a "win" is a weekly points win). The
+   *  `catWins`-named fields carry matchup wins here. Yahoo only — ESPN
+   *  exposes no manager-legacy source (its category path has none either).
+   *  Drives the Chronicles Record Watch. */
+  managerLegacy?: CategoryLeagueDataManagerLegacy[]
 }
 
 /* ─────────────────────────────────────────────────────────────────

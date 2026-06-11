@@ -362,6 +362,12 @@ export async function espnLeagueToCategoryData(
 
     const { standings, seasonRankHistory } = buildPointsStandings(teamsOutMinimal, allPointsWeeks)
 
+    // Chronicles champions — buildSeasonHistory reads only prior seasons'
+    // final W/L/T + rank (champion = rank 1), so it's format-agnostic.
+    // ESPN has no manager-legacy builder (its category path has none
+    // either), so Record Watch is simply absent for ESPN points.
+    const seasonHistory = await buildSeasonHistory(leagueId, season).catch(() => [])
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: String(league.id),
@@ -374,6 +380,7 @@ export async function espnLeagueToCategoryData(
       weeklyPointsAverage,
       standings,
       seasonRankHistory,
+      seasonHistory,
     }
     return out
   }
