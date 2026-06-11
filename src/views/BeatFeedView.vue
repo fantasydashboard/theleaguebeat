@@ -52,7 +52,7 @@
       <p class="beat-sub">
         The wire on your league. Updated continuously.
         <span v-if="lastUpdatedLabel" class="beat-updated">
-          · <span aria-hidden="true">●</span> {{ lastUpdatedLabel }}
+          · <span class="beat-live-dot" aria-hidden="true">●</span> {{ lastUpdatedLabel }}
         </span>
       </p>
     </header>
@@ -892,8 +892,27 @@ function collectUserIdentity() {
 /* Press feedback — these rows are full-width tappable cards. Without
    a subtle scale on :active, taps feel like they're going into a void. */
 .beat-item-clickable:active {
-  transform: scale(0.997);
+  /* 0.997 was below the perceptual threshold — a press that doesn't
+     register reads as a dead tap. 0.99 stays subtle on a full-width row
+     but is actually felt. */
+  transform: scale(0.99);
   transition-duration: 100ms;
+}
+
+/* The live "updated" dot — a single, purposeful heartbeat that says the
+   wire is live. One element, slow and quiet, so it reads as a status
+   light, not decoration. Scale needs inline-block to take effect. */
+.beat-live-dot {
+  display: inline-block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .beat-live-dot {
+    animation: beat-live-pulse 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  }
+  @keyframes beat-live-pulse {
+    0%, 100% { opacity: 0.5;  transform: scale(0.82); }
+    50%      { opacity: 1;    transform: scale(1); }
+  }
 }
 /* Touch devices trigger :hover on tap and the highlight stays sticky
    until the next interaction — gate it behind hover-capable pointers. */
