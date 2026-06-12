@@ -9,7 +9,16 @@ import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-stor
 /** Optional visualization a block can render. The view draws these; the
  *  builder just hands over the shaped data. */
 export type YourColumnViz =
-  | { kind: 'rankLine'; series: number[]; teamCount: number; start: number; end: number }
+  | {
+      kind: 'rankLine'
+      series: number[]
+      teamCount: number
+      start: number
+      end: number
+      best: number // best (lowest) rank reached — top of the chart
+      worst: number // worst (highest) rank — bottom of the chart
+      tone: 'up' | 'down' | 'flat' // climb / slide / ranged, drives the line color
+    }
   | {
       kind: 'scoreBar'
       myName: string
@@ -153,10 +162,18 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
   const oppName = nameOf(data, oppId)
   const verbPhrase =
     mine > opp ? `leads ${oppName}` : mine < opp ? `trails ${oppName}` : `tied with ${oppName}`
+  // A category split bar gives the cats matchup the same visual weight as
+  // points. The margin chip is skipped on a tie (0 reads oddly).
+  const catChips =
+    mine === opp
+      ? undefined
+      : [{ value: String(Math.abs(mine - opp)), label: mine > opp ? 'AHEAD' : 'BACK' }]
   return {
     label: 'Your matchup',
     eyebrow: 'LIVE',
     headline: `${cap(verbPhrase)}, ${nbScore(`${mine}-${opp}`)}.`,
+    chips: catChips,
+    viz: { kind: 'scoreBar', myName: name, oppName, mine, opp },
     teamIds: [teamId, oppId],
   }
 }
@@ -225,17 +242,21 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
   // label) — so a climber reads THE CLIMB, a faller THE SLIDE.
   let headline: string
   let eyebrow: string
+  let tone: 'up' | 'down' | 'flat'
   if (start - end > 0 && end <= min + 1) {
     eyebrow = 'THE CLIMB'
+    tone = 'up'
     headline =
       end <= 1
         ? `Climbed to the top of the board.`
         : `Climbed the board, #${start} to #${end}.`
   } else if (start - end < 0 && end >= max - 1) {
     eyebrow = 'THE SLIDE'
+    tone = 'down'
     headline = `Slid from #${start} to #${end}.`
   } else {
     eyebrow = 'THE ARC'
+    tone = 'flat'
     headline = `Ranged from #${min} to #${max} on the season.`
   }
   return {
@@ -243,7 +264,16 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
     eyebrow,
     headline,
     chips: [{ value: `#${start} → #${end}`, label: 'SEASON' }],
-    viz: { kind: 'rankLine', series, teamCount: data.teams.length, start, end },
+    viz: {
+      kind: 'rankLine',
+      series,
+      teamCount: data.teams.length,
+      start,
+      end,
+      best: min,
+      worst: max,
+      tone,
+    },
     teamIds: [teamId],
   }
 }

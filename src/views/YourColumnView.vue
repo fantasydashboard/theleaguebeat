@@ -98,7 +98,7 @@
             >
               <div class="yc-sb-meta">
                 <span class="yc-sb-name">{{ row.name }}</span>
-                <span class="yc-sb-score">{{ row.score.toFixed(1) }}</span>
+                <span class="yc-sb-score">{{ fmtScore(row.score) }}</span>
               </div>
               <div class="yc-sb-track">
                 <div class="yc-sb-fill" :style="{ width: row.pct + '%' }"></div>
@@ -112,21 +112,27 @@
             </div>
           </div>
 
-          <!-- Season rank line -->
+          <!-- Season rank line. Vertical scale anchors the chart: best rank
+               at the top, worst at the bottom, so it reads even when the
+               season started and ended on the same number. -->
           <div v-else-if="block.viz && block.viz.kind === 'rankLine'" class="yc-rankline">
+            <div class="yc-rl-scale">
+              <span>#{{ block.viz.best }}</span>
+              <span>#{{ block.viz.worst }}</span>
+            </div>
             <svg
               :viewBox="`0 0 100 ${RANK_H}`"
               preserveAspectRatio="none"
               class="yc-rl-svg"
               role="img"
-              :aria-label="`Season rank, #${block.viz.start} to #${block.viz.end}`"
+              :aria-label="`Season rank, best #${block.viz.best}, worst #${block.viz.worst}`"
             >
-              <polyline :points="rankLine(block.viz)" class="yc-rl-line" />
+              <polyline
+                :points="rankLine(block.viz)"
+                class="yc-rl-line"
+                :class="`tone-${block.viz.tone}`"
+              />
             </svg>
-            <div class="yc-rl-axis">
-              <span>#{{ block.viz.start }}</span>
-              <span>#{{ block.viz.end }}</span>
-            </div>
           </div>
 
           <ul
@@ -336,6 +342,9 @@ const RANK_H = 34 // SVG viewBox height for the rank line
 
 type ScoreBarViz = Extract<NonNullable<YourColumnBlock['viz']>, { kind: 'scoreBar' }>
 type RankLineViz = Extract<NonNullable<YourColumnBlock['viz']>, { kind: 'rankLine' }>
+
+// Points carry one decimal (376.5); category wins are whole numbers (12).
+const fmtScore = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
 function scoreBarRows(v: ScoreBarViz) {
   const max = Math.max(v.mine, v.opp, v.myProj ?? 0, v.oppProj ?? 0) || 1
@@ -779,26 +788,38 @@ function onClaim() {
 }
 
 /* ─── RANK LINE (season arc) ───────────────────────────────────── */
-.yc-rankline { margin-top: 4px; max-width: 300px; }
-.yc-rl-svg { width: 100%; height: 44px; display: block; overflow: visible; }
+/* Best rank at the top of the chart, worst at the bottom; the line is
+   tinted by direction — green climb, warm slide, cyan range. */
+.yc-rankline {
+  margin-top: 6px;
+  max-width: 320px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.yc-rl-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  flex: none;
+}
+.yc-rl-svg { flex: 1; height: 48px; display: block; overflow: visible; }
 .yc-rl-line {
   fill: none;
-  stroke: var(--accent-tertiary);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-.yc-rl-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 5px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
+.yc-rl-line.tone-up { stroke: oklch(0.8 0.17 155); }
+.yc-rl-line.tone-down { stroke: oklch(0.68 0.19 25); }
+.yc-rl-line.tone-flat { stroke: var(--accent-tertiary); }
 
 /* ─── STAT CHIPS ───────────────────────────────────────────────── */
 .yc-block-chips {
