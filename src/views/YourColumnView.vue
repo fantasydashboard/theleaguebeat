@@ -65,85 +65,90 @@
           <a href="#" @click.prevent="onClaim">Make this yours</a>
         </p>
         <section
-          v-for="(block, i) in renderedBlocks"
-          :key="block.label"
+          v-for="(entry, i) in renderedBlocks"
+          :key="entry.block.label"
           class="yc-block"
-          :class="{ 'yc-block-focal': block.label === 'Your matchup' }"
+          :class="{ 'yc-block-focal': entry.kind === 'block' && entry.block.label === 'Your matchup' }"
         >
           <div class="yc-block-head">
             <span class="yc-block-num">{{ String(i + 1).padStart(2, '0') }}</span>
             <p class="yc-block-kicker">
-              <span class="yc-k-label">{{ block.label }}</span>
+              <span class="yc-k-label">{{ entry.block.label }}</span>
               <template
-                v-if="block.eyebrow && block.eyebrow.toUpperCase() !== block.label.toUpperCase()"
+                v-if="entry.block.eyebrow && entry.block.eyebrow.toUpperCase() !== entry.block.label.toUpperCase()"
               >
                 <span class="yc-k-sep" aria-hidden="true">/</span>
-                <span class="yc-k-eyebrow" :class="{ 'is-live': block.eyebrow === 'LIVE' }">
-                  <span v-if="block.eyebrow === 'LIVE'" class="yc-live-dot" aria-hidden="true"></span>{{ block.eyebrow }}
+                <span class="yc-k-eyebrow" :class="{ 'is-live': entry.block.eyebrow === 'LIVE' }">
+                  <span v-if="entry.block.eyebrow === 'LIVE'" class="yc-live-dot" aria-hidden="true"></span>{{ entry.block.eyebrow }}
                 </span>
               </template>
             </p>
           </div>
 
-          <h2 class="yc-block-headline">{{ block.headline }}</h2>
-          <p v-if="block.body" class="yc-block-body">{{ block.body }}</p>
-
-          <!-- Live score bar -->
-          <div v-if="block.viz && block.viz.kind === 'scoreBar'" class="yc-scorebar">
-            <div
-              v-for="(row, r) in scoreBarRows(block.viz)"
-              :key="r"
-              class="yc-sb-row"
-              :class="{ 'yc-sb-mine': row.mine }"
-            >
-              <div class="yc-sb-meta">
-                <span class="yc-sb-name">{{ row.name }}</span>
-                <span class="yc-sb-score">{{ fmtScore(row.score) }}</span>
-              </div>
-              <div class="yc-sb-track">
-                <div class="yc-sb-fill" :style="{ width: row.pct + '%' }"></div>
-                <div
-                  v-if="row.projPct != null"
-                  class="yc-sb-proj"
-                  :style="{ left: row.projPct + '%' }"
-                  title="projected finish"
-                ></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Season rank line. Vertical scale anchors the chart: best rank
-               at the top, worst at the bottom, so it reads even when the
-               season started and ended on the same number. -->
-          <div v-else-if="block.viz && block.viz.kind === 'rankLine'" class="yc-rankline">
-            <div class="yc-rl-scale">
-              <span>#{{ block.viz.best }}</span>
-              <span>#{{ block.viz.worst }}</span>
-            </div>
-            <svg
-              :viewBox="`0 0 100 ${RANK_H}`"
-              preserveAspectRatio="none"
-              class="yc-rl-svg"
-              role="img"
-              :aria-label="`Season rank, best #${block.viz.best}, worst #${block.viz.worst}`"
-            >
-              <polyline
-                :points="rankLine(block.viz)"
-                class="yc-rl-line"
-                :class="`tone-${block.viz.tone}`"
-              />
-            </svg>
-          </div>
-
-          <ul
-            v-if="block.chips && block.chips.length && !(block.viz && block.viz.kind === 'rankLine')"
-            class="yc-block-chips"
-          >
-            <li v-for="(c, ci) in block.chips" :key="ci">
-              <span class="yc-chip-num">{{ c.value }}</span>
-              <span class="yc-chip-label">{{ c.label }}</span>
+          <!-- Players list -->
+          <ul v-if="entry.kind === 'players'" class="yc-players">
+            <li v-for="(p, pi) in entry.block.players" :key="pi" class="yc-player" :class="`tone-${p.tone}`">
+              <span class="yc-player-mark" aria-hidden="true">{{ p.tone === 'up' ? '↑' : '↓' }}</span>
+              <span class="yc-player-name">{{ p.name }}</span>
+              <span class="yc-player-line">{{ p.line }}</span>
+              <span v-if="p.detail" class="yc-player-detail">{{ p.detail }}</span>
             </li>
           </ul>
+
+          <!-- Standard block -->
+          <template v-else>
+            <h2 class="yc-block-headline">{{ entry.block.headline }}</h2>
+            <p v-if="entry.block.body" class="yc-block-body">{{ entry.block.body }}</p>
+
+            <div v-if="entry.block.viz && entry.block.viz.kind === 'scoreBar'" class="yc-scorebar">
+              <div
+                v-for="(row, r) in scoreBarRows(entry.block.viz)"
+                :key="r"
+                class="yc-sb-row"
+                :class="{ 'yc-sb-mine': row.mine }"
+              >
+                <div class="yc-sb-meta">
+                  <span class="yc-sb-name">{{ row.name }}</span>
+                  <span class="yc-sb-score">{{ fmtScore(row.score) }}</span>
+                </div>
+                <div class="yc-sb-track">
+                  <div class="yc-sb-fill" :style="{ width: row.pct + '%' }"></div>
+                  <div
+                    v-if="row.projPct != null"
+                    class="yc-sb-proj"
+                    :style="{ left: row.projPct + '%' }"
+                    title="projected finish"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="entry.block.viz && entry.block.viz.kind === 'rankLine'" class="yc-rankline">
+              <div class="yc-rl-scale">
+                <span>#{{ entry.block.viz.best }}</span>
+                <span>#{{ entry.block.viz.worst }}</span>
+              </div>
+              <svg
+                :viewBox="`0 0 100 ${RANK_H}`"
+                preserveAspectRatio="none"
+                class="yc-rl-svg"
+                role="img"
+                :aria-label="`Season rank, best #${entry.block.viz.best}, worst #${entry.block.viz.worst}`"
+              >
+                <polyline :points="rankLine(entry.block.viz)" class="yc-rl-line" :class="`tone-${entry.block.viz.tone}`" />
+              </svg>
+            </div>
+
+            <ul
+              v-if="entry.block.chips && entry.block.chips.length && !(entry.block.viz && entry.block.viz.kind === 'rankLine')"
+              class="yc-block-chips"
+            >
+              <li v-for="(c, ci) in entry.block.chips" :key="ci">
+                <span class="yc-chip-num">{{ c.value }}</span>
+                <span class="yc-chip-label">{{ c.label }}</span>
+              </li>
+            </ul>
+          </template>
         </section>
       </template>
     </template>
@@ -162,6 +167,7 @@ import { usePlatformsStore } from '@/stores/platforms'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import { useViewerTeam } from '@/composables/useViewerTeam'
 import { buildYourColumn, type YourColumnBlock } from '@/editorial/yourColumn/buildYourColumn'
+import type { YourPlayersBlock } from '@/editorial/yourColumn/buildYourPlayers'
 
 const route = useRoute()
 const router = useRouter()
@@ -325,13 +331,20 @@ const column = computed(() => {
   return buildYourColumn(liveData.value as LeagueData, viewerTeamId.value)
 })
 
-const renderedBlocks = computed(() =>
-  column.value
-    ? [column.value.hero, column.value.matchup, column.value.rival, column.value.arc].filter(
-        Boolean,
-      )
-    : [],
-)
+type ColumnEntry =
+  | { kind: 'block'; block: YourColumnBlock }
+  | { kind: 'players'; block: YourPlayersBlock }
+
+const renderedBlocks = computed<ColumnEntry[]>(() => {
+  const c = column.value
+  if (!c) return []
+  const out: ColumnEntry[] = [{ kind: 'block', block: c.hero }]
+  if (c.matchup) out.push({ kind: 'block', block: c.matchup })
+  if (c.players) out.push({ kind: 'players', block: c.players })
+  if (c.rival) out.push({ kind: 'block', block: c.rival })
+  if (c.arc) out.push({ kind: 'block', block: c.arc })
+  return out
+})
 
 /* ─────────────────────────────────────────────────────────────────
    VISUALIZATION MODELS — turn the builder's shaped data into draw-
@@ -856,6 +869,64 @@ function onClaim() {
   text-transform: uppercase;
   color: var(--ink-3);
   margin-top: 3px;
+}
+
+/* ─── YOUR PLAYERS ─────────────────────────────────────────────── */
+.yc-players {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+}
+.yc-player {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+}
+.yc-player-mark {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.yc-player.tone-up .yc-player-mark { color: oklch(0.8 0.17 155); }
+.yc-player.tone-down .yc-player-mark { color: oklch(0.68 0.19 25); }
+.yc-player-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.18rem;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+.yc-player-line {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.yc-player-detail {
+  display: none;
+}
+@media (min-width: 520px) {
+  .yc-player {
+    grid-template-columns: auto auto 1fr auto;
+  }
+  .yc-player-detail {
+    display: inline;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
 }
 
 /* ─── MOBILE ───────────────────────────────────────────────────── */
