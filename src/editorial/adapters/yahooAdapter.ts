@@ -265,15 +265,26 @@ async function buildYahooLeagueData(
         : Promise.resolve([] as PriorSeasonData[]),
     ])
     const myGuid = opts?.userIdentity?.yahooGuid?.trim() || null
-    const teamList: CategoryLeagueDataTeam[] = pointsTeams.map((t: any) => ({
-      id: t.team_key,
-      name: t.name || `Team ${t.team_id}`,
-      ownerName: t.manager_nickname || '',
-      ownerInitials: initialsOf(t.manager_nickname || t.name || '?'),
-      avatarUrl: t.logo_url || undefined,
-      avatarColor: 'oklch(0.62 0.18 200), oklch(0.42 0.18 220)',
-      isMyTeam: myGuid != null && t.manager_guid === myGuid,
-    }))
+    const teamList: CategoryLeagueDataTeam[] = pointsTeams.map((t: any) => {
+      // getTeams nests manager info under managers[0].manager and exposes
+      // is_my_team (from Yahoo's is_current_login flag). The points branch
+      // formerly read flat t.manager_guid / t.manager_nickname — fields
+      // getTeams never sets — so "my team" never resolved and owner names
+      // came back blank. Mirror the proven category path: prefer the
+      // is_current_login signal, fall back to a guid match.
+      const mgr = t.managers?.[0]?.manager
+      const ownerName: string = mgr?.nickname || mgr?.name || ''
+      const teamGuid = typeof mgr?.guid === 'string' ? mgr.guid : null
+      return {
+        id: t.team_key,
+        name: t.name || `Team ${t.team_id}`,
+        ownerName,
+        ownerInitials: initialsOf(ownerName || t.name || '?'),
+        avatarUrl: t.logo_url || undefined,
+        avatarColor: 'oklch(0.62 0.18 200), oklch(0.42 0.18 220)',
+        isMyTeam: t.is_my_team === true || (myGuid != null && teamGuid === myGuid),
+      }
+    })
 
     const currentWeekMatchups = mapYahooPointsMatchups(pointsMatchupsRaw, /*isFinal=*/ false)
     const previousWeekMatchups = allPointsWeeks.get(currentWeek - 1) ?? []
