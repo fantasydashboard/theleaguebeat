@@ -23,12 +23,14 @@ describe('buildYourColumn', () => {
   const col = buildYourColumn(data, 't1')
 
   it('builds a third-person hero (no "you")', () => {
-    expect(col.hero.headline).toMatch(/t1/)
+    expect(col.hero.headline.length).toBeGreaterThan(0)
     expect(col.hero.headline.toLowerCase()).not.toMatch(/\byou\b/)
   })
-  it('finds the team matchup', () => {
-    expect(col.matchup?.headline).toMatch(/t1/)
+  it('finds the team matchup and gives it a score-bar viz', () => {
+    // Inner headlines elide the viewer's name; the opponent + score remain.
+    expect(col.matchup?.headline).toMatch(/Leads t2/)
     expect(col.matchup?.headline).toMatch(/96\.7/)
+    expect(col.matchup?.viz).toMatchObject({ kind: 'scoreBar', mine: 96.7, opp: 70.5 })
   })
   it('gives the matchup a live-gap chip, and a projection chip when available', () => {
     expect(col.matchup?.chips?.[0]).toMatchObject({ value: '26.2', label: 'AHEAD' })
@@ -51,11 +53,12 @@ describe('buildYourColumn', () => {
     } as unknown as LeagueDataH2HPoints
     expect(buildYourColumn(thin, 't1').rival?.eyebrow).toBe('HEAD TO HEAD')
   })
-  it('classifies the arc chronologically with a matching kicker', () => {
-    expect(col.arc?.headline).toMatch(/t1/)
+  it('classifies the arc chronologically with a matching kicker and rank-line viz', () => {
+    expect(col.arc?.headline).toMatch(/[Cc]limbed/)
     expect(col.arc?.eyebrow).toBe('THE CLIMB')
     expect(col.arc?.label.toUpperCase()).not.toBe(col.arc?.eyebrow) // no duplicate label
     expect(JSON.stringify(col.arc)).toMatch(/#4 → #1/)
+    expect(col.arc?.viz).toMatchObject({ kind: 'rankLine', series: [4, 3, 2, 1, 1, 1], teamCount: 4 })
   })
   it('uses personal labels but no em dashes', () => {
     expect(col.rival?.label).toBe('Your Rival')

@@ -6,12 +6,27 @@
 import type { LeagueData, H2HRecord } from '@/editorial/types'
 import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
 
+/** Optional visualization a block can render. The view draws these; the
+ *  builder just hands over the shaped data. */
+export type YourColumnViz =
+  | { kind: 'rankLine'; series: number[]; teamCount: number; start: number; end: number }
+  | {
+      kind: 'scoreBar'
+      myName: string
+      oppName: string
+      mine: number
+      opp: number
+      myProj?: number
+      oppProj?: number
+    }
+
 export interface YourColumnBlock {
   label: string
   eyebrow?: string
   headline: string
   body?: string
   chips?: { value: string; label: string }[]
+  viz?: YourColumnViz
   teamIds: string[]
 }
 export interface YourColumn {
@@ -32,7 +47,10 @@ const ordinal = (n: number) => {
     default: return `${n}th`
   }
 }
-const possessive = (s: string) => (/s$/i.test(s) ? `${s}'` : `${s}'s`)
+// Inner blocks elide the viewer's team name (the hero header already names
+// them, and the team is in teamIds for share cards). Capitalize the verb so
+// the elided sentence still reads as a headline.
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export function buildYourColumn(data: LeagueData, teamId: string): YourColumn {
   return {
@@ -66,9 +84,7 @@ function buildHero(data: LeagueData, teamId: string): YourColumnBlock {
       : `${s.catWins}-${s.catLosses}`
     : ''
   const streak = s && s.streak.type !== 'T' ? `${s.streak.type}${s.streak.length}` : ''
-  const headline = s
-    ? `${name} sits ${ordinal(s.rank)}, ${record}.`
-    : `${name} this week.`
+  const headline = s ? `Sits ${ordinal(s.rank)}, ${record}.` : `${name} this week.`
   // Chips carry facts the headline DIDN'T (streak, win pct) — never an
   // echo of the rank/record already in the sentence.
   const chips: { value: string; label: string }[] = []
@@ -99,15 +115,16 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     const oppId = m.homeTeamId === teamId ? m.awayTeamId : m.homeTeamId
     const opp = m.homeTeamId === teamId ? m.awayPoints : m.homePoints
     const oppName = nameOf(data, oppId)
-    const verb = mine > opp ? 'leads' : mine < opp ? 'trails' : 'is level with'
+    const verbPhrase =
+      mine > opp ? `leads ${oppName}` : mine < opp ? `trails ${oppName}` : `level with ${oppName}`
     // Chips carry what the score line can't: the live gap, and where the
     // week projects to land. Never an echo of the two numbers above.
+    const myProj = m.homeTeamId === teamId ? m.homeProjected : m.awayProjected
+    const oppProj = m.homeTeamId === teamId ? m.awayProjected : m.homeProjected
     const chips: { value: string; label: string }[] = [
       { value: Math.abs(mine - opp).toFixed(1), label: mine >= opp ? 'AHEAD' : 'BACK' },
     ]
-    if (m.homeProjected != null && m.awayProjected != null) {
-      const myProj = m.homeTeamId === teamId ? m.homeProjected : m.awayProjected
-      const oppProj = m.homeTeamId === teamId ? m.awayProjected : m.homeProjected
+    if (myProj != null && oppProj != null) {
       chips.push({
         value: Math.abs(myProj - oppProj).toFixed(1),
         label: myProj >= oppProj ? 'PROJ AHEAD' : 'PROJ BACK',
@@ -116,8 +133,9 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     return {
       label: 'Your matchup',
       eyebrow: 'LIVE',
-      headline: `${name} ${verb} ${oppName}, ${mine.toFixed(1)}-${opp.toFixed(1)}.`,
+      headline: `${cap(verbPhrase)}, ${mine.toFixed(1)}-${opp.toFixed(1)}.`,
       chips,
+      viz: { kind: 'scoreBar', myName: name, oppName, mine, opp, myProj: myProj ?? undefined, oppProj: oppProj ?? undefined },
       teamIds: [teamId, oppId],
     }
   }
@@ -129,17 +147,17 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
   const oppId = m.homeTeamId === teamId ? m.awayTeamId : m.homeTeamId
   const opp = m.homeTeamId === teamId ? m.awayCatWins : m.homeCatWins
   const oppName = nameOf(data, oppId)
-  const verb = mine > opp ? 'leads' : mine < opp ? 'trails' : 'is tied with'
+  const verbPhrase =
+    mine > opp ? `leads ${oppName}` : mine < opp ? `trails ${oppName}` : `tied with ${oppName}`
   return {
     label: 'Your matchup',
     eyebrow: 'LIVE',
-    headline: `${name} ${verb} ${oppName}, ${mine}-${opp}.`,
+    headline: `${cap(verbPhrase)}, ${mine}-${opp}.`,
     teamIds: [teamId, oppId],
   }
 }
 
 function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefined {
-  const name = nameOf(data, teamId)
   const records = (data.h2hRecords ?? []).filter(
     (r: H2HRecord) => r.teamId === teamId && r.meetings > 0,
   )
@@ -152,12 +170,12 @@ function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefin
     )
     const r = records[0]
     const oppName = nameOf(data, r.opponentId)
-    const verb =
+    const verbPhrase =
       r.wins > r.losses
         ? `leads ${oppName}`
         : r.wins < r.losses
           ? `trails ${oppName}`
-          : `is even with ${oppName}`
+          : `even with ${oppName}`
     const record = r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`
     // "Grudge" has to be earned: a 1-1 over two games isn't one. Below the
     // threshold it's just head-to-head. (Records are this season's meetings,
@@ -166,7 +184,7 @@ function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefin
     return {
       label: 'Your Rival',
       eyebrow: isGrudge ? 'THE GRUDGE' : 'HEAD TO HEAD',
-      headline: `${name} ${verb}, ${record}.`,
+      headline: `${cap(verbPhrase)}, ${record}.`,
       body: `${r.meetings} meetings and counting.`,
       teamIds: [teamId, r.opponentId],
     }
@@ -178,7 +196,7 @@ function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefin
   return {
     label: 'Your Rival',
     eyebrow: 'THIS WEEK',
-    headline: `${name} faces ${nameOf(data, oppId)} this week.`,
+    headline: `Faces ${nameOf(data, oppId)} this week.`,
     body: `A rivalry starts somewhere.`,
     teamIds: [teamId, oppId],
   }
@@ -192,7 +210,6 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
     if (rk != null) series.push(rk)
   }
   if (series.length < 2) return undefined
-  const name = nameOf(data, teamId)
   const start = series[0]
   const end = series[series.length - 1]
   const min = Math.min(...series)
@@ -208,20 +225,21 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
     eyebrow = 'THE CLIMB'
     headline =
       end <= 1
-        ? `${name} climbed to the top.`
-        : `${name} climbed the board, #${start} to #${end}.`
+        ? `Climbed to the top of the board.`
+        : `Climbed the board, #${start} to #${end}.`
   } else if (start - end < 0 && end >= max - 1) {
     eyebrow = 'THE SLIDE'
-    headline = `${name} slid from #${start} to #${end}.`
+    headline = `Slid from #${start} to #${end}.`
   } else {
     eyebrow = 'THE ARC'
-    headline = `${possessive(name)} season ranged from #${min} to #${max}.`
+    headline = `Ranged from #${min} to #${max} on the season.`
   }
   return {
     label: 'Your arc',
     eyebrow,
     headline,
     chips: [{ value: `#${start} → #${end}`, label: 'SEASON' }],
+    viz: { kind: 'rankLine', series, teamCount: data.teams.length, start, end },
     teamIds: [teamId],
   }
 }

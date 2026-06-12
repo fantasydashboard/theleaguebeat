@@ -65,19 +65,75 @@
           <a href="#" @click.prevent="onClaim">Make this yours</a>
         </p>
         <section
-          v-for="block in renderedBlocks"
+          v-for="(block, i) in renderedBlocks"
           :key="block.label"
           class="yc-block"
+          :class="{ 'yc-block-focal': block.label === 'Your matchup' }"
         >
-          <p class="yc-block-label">{{ block.label }}</p>
-          <p
-            v-if="block.eyebrow && block.eyebrow.toUpperCase() !== block.label.toUpperCase()"
-            class="yc-block-eyebrow"
-          >{{ block.eyebrow }}</p>
+          <div class="yc-block-head">
+            <span class="yc-block-num">{{ String(i + 1).padStart(2, '0') }}</span>
+            <p class="yc-block-kicker">
+              <span class="yc-k-label">{{ block.label }}</span>
+              <template
+                v-if="block.eyebrow && block.eyebrow.toUpperCase() !== block.label.toUpperCase()"
+              >
+                <span class="yc-k-sep" aria-hidden="true">/</span>
+                <span class="yc-k-eyebrow" :class="{ 'is-live': block.eyebrow === 'LIVE' }">
+                  <span v-if="block.eyebrow === 'LIVE'" class="yc-live-dot" aria-hidden="true"></span>{{ block.eyebrow }}
+                </span>
+              </template>
+            </p>
+          </div>
+
           <h2 class="yc-block-headline">{{ block.headline }}</h2>
           <p v-if="block.body" class="yc-block-body">{{ block.body }}</p>
-          <ul v-if="block.chips && block.chips.length" class="yc-block-chips">
-            <li v-for="(c, i) in block.chips" :key="i">
+
+          <!-- Live score bar -->
+          <div v-if="block.viz && block.viz.kind === 'scoreBar'" class="yc-scorebar">
+            <div
+              v-for="(row, r) in scoreBarRows(block.viz)"
+              :key="r"
+              class="yc-sb-row"
+              :class="{ 'yc-sb-mine': row.mine }"
+            >
+              <div class="yc-sb-meta">
+                <span class="yc-sb-name">{{ row.name }}</span>
+                <span class="yc-sb-score">{{ row.score.toFixed(1) }}</span>
+              </div>
+              <div class="yc-sb-track">
+                <div class="yc-sb-fill" :style="{ width: row.pct + '%' }"></div>
+                <div
+                  v-if="row.projPct != null"
+                  class="yc-sb-proj"
+                  :style="{ left: row.projPct + '%' }"
+                  title="projected finish"
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Season rank line -->
+          <div v-else-if="block.viz && block.viz.kind === 'rankLine'" class="yc-rankline">
+            <svg
+              :viewBox="`0 0 100 ${RANK_H}`"
+              preserveAspectRatio="none"
+              class="yc-rl-svg"
+              role="img"
+              :aria-label="`Season rank, #${block.viz.start} to #${block.viz.end}`"
+            >
+              <polyline :points="rankLine(block.viz)" class="yc-rl-line" />
+            </svg>
+            <div class="yc-rl-axis">
+              <span>#{{ block.viz.start }}</span>
+              <span>#{{ block.viz.end }}</span>
+            </div>
+          </div>
+
+          <ul
+            v-if="block.chips && block.chips.length && !(block.viz && block.viz.kind === 'rankLine')"
+            class="yc-block-chips"
+          >
+            <li v-for="(c, ci) in block.chips" :key="ci">
               <span class="yc-chip-num">{{ c.value }}</span>
               <span class="yc-chip-label">{{ c.label }}</span>
             </li>
@@ -99,7 +155,7 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import { usePlatformsStore } from '@/stores/platforms'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import { useViewerTeam } from '@/composables/useViewerTeam'
-import { buildYourColumn } from '@/editorial/yourColumn/buildYourColumn'
+import { buildYourColumn, type YourColumnBlock } from '@/editorial/yourColumn/buildYourColumn'
 
 const route = useRoute()
 const router = useRouter()
@@ -272,6 +328,45 @@ const renderedBlocks = computed(() =>
 )
 
 /* ─────────────────────────────────────────────────────────────────
+   VISUALIZATION MODELS — turn the builder's shaped data into draw-
+   ready geometry. The builder stays pure; the view owns the pixels.
+───────────────────────────────────────────────────────────────── */
+
+const RANK_H = 34 // SVG viewBox height for the rank line
+
+type ScoreBarViz = Extract<NonNullable<YourColumnBlock['viz']>, { kind: 'scoreBar' }>
+type RankLineViz = Extract<NonNullable<YourColumnBlock['viz']>, { kind: 'rankLine' }>
+
+function scoreBarRows(v: ScoreBarViz) {
+  const max = Math.max(v.mine, v.opp, v.myProj ?? 0, v.oppProj ?? 0) || 1
+  const row = (name: string, score: number, proj: number | undefined, mine: boolean) => ({
+    name,
+    score,
+    mine,
+    pct: (score / max) * 100,
+    projPct: proj != null ? (proj / max) * 100 : null,
+  })
+  return [row(v.myName, v.mine, v.myProj, true), row(v.oppName, v.opp, v.oppProj, false)]
+}
+
+function rankLine(v: RankLineViz): string {
+  const s = v.series
+  const n = s.length
+  const lo = Math.min(...s)
+  const hi = Math.max(...s)
+  const span = hi - lo || 1
+  const pad = 5
+  // Best rank (lo) sits at the top; the line rises as the team climbs.
+  return s
+    .map((rank, i) => {
+      const x = n === 1 ? 0 : (i / (n - 1)) * 100
+      const y = ((rank - lo) / span) * (RANK_H - pad * 2) + pad
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+}
+
+/* ─────────────────────────────────────────────────────────────────
    CLAIM / SIGN-UP NUDGE
    Routes guests toward /signup (the app's sign-in entry point).
    The sign-in flow under /auth/callback handles the full OAuth
@@ -291,11 +386,13 @@ function onClaim() {
 .your-column {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 0; /* blocks self-space via padding + hairline rules */
   font-family: 'Barlow', sans-serif;
   color: var(--ink-1);
   padding: 32px 0 80px;
 }
+.yc-head { margin-bottom: 18px; }
+.yc-claim { margin-bottom: 4px; }
 
 /* ─── LOADING STATE ────────────────────────────────────────────── */
 /* Mirrors the Beat / Issue loading treatment: wobble lockup,
@@ -535,19 +632,17 @@ function onClaim() {
   white-space: nowrap;
 }
 
-/* ─── COLUMN BLOCKS ────────────────────────────────────────────── */
-/* Each block is a contained editorial card: label in the accent,
-   eyebrow in caps, display headline, optional body + chips. The
-   stagger-in animation mirrors the Beat's day-group entrance. */
+/* ─── COLUMN BLOCKS (editorial, no boxes) ──────────────────────── */
+/* A magazine contents list, not a dashboard: each entry is a numbered
+   section divided by a hairline rule. The LIVE matchup is the focal
+   block (louder headline, accent rule). */
 .yc-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 28px 28px 24px;
-  background: oklch(0.09 0.013 90);
-  border: 1px solid oklch(0.18 0.015 90);
-  border-radius: 16px;
-  max-width: 720px;
+  gap: 10px;
+  padding: 30px 0 28px;
+  max-width: 760px;
+  border-top: 1px solid oklch(0.21 0.012 90);
   animation: yc-block-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 .your-column > .yc-block:nth-of-type(2) { animation-delay: 60ms; }
@@ -560,49 +655,156 @@ function onClaim() {
 @media (prefers-reduced-motion: reduce) {
   .yc-block { animation: none; }
 }
-.yc-block-label {
+
+/* Focal block — the live matchup carries the most weight. */
+.yc-block-focal { border-top-color: oklch(0.55 0.13 205 / 0.45); }
+.yc-block-focal .yc-block-headline { font-size: clamp(1.9rem, 4.2vw, 2.85rem); }
+
+/* Kicker row: section number + label / eyebrow on one line. */
+.yc-block-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.yc-block-num {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 800;
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent-secondary);
-  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: oklch(0.46 0.01 90);
+  font-variant-numeric: tabular-nums;
+  flex: none;
 }
-.yc-block-eyebrow {
+.yc-block-kicker {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
   font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--accent-tertiary);
-  margin: 0;
 }
+.yc-k-label { color: var(--accent-secondary); }
+.yc-k-sep { color: var(--ink-3); opacity: 0.45; }
+.yc-k-eyebrow { color: var(--accent-tertiary); font-weight: 700; }
+.yc-k-eyebrow.is-live { display: inline-flex; align-items: center; }
+.yc-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-tertiary);
+  margin-right: 6px;
+  animation: yc-pulse 1.6s ease-in-out infinite;
+}
+@keyframes yc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .yc-live-dot { animation: none; } }
+
 .yc-block-headline {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
   font-size: clamp(1.5rem, 3.2vw, 2.2rem);
-  line-height: 1.0;
-  letter-spacing: -0.010em;
+  line-height: 1.02;
+  letter-spacing: -0.012em;
   color: var(--ink-1);
-  margin: 4px 0 0;
+  margin: 0;
+  max-width: 22ch;
 }
 .yc-block-body {
   font-size: 0.98rem;
-  line-height: 1.52;
+  line-height: 1.5;
   color: var(--ink-2);
-  margin: 6px 0 0;
+  margin: 0;
   max-width: 56ch;
 }
 
+/* ─── SCORE BAR (live matchup) ─────────────────────────────────── */
+.yc-scorebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  max-width: 520px;
+}
+.yc-sb-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+.yc-sb-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.yc-sb-mine .yc-sb-name { color: var(--ink-1); }
+.yc-sb-score {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.yc-sb-track {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: oklch(0.17 0.012 90);
+}
+.yc-sb-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: oklch(0.46 0.02 90);
+  transition: width 600ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.yc-sb-mine .yc-sb-fill { background: var(--accent-tertiary); }
+.yc-sb-proj {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--ink-2);
+  transform: translateX(-1px);
+}
+
+/* ─── RANK LINE (season arc) ───────────────────────────────────── */
+.yc-rankline { margin-top: 4px; max-width: 300px; }
+.yc-rl-svg { width: 100%; height: 44px; display: block; overflow: visible; }
+.yc-rl-line {
+  fill: none;
+  stroke: var(--accent-tertiary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.yc-rl-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
 /* ─── STAT CHIPS ───────────────────────────────────────────────── */
-/* Reuse the IssueView cover-stat idiom: number in large display
-   weight, label below in small caps. The whole row is a horizontal
-   scroll trap at narrow widths. */
 .yc-block-chips {
   list-style: none;
   padding: 0;
-  margin: 12px 0 0;
+  margin: 4px 0 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -610,17 +812,16 @@ function onClaim() {
 .yc-block-chips li {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 10px 18px;
-  background: oklch(0.13 0.015 90);
-  border: 1px solid oklch(0.20 0.015 90);
+  padding: 9px 16px;
+  background: oklch(0.12 0.013 90);
+  border: 1px solid oklch(0.19 0.013 90);
   border-radius: 10px;
-  min-width: 72px;
+  min-width: 70px;
 }
 .yc-chip-num {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
-  font-size: 1.32rem;
+  font-size: 1.28rem;
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--ink-1);
@@ -629,8 +830,8 @@ function onClaim() {
 .yc-chip-label {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
+  font-size: 0.64rem;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--ink-3);
   margin-top: 3px;
@@ -638,18 +839,8 @@ function onClaim() {
 
 /* ─── MOBILE ───────────────────────────────────────────────────── */
 @media (max-width: 600px) {
-  .yc-picker-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .yc-block {
-    padding: 20px 18px 18px;
-  }
-  .yc-block-chips {
-    gap: 6px;
-  }
-  .yc-block-chips li {
-    padding: 8px 14px;
-    min-width: 60px;
-  }
+  .yc-picker-grid { grid-template-columns: 1fr 1fr; }
+  .yc-block { padding: 24px 0 22px; }
+  .yc-block-chips li { padding: 8px 14px; min-width: 60px; }
 }
 </style>
