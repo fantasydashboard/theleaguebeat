@@ -15,6 +15,14 @@ export function useViewerTeam(teams: () => CategoryLeagueDataTeam[], leagueKey: 
   const storageKey = () => `tlb:viewerTeam:${leagueKey()}`
   const picked = ref<string | null>(null)
 
+  // Clear a manual pick when the league changes, so a pick made in one
+  // league can't bleed into another (ESPN reuses numeric team ids 1..N
+  // across leagues, so a stale "3" would silently resolve to the wrong
+  // team). isMyTeam still wins; this only affects manual picks.
+  watch(leagueKey, () => {
+    picked.value = null
+  })
+
   // Seed from URL or localStorage once teams are known.
   watch([teams, leagueKey], () => {
     if (picked.value) return

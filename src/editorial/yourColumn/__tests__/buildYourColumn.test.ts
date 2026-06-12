@@ -42,4 +42,20 @@ describe('buildYourColumn', () => {
     expect(col.rival?.label).toBe('Your Rival')
     expect(JSON.stringify(col)).not.toMatch(/—/)
   })
+
+  it('shows ties in the rival record when present', () => {
+    const withTies = {
+      ...data,
+      h2hRecords: [{ teamId: 't1', opponentId: 't2', wins: 3, losses: 3, ties: 2, meetings: 8 }],
+    } as unknown as LeagueDataH2HPoints
+    expect(buildYourColumn(withTies, 't1').rival?.headline).toMatch(/3-3-2/)
+  })
+
+  it('omits the arc for a team that never moved (omit, never invent)', () => {
+    const flat = {
+      ...data,
+      seasonRankHistory: [3, 3, 3, 3].map((r, i) => ({ week: i + 1, ranks: { t1: 3, t2: 1, t3: 2, t4: 4 } })),
+    } as unknown as LeagueDataH2HPoints
+    expect(buildYourColumn(flat, 't1').arc).toBeUndefined()
+  })
 })

@@ -142,10 +142,11 @@ function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefin
         : r.wins < r.losses
           ? `trails ${oppName}`
           : `is even with ${oppName}`
+    const record = r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`
     return {
       label: 'Your Rival',
       eyebrow: 'THE GRUDGE',
-      headline: `${name} ${verb} ${r.wins}-${r.losses} all-time.`,
+      headline: `${name} ${verb} ${record} all-time.`,
       body: `${r.meetings} meetings and counting.`,
       teamIds: [teamId, r.opponentId],
     }
@@ -176,6 +177,9 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
   const end = series[series.length - 1]
   const min = Math.min(...series)
   const max = Math.max(...series)
+  // A team that never moved has no arc to report — omit rather than
+  // print "ranged from #3 to #3" (omit, never invent).
+  if (start === end && min === max) return undefined
   let headline: string
   if (start - end > 0 && end <= min + 1)
     headline =
