@@ -47,11 +47,20 @@ describe('buildYourColumn', () => {
   it('earns THE GRUDGE only with enough meetings, and never claims "all-time"', () => {
     expect(col.rival?.eyebrow).toBe('THE GRUDGE')    // 12 meetings
     expect(col.rival?.headline).not.toMatch(/all-time/)
+    // t3 isn't this week's opponent (t2 is), 2 meetings → shows, but soft.
     const thin = {
+      ...data,
+      h2hRecords: [{ teamId: 't1', opponentId: 't3', wins: 1, losses: 1, ties: 0, meetings: 2 }],
+    } as unknown as LeagueDataH2HPoints
+    expect(buildYourColumn(thin, 't1').rival?.eyebrow).toBe('HEAD TO HEAD')
+  })
+  it("omits the rival when the only history is this week's thin opponent", () => {
+    // t2 is this week's opponent (the matchup), 2 meetings < 4 → not a rival.
+    const onlyCurrent = {
       ...data,
       h2hRecords: [{ teamId: 't1', opponentId: 't2', wins: 1, losses: 1, ties: 0, meetings: 2 }],
     } as unknown as LeagueDataH2HPoints
-    expect(buildYourColumn(thin, 't1').rival?.eyebrow).toBe('HEAD TO HEAD')
+    expect(buildYourColumn(onlyCurrent, 't1').rival).toBeUndefined()
   })
   it('classifies the arc chronologically with a matching kicker and rank-line viz', () => {
     expect(col.arc?.headline).toMatch(/[Cc]limbed/)
@@ -73,9 +82,26 @@ describe('buildYourColumn', () => {
     expect(buildYourColumn(withTies, 't1').rival?.headline).toMatch(/3-3-2/)
   })
 
+  it('ends the arc on the live standing, not the last completed week', () => {
+    // History stops at #6, but the team currently sits 9th.
+    const ranks = [11, 9, 7, 6, 6]
+    const fixture = {
+      ...data,
+      standings: data.standings.map((s: { teamId: string }) =>
+        s.teamId === 't1' ? { ...s, rank: 9 } : s,
+      ),
+      seasonRankHistory: ranks.map((rk, i) => ({ week: i + 1, ranks: { t1: rk, t2: 1, t3: 2, t4: 3 } })),
+    } as unknown as LeagueDataH2HPoints
+    const arc = buildYourColumn(fixture, 't1').arc
+    expect((arc?.viz as { series: number[] }).series.at(-1)).toBe(9) // appended live rank
+  })
   it('omits the arc for a team that never moved (omit, never invent)', () => {
     const flat = {
       ...data,
+      // Live standing also #3, so the appended rank doesn't re-introduce movement.
+      standings: data.standings.map((s: { teamId: string }) =>
+        s.teamId === 't1' ? { ...s, rank: 3 } : s,
+      ),
       seasonRankHistory: [3, 3, 3, 3].map((r, i) => ({ week: i + 1, ranks: { t1: 3, t2: 1, t3: 2, t4: 4 } })),
     } as unknown as LeagueDataH2HPoints
     expect(buildYourColumn(flat, 't1').arc).toBeUndefined()

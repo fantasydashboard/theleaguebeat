@@ -51,6 +51,10 @@ const ordinal = (n: number) => {
 // them, and the team is in teamIds for share cards). Capitalize the verb so
 // the elided sentence still reads as a headline.
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+// Keep a score like "12-7" or "376.5-441.1" from breaking across lines
+// (the hyphen would otherwise let "12-" and "7" split). U+2011 is a
+// non-breaking hyphen — a hyphen, not an em dash, so the voice rule holds.
+const nbScore = (s: string) => s.replace(/-/g, '‑')
 
 export function buildYourColumn(data: LeagueData, teamId: string): YourColumn {
   return {
@@ -133,7 +137,7 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     return {
       label: 'Your matchup',
       eyebrow: 'LIVE',
-      headline: `${cap(verbPhrase)}, ${mine.toFixed(1)}-${opp.toFixed(1)}.`,
+      headline: `${cap(verbPhrase)}, ${nbScore(`${mine.toFixed(1)}-${opp.toFixed(1)}`)}.`,
       chips,
       viz: { kind: 'scoreBar', myName: name, oppName, mine, opp, myProj: myProj ?? undefined, oppProj: oppProj ?? undefined },
       teamIds: [teamId, oppId],
@@ -152,53 +156,47 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
   return {
     label: 'Your matchup',
     eyebrow: 'LIVE',
-    headline: `${cap(verbPhrase)}, ${mine}-${opp}.`,
+    headline: `${cap(verbPhrase)}, ${nbScore(`${mine}-${opp}`)}.`,
     teamIds: [teamId, oppId],
   }
 }
 
 function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefined {
+  const currentOppId = buildMatchup(data, teamId)?.teamIds[1]
+  // A rival is a recurring foe, not whoever you happen to face this week.
+  // Require at least two meetings, and skip this week's opponent unless
+  // they're a real nemesis (4+ meetings) — otherwise the rival block just
+  // echoes the matchup block. Below the bar: omit, never invent.
   const records = (data.h2hRecords ?? []).filter(
-    (r: H2HRecord) => r.teamId === teamId && r.meetings > 0,
+    (r: H2HRecord) =>
+      r.teamId === teamId &&
+      r.meetings >= 2 &&
+      (r.opponentId !== currentOppId || r.meetings >= 4),
   )
-  if (records.length > 0) {
-    // Most-played, tie-broken by closest record (smallest |wins-losses|).
-    records.sort(
-      (a, b) =>
-        b.meetings - a.meetings ||
-        Math.abs(a.wins - a.losses) - Math.abs(b.wins - b.losses),
-    )
-    const r = records[0]
-    const oppName = nameOf(data, r.opponentId)
-    const verbPhrase =
-      r.wins > r.losses
-        ? `leads ${oppName}`
-        : r.wins < r.losses
-          ? `trails ${oppName}`
-          : `even with ${oppName}`
-    const record = r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`
-    // "Grudge" has to be earned: a 1-1 over two games isn't one. Below the
-    // threshold it's just head-to-head. (Records are this season's meetings,
-    // not cross-season — so the copy says "head-to-head", never "all-time".)
-    const isGrudge = r.meetings >= 4
-    return {
-      label: 'Your Rival',
-      eyebrow: isGrudge ? 'THE GRUDGE' : 'HEAD TO HEAD',
-      headline: `${cap(verbPhrase)}, ${record}.`,
-      body: `${r.meetings} meetings and counting.`,
-      teamIds: [teamId, r.opponentId],
-    }
-  }
-  // Fallback: this week's opponent.
-  const mu = buildMatchup(data, teamId)
-  if (!mu) return undefined
-  const oppId = mu.teamIds[1]
+  if (records.length === 0) return undefined
+  // Most-played, tie-broken by closest record (smallest |wins-losses|).
+  records.sort(
+    (a, b) =>
+      b.meetings - a.meetings || Math.abs(a.wins - a.losses) - Math.abs(b.wins - b.losses),
+  )
+  const r = records[0]
+  const oppName = nameOf(data, r.opponentId)
+  const verbPhrase =
+    r.wins > r.losses
+      ? `leads ${oppName}`
+      : r.wins < r.losses
+        ? `trails ${oppName}`
+        : `even with ${oppName}`
+  const record = r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`
+  // (Records are this season's meetings, not cross-season — so the copy
+  // says "head to head", never "all-time".)
+  const isGrudge = r.meetings >= 4
   return {
     label: 'Your Rival',
-    eyebrow: 'THIS WEEK',
-    headline: `Faces ${nameOf(data, oppId)} this week.`,
-    body: `A rivalry starts somewhere.`,
-    teamIds: [teamId, oppId],
+    eyebrow: isGrudge ? 'THE GRUDGE' : 'HEAD TO HEAD',
+    headline: `${cap(verbPhrase)}, ${record}.`,
+    body: `${r.meetings} meeting${r.meetings === 1 ? '' : 's'} and counting.`,
+    teamIds: [teamId, r.opponentId],
   }
 }
 
@@ -209,6 +207,12 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
     const rk = w.ranks[teamId]
     if (rk != null) series.push(rk)
   }
+  // seasonRankHistory can stop at the last fully-decided week, which may
+  // disagree with where the team sits right now (e.g. Yahoo cats: history
+  // ends #6 while the live standing is #9). Append the current rank so the
+  // arc ends on the same number the season block shows — no contradiction.
+  const currentRank = (data.standings ?? []).find((s) => s.teamId === teamId)?.rank
+  if (currentRank != null && series[series.length - 1] !== currentRank) series.push(currentRank)
   if (series.length < 2) return undefined
   const start = series[0]
   const end = series[series.length - 1]
