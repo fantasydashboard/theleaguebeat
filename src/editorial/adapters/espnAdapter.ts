@@ -384,6 +384,11 @@ export async function espnLeagueToCategoryData(
     }
     const h2hRecords = buildH2H(pointsGames)
 
+    // Daily player nights for Your Players. buildEspnPlayerNights builds the
+    // roster index internally (keyed to String(team id), matching teams[].id)
+    // and is already error-tolerant.
+    const pointsPlayerNights = await buildEspnPlayerNights(league)
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: String(league.id),
@@ -398,6 +403,7 @@ export async function espnLeagueToCategoryData(
       seasonRankHistory,
       seasonHistory,
       h2hRecords,
+      playerNights: pointsPlayerNights,
     }
     return out
   }
