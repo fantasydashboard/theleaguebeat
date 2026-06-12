@@ -264,6 +264,17 @@ export interface CategoryLeagueDataTeamCareerStats {
   catDifferential: number
 }
 
+/** All-time head-to-head record of one team vs one opponent. One row per
+ *  ordered (teamId, opponentId) pair. Drives Your Column's "Your Rival". */
+export interface H2HRecord {
+  teamId: string
+  opponentId: string
+  wins: number
+  losses: number
+  ties: number
+  meetings: number
+}
+
 /** All-time head-to-head matrix entry, alphabetized to dedupe. */
 export interface CategoryLeagueDataH2HEntry {
   teamA: string            // alphabetized teamId order
@@ -347,6 +358,11 @@ export interface LeagueDataH2HCategory {
 
   // Season rank history — for trajectory detection
   seasonRankHistory: CategoryLeagueDataWeeklyRanks[]
+
+  /** Per-opponent all-time head-to-head, built by the shared buildH2H.
+   *  Optional: adapters that can't compute it degrade (rival falls back
+   *  to this week's opponent). */
+  h2hRecords?: H2HRecord[]
 
   /* ───── Extended fields (Wave 2 detection consumers) ───────── */
 
@@ -560,6 +576,11 @@ export interface LeagueDataH2HPoints {
    *  only completed weeks (the live current week is excluded, matching
    *  the category contract). Drives WILD_ARC / THRONE_CHANGE. */
   seasonRankHistory?: CategoryLeagueDataWeeklyRanks[]
+
+  /** Per-opponent all-time head-to-head, built by the shared buildH2H.
+   *  Optional: adapters that can't compute it degrade (rival falls back
+   *  to this week's opponent). */
+  h2hRecords?: H2HRecord[]
 
   /** Multi-season champions history. Champion = a past season's final
    *  rank 1, which is format-agnostic, so the category `buildSeasonHistory`
