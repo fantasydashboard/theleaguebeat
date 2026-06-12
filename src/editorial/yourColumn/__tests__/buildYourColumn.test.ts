@@ -34,8 +34,19 @@ describe('buildYourColumn', () => {
     expect(col.rival?.headline).toMatch(/t2/)        // 12 meetings beats t3's 3
     expect(col.rival?.headline).toMatch(/7-5/)
   })
-  it('classifies the arc chronologically', () => {
+  it('earns THE GRUDGE only with enough meetings, and never claims "all-time"', () => {
+    expect(col.rival?.eyebrow).toBe('THE GRUDGE')    // 12 meetings
+    expect(col.rival?.headline).not.toMatch(/all-time/)
+    const thin = {
+      ...data,
+      h2hRecords: [{ teamId: 't1', opponentId: 't2', wins: 1, losses: 1, ties: 0, meetings: 2 }],
+    } as unknown as LeagueDataH2HPoints
+    expect(buildYourColumn(thin, 't1').rival?.eyebrow).toBe('HEAD TO HEAD')
+  })
+  it('classifies the arc chronologically with a matching kicker', () => {
     expect(col.arc?.headline).toMatch(/t1/)
+    expect(col.arc?.eyebrow).toBe('THE CLIMB')
+    expect(col.arc?.label.toUpperCase()).not.toBe(col.arc?.eyebrow) // no duplicate label
     expect(JSON.stringify(col.arc)).toMatch(/#4 → #1/)
   })
   it('uses personal labels but no em dashes', () => {

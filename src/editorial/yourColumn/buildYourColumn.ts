@@ -69,19 +69,21 @@ function buildHero(data: LeagueData, teamId: string): YourColumnBlock {
   const headline = s
     ? `${name} sits ${ordinal(s.rank)}, ${record}.`
     : `${name} this week.`
-  const body = streak
-    ? s!.streak.type === 'W'
-      ? `Riding a ${streak} run.`
-      : `Stuck on a ${streak} slide.`
-    : undefined
+  // Chips carry facts the headline DIDN'T (streak, win pct) — never an
+  // echo of the rank/record already in the sentence.
+  const chips: { value: string; label: string }[] = []
+  if (s) {
+    if (streak) chips.push({ value: streak, label: 'STREAK' })
+    chips.push({
+      value: `.${Math.round(s.winPct * 1000).toString().padStart(3, '0')}`,
+      label: 'WIN PCT',
+    })
+  }
   return {
     label: 'Your season',
-    eyebrow: 'YOUR COLUMN',
+    eyebrow: 'STANDINGS',
     headline,
-    body,
-    chips: s
-      ? [{ value: `#${s.rank}`, label: 'RANK' }, { value: record, label: 'RECORD' }]
-      : [],
+    chips,
     teamIds: [teamId],
   }
 }
@@ -143,10 +145,14 @@ function buildRival(data: LeagueData, teamId: string): YourColumnBlock | undefin
           ? `trails ${oppName}`
           : `is even with ${oppName}`
     const record = r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`
+    // "Grudge" has to be earned: a 1-1 over two games isn't one. Below the
+    // threshold it's just head-to-head. (Records are this season's meetings,
+    // not cross-season — so the copy says "head-to-head", never "all-time".)
+    const isGrudge = r.meetings >= 4
     return {
       label: 'Your Rival',
-      eyebrow: 'THE GRUDGE',
-      headline: `${name} ${verb} ${record} all-time.`,
+      eyebrow: isGrudge ? 'THE GRUDGE' : 'HEAD TO HEAD',
+      headline: `${name} ${verb}, ${record}.`,
       body: `${r.meetings} meetings and counting.`,
       teamIds: [teamId, r.opponentId],
     }
@@ -180,18 +186,26 @@ function buildArc(data: LeagueData, teamId: string): YourColumnBlock | undefined
   // A team that never moved has no arc to report — omit rather than
   // print "ranged from #3 to #3" (omit, never invent).
   if (start === end && min === max) return undefined
+  // The kicker matches the shape of the move (never echoes the "Your arc"
+  // label) — so a climber reads THE CLIMB, a faller THE SLIDE.
   let headline: string
-  if (start - end > 0 && end <= min + 1)
+  let eyebrow: string
+  if (start - end > 0 && end <= min + 1) {
+    eyebrow = 'THE CLIMB'
     headline =
       end <= 1
         ? `${name} climbed to the top.`
         : `${name} climbed the board, #${start} to #${end}.`
-  else if (start - end < 0 && end >= max - 1)
+  } else if (start - end < 0 && end >= max - 1) {
+    eyebrow = 'THE SLIDE'
     headline = `${name} slid from #${start} to #${end}.`
-  else headline = `${possessive(name)} season ranged from #${min} to #${max}.`
+  } else {
+    eyebrow = 'THE ARC'
+    headline = `${possessive(name)} season ranged from #${min} to #${max}.`
+  }
   return {
     label: 'Your arc',
-    eyebrow: 'YOUR ARC',
+    eyebrow,
     headline,
     chips: [{ value: `#${start} → #${end}`, label: 'SEASON' }],
     teamIds: [teamId],

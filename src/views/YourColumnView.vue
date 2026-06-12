@@ -70,7 +70,10 @@
           class="yc-block"
         >
           <p class="yc-block-label">{{ block.label }}</p>
-          <p v-if="block.eyebrow" class="yc-block-eyebrow">{{ block.eyebrow }}</p>
+          <p
+            v-if="block.eyebrow && block.eyebrow.toUpperCase() !== block.label.toUpperCase()"
+            class="yc-block-eyebrow"
+          >{{ block.eyebrow }}</p>
           <h2 class="yc-block-headline">{{ block.headline }}</h2>
           <p v-if="block.body" class="yc-block-body">{{ block.body }}</p>
           <ul v-if="block.chips && block.chips.length" class="yc-block-chips">
