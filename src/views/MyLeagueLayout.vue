@@ -309,6 +309,9 @@ const issueStore = useIssueStore()
  *  second later, building reader distrust. On every other route
  *  the masthead always shows (fallback or live). */
 const showMasthead = computed(() => {
+  // Your Column carries its own header band, and the issue/share masthead
+  // framing ("Issue 12", "Share issue") doesn't apply to a personal column.
+  if (activeSection.value === 'column') return false
   if (!onIssuePage.value) return true
   return issueStore.currentWeek != null
 })

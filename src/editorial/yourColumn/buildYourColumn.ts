@@ -100,10 +100,24 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     const opp = m.homeTeamId === teamId ? m.awayPoints : m.homePoints
     const oppName = nameOf(data, oppId)
     const verb = mine > opp ? 'leads' : mine < opp ? 'trails' : 'is level with'
+    // Chips carry what the score line can't: the live gap, and where the
+    // week projects to land. Never an echo of the two numbers above.
+    const chips: { value: string; label: string }[] = [
+      { value: Math.abs(mine - opp).toFixed(1), label: mine >= opp ? 'AHEAD' : 'BACK' },
+    ]
+    if (m.homeProjected != null && m.awayProjected != null) {
+      const myProj = m.homeTeamId === teamId ? m.homeProjected : m.awayProjected
+      const oppProj = m.homeTeamId === teamId ? m.awayProjected : m.homeProjected
+      chips.push({
+        value: Math.abs(myProj - oppProj).toFixed(1),
+        label: myProj >= oppProj ? 'PROJ AHEAD' : 'PROJ BACK',
+      })
+    }
     return {
       label: 'Your matchup',
       eyebrow: 'LIVE',
       headline: `${name} ${verb} ${oppName}, ${mine.toFixed(1)}-${opp.toFixed(1)}.`,
+      chips,
       teamIds: [teamId, oppId],
     }
   }

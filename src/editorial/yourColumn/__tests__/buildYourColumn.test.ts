@@ -30,6 +30,14 @@ describe('buildYourColumn', () => {
     expect(col.matchup?.headline).toMatch(/t1/)
     expect(col.matchup?.headline).toMatch(/96\.7/)
   })
+  it('gives the matchup a live-gap chip, and a projection chip when available', () => {
+    expect(col.matchup?.chips?.[0]).toMatchObject({ value: '26.2', label: 'AHEAD' })
+    const withProj = {
+      ...data,
+      currentWeekMatchups: [{ id: 'm', homeTeamId: 't1', awayTeamId: 't2', status: 'live', homePoints: 96.7, awayPoints: 70.5, homeProjected: 410, awayProjected: 450 }],
+    } as unknown as LeagueDataH2HPoints
+    expect(buildYourColumn(withProj, 't1').matchup?.chips?.[1]).toMatchObject({ value: '40.0', label: 'PROJ BACK' })
+  })
   it('picks the most-played opponent as the rival', () => {
     expect(col.rival?.headline).toMatch(/t2/)        // 12 meetings beats t3's 3
     expect(col.rival?.headline).toMatch(/7-5/)
