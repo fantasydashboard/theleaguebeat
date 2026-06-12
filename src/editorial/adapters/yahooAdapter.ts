@@ -331,6 +331,18 @@ async function buildYahooLeagueData(
     }
     const h2hRecords = buildH2H(pointsGames)
 
+    // Daily player nights for Your Players — mirror the cats path: build a
+    // name->teamKey roster index from the standings, then fetch nights.
+    // ownedByTeamIds end up keyed by team_key, matching teamList[].id.
+    const myTeamKeyPoints = teamList.find((t) => t.isMyTeam)?.id
+    const pointsRoster = await fetchYahooRostersOnce(pointsRawStandings, myTeamKeyPoints).catch(
+      () => ({ rosterByName: new Map<string, string[]>(), myBenchedPlayers: undefined as Set<string> | undefined }),
+    )
+    const pointsPlayerNights = await buildPlayerNights({
+      rosterByName: pointsRoster.rosterByName,
+      includeUnowned: true,
+    }).catch(() => [] as PlayerNight[])
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: leagueKey,
@@ -347,6 +359,7 @@ async function buildYahooLeagueData(
       seasonHistory,
       managerLegacy,
       h2hRecords,
+      playerNights: pointsPlayerNights,
     }
     return out
   }
