@@ -582,6 +582,11 @@ export interface LeagueDataH2HPoints {
    *  to this week's opponent). */
   h2hRecords?: H2HRecord[]
 
+  /** Daily MLB player performances for rosters in this league, same
+   *  shape The Beat uses. Optional — populated by the adapter's daily
+   *  hydration; absent when it can't run. Drives Your Players. */
+  playerNights?: import('./players/types').PlayerNight[]
+
   /** Multi-season champions history. Champion = a past season's final
    *  rank 1, which is format-agnostic, so the category `buildSeasonHistory`
    *  is reused as-is. Empty for first-season leagues. Drives the
