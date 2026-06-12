@@ -96,6 +96,11 @@
       <div class="league-nav-inner">
         <router-link
           class="league-nav-tab"
+          :to="`/leagues/${routeLeagueId}/your-column`"
+          :class="{ 'league-nav-tab-active': activeSection === 'column' }"
+        >Your Column</router-link>
+        <router-link
+          class="league-nav-tab"
           :to="`/leagues/${routeLeagueId}/the-beat`"
           :class="{ 'league-nav-tab-active': activeSection === 'beat' }"
         >The Beat</router-link>
@@ -200,7 +205,7 @@ const activeLeague = computed(() =>
    THE BEAT since it's a single view).
 ───────────────────────────────────────────────────────────────── */
 
-type SectionKey = 'beat' | 'issue' | 'chronicles'
+type SectionKey = 'column' | 'beat' | 'issue' | 'chronicles'
 
 const ISSUE_PATHS = ['the-issue', 'power-rankings', 'matchups', 'draft'] as const
 const CHRONICLES_PATHS = ['chronicles', 'history', 'archive'] as const
@@ -210,6 +215,7 @@ const activeSection = computed<SectionKey>(() => {
   // still resolve to their section. The previous endsWith check
   // missed those and fell through to 'beat'.
   const segments = route.path.split('/').filter(Boolean)
+  if (segments.includes('your-column')) return 'column'
   if (ISSUE_PATHS.some((slug) => segments.includes(slug))) return 'issue'
   if (CHRONICLES_PATHS.some((slug) => segments.includes(slug))) return 'chronicles'
   return 'beat'

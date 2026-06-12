@@ -98,6 +98,11 @@ const router = createRouter({
       children: [
         { path: '', redirect: (to) => `/leagues/${to.params.leagueId}/the-beat` },
         {
+          path: 'your-column',
+          name: 'my-league-your-column',
+          component: () => import('@/views/YourColumnView.vue'),
+        },
+        {
           path: 'the-beat',
           name: 'my-league-the-beat',
           component: () => import('@/views/BeatFeedView.vue'),
