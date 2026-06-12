@@ -5,6 +5,7 @@
  */
 import type { LeagueData, H2HRecord } from '@/editorial/types'
 import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
+import { buildYourPlayers, type YourPlayersBlock } from '@/editorial/yourColumn/buildYourPlayers'
 
 /** Optional visualization a block can render. The view draws these; the
  *  builder just hands over the shaped data. */
@@ -41,6 +42,7 @@ export interface YourColumnBlock {
 export interface YourColumn {
   hero: YourColumnBlock
   matchup?: YourColumnBlock
+  players?: YourPlayersBlock
   rival?: YourColumnBlock
   arc?: YourColumnBlock
 }
@@ -69,6 +71,7 @@ export function buildYourColumn(data: LeagueData, teamId: string): YourColumn {
   return {
     hero: buildHero(data, teamId),
     matchup: buildMatchup(data, teamId),
+    players: buildYourPlayers(data.playerNights ?? [], teamId),
     rival: buildRival(data, teamId),
     arc: buildArc(data, teamId),
   }

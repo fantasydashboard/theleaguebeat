@@ -106,4 +106,19 @@ describe('buildYourColumn', () => {
     } as unknown as LeagueDataH2HPoints
     expect(buildYourColumn(flat, 't1').arc).toBeUndefined()
   })
+
+  it('includes a Your Players block from playerNights, ordered after the matchup', () => {
+    const withNights = {
+      ...data,
+      playerNights: [
+        { mlbId: 1, name: 'Judge', gameDate: '2026-06-11', ownedByTeamIds: ['t1'],
+          hitting: { atBats: 4, hits: 3, runs: 2, rbi: 5, homeRuns: 2, doubles: 0, triples: 0, walks: 0, strikeouts: 0, stolenBases: 0, hitByPitch: 0 } },
+      ],
+    } as unknown as LeagueDataH2HPoints
+    const col = buildYourColumn(withNights, 't1')
+    expect(col.players?.players[0].name).toBe('Judge')
+  })
+  it('omits Your Players when there are no nights', () => {
+    expect(buildYourColumn(data, 't1').players).toBeUndefined()
+  })
 })
