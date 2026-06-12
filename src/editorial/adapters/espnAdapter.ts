@@ -65,6 +65,8 @@ import {
   seasonStrengthPrior,
   daysInCurrentWeek,
 } from '../matchups-projection'
+import { buildH2H } from '../h2h/buildH2H'
+import type { H2HGame } from '../h2h/buildH2H'
 
 /* ─────────────────────────────────────────────────────────────────
    ESPN MLB STAT-ID → CANONICAL CAT MAPPING
@@ -368,6 +370,20 @@ export async function espnLeagueToCategoryData(
     // either), so Record Watch is simply absent for ESPN points.
     const seasonHistory = await buildSeasonHistory(leagueId, season).catch(() => [])
 
+    const pointsGames: H2HGame[] = []
+    for (const weekMatchups of allPointsWeeks.values()) {
+      for (const m of weekMatchups) {
+        if (m.status !== 'final') continue
+        if (m.homePoints === 0 && m.awayPoints === 0) continue
+        pointsGames.push({
+          a: m.homeTeamId,
+          b: m.awayTeamId,
+          winner: m.homePoints > m.awayPoints ? 'a' : m.awayPoints > m.homePoints ? 'b' : 'tie',
+        })
+      }
+    }
+    const h2hRecords = buildH2H(pointsGames)
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: String(league.id),
@@ -381,6 +397,7 @@ export async function espnLeagueToCategoryData(
       standings,
       seasonRankHistory,
       seasonHistory,
+      h2hRecords,
     }
     return out
   }
@@ -539,6 +556,28 @@ export async function espnLeagueToCategoryData(
   // detectors no-op when the field is absent.
   const divisions = buildDivisions(league)
 
+  // Build H2H records from completed category matchups. ESPN's
+  // `winner` field carries the matchup-level result; 'UNDECIDED'
+  // means still in progress — skip those weeks entirely.
+  const catGames: H2HGame[] = []
+  for (const weekMatchups of matchupsByWeek.values()) {
+    for (const m of weekMatchups) {
+      if (!m.awayTeamId) continue   // bye
+      if (!m.winner || m.winner === 'UNDECIDED') continue
+      const homeCatWins = m.homeCategoryWins ?? 0
+      const awayCatWins = m.awayCategoryWins ?? 0
+      catGames.push({
+        a: String(m.homeTeamId),
+        b: String(m.awayTeamId),
+        winner:
+          homeCatWins > awayCatWins ? 'a'
+          : awayCatWins > homeCatWins ? 'b'
+          : 'tie',
+      })
+    }
+  }
+  const h2hRecordsCat = buildH2H(catGames)
+
   // 18. Snapshot delta — save today's snapshot (idempotent) and
   //     diff against the previous snapshot for overnight stories.
   const partialData: CategoryLeagueData = {
@@ -569,6 +608,7 @@ export async function espnLeagueToCategoryData(
     injuryReports,
     slumpReports,
     myBenchedPlayers,
+    h2hRecords: h2hRecordsCat,
     // Pass through the league's current scoringPeriodId so the
     // Phase 2 ESPN daily-roster hydrator can map YYYY-MM-DD dates
     // (from playerNights.gameDate) onto ESPN's sequential period
