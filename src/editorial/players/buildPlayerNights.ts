@@ -68,9 +68,8 @@ export async function buildPlayerNights(
     const out: PlayerNight[] = []
 
     for (const h of hitters) {
-      if (!isNotableHitterLine(h)) continue
       const owned = ownersFor(h.mlbId, h.name, opts)
-      if (!includeUnowned && owned.length === 0) continue
+      if (!keepNight(owned.length > 0, includeUnowned, isNotableHitterLine(h))) continue
       out.push({
         mlbId: h.mlbId,
         name: h.name,
@@ -95,9 +94,8 @@ export async function buildPlayerNights(
     }
 
     for (const p of pitchers) {
-      if (!isNotablePitcherLine(p)) continue
       const owned = ownersFor(p.mlbId, p.name, opts)
-      if (!includeUnowned && owned.length === 0) continue
+      if (!keepNight(owned.length > 0, includeUnowned, isNotablePitcherLine(p))) continue
       const pitching: PitcherStats = {
         inningsPitched: p.inningsPitched,
         hits: p.hits,
@@ -133,6 +131,18 @@ export async function buildPlayerNights(
 /* ─────────────────────────────────────────────────────────────────
    FILTERS — what counts as "notable enough for the Wire"
 ───────────────────────────────────────────────────────────────── */
+
+/**
+ * Decide whether a night makes the cut. Owned players are ALWAYS kept —
+ * their manager wants the quiet and the rough nights too (Your Players
+ * surfaces a roster's standouts AND duds), not just the loud ones. Unowned
+ * players must clear the league-wide notability bar, and only when
+ * includeUnowned, or the set balloons to hundreds of lines a day.
+ */
+export function keepNight(owned: boolean, includeUnowned: boolean, notable: boolean): boolean {
+  if (owned) return true
+  return includeUnowned && notable
+}
 
 /**
  * Threshold: hitter performance worth surfacing. A 1-for-4 isn't a
