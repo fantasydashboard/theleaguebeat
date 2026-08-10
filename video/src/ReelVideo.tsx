@@ -2,6 +2,8 @@ import React from 'react'
 import { Series } from 'remotion'
 import type { Reel, ReelScene } from '../../src/editorial/video/types'
 import { Backdrop } from './chrome'
+import { ColdOpen } from './scenes/ColdOpen'
+import { SignOff } from './scenes/SignOff'
 import { theme } from './theme'
 import { sceneFrames } from './timing'
 
@@ -14,7 +16,7 @@ import { sceneFrames } from './timing'
  */
 export { sceneDurationMs, sceneFrames, reelFrames } from './timing'
 
-/** Placeholder until the scene components land in Tasks 9–12. */
+/** Placeholder until the remaining scene components land in Tasks 10–12. */
 const Placeholder: React.FC<{ scene: ReelScene }> = ({ scene }) => (
   <Backdrop>
     <div style={{
@@ -27,13 +29,24 @@ const Placeholder: React.FC<{ scene: ReelScene }> = ({ scene }) => (
   </Backdrop>
 )
 
+const SceneSwitch: React.FC<{ scene: ReelScene; week: number }> = ({ scene, week }) => {
+  switch (scene.template) {
+    case 'cold-open':
+      return <ColdOpen {...scene.props} />
+    case 'sign-off':
+      return <SignOff {...scene.props} />
+    default:
+      return <Placeholder scene={scene} />
+  }
+}
+
 export const ReelVideo: React.FC<{ reel: Reel }> = ({ reel }) => {
   const frames = sceneFrames(reel)
   return (
     <Series>
       {reel.scenes.map((scene, i) => (
         <Series.Sequence key={i} durationInFrames={frames[i]}>
-          <Placeholder scene={scene} />
+          <SceneSwitch scene={scene} week={reel.week} />
         </Series.Sequence>
       ))}
     </Series>
