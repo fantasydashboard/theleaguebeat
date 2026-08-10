@@ -153,14 +153,34 @@ Unmapped section types are **skipped**, not rendered generically. A shorter
 honest reel beats a padded one. Adding a scene later is one table row plus one
 React component — additive, not architectural.
 
-**Dedup by `SceneTemplate`, not `SectionType`.** `composeIssue()` already dedupes
-by `SectionType`, but the mapping above is many-to-one: `hero-faceoff` and
-`matchup-of-week` both route to `the-throne`; `hero-solo` and `streak-watch` both
-route to `the-climb`. Two sections that survive the existing dedup can therefore
-produce two visually identical scenes back to back — the exact templated feel the
-editorial discipline exists to prevent. `buildReel` applies a second dedup pass
-on `SceneTemplate`, keeping the higher-priority section and dropping the other.
-A reel with one strong scene is better than one with the same scene twice.
+**Dedup runs AFTER the builders, not before.** *(Corrected 2026-08-09 during
+implementation — the original design produced reels with zero story scenes.)*
+
+The mapping above is many-to-one: `hero-faceoff` and `matchup-of-week` both route
+to `the-throne`. Two sections surviving `composeIssue`'s own `SectionType` dedup
+would produce two identical scenes back to back, so a second dedup pass on
+`SceneTemplate` is needed. But running it *before* the builders is wrong: a
+high-priority section claims a template slot, its builder then returns `null`,
+and the viable lower-priority candidate for that slot has already been discarded.
+Against the real week-8 fixture this produced `cold-open → the-board` and nothing
+else, while two perfectly good story scenes sat unused.
+
+`buildReel` therefore marks a template used only once a builder has returned a
+non-`null` scene.
+
+**Templates are chosen by what the data supports, not by `SectionType`.**
+`SectionType` carries no arity guarantee — `heroSectionForStoryType` maps the
+single-team story `dynasty-falling` to `hero-faceoff` because that is a *web
+layout* decision. Scene templates have *data* requirements: `the-throne` needs
+two teams plus a current-week matchup; `the-climb` needs one team plus three
+rank-history points. So `templateForSection` supplies a **preferred** template
+and the other is tried as a fallback.
+
+The fallback is constrained: `the-climb` is only attempted for a story with
+exactly one team. The Climb is a single-team scene, so a two-team story is not a
+candidate for it regardless of rank history — without this guard a
+`matchup-of-week` whose Throne slot was taken would fall back to a flat one-team
+Climb, dropping the second team and padding the reel with a non-story.
 
 ### Structure
 
