@@ -122,4 +122,46 @@ describe('buildClimb', () => {
     const scene = buildClimb(data, story(['a']))!
     expect(scene.vo).toContain('from 3rd to 1st')
   })
+
+  it('describes an unchanged rank with the held VO and footnote', () => {
+    const data = base({
+      seasonRankHistory: [
+        { week: 9, ranks: { a: 3 } },
+        { week: 10, ranks: { a: 3 } },
+        { week: 11, ranks: { a: 3 } },
+      ],
+    })
+    const scene = buildClimb(data, story(['a']))!
+    expect(scene.vo).toBe('Rally Caps have not moved in 3 weeks, still sitting 3rd.')
+    expect((scene.props as { footnote: string }).footnote).toBe('HELD AT 3 FOR 3 WEEKS')
+  })
+
+  it('pins the exact fall footnote wording', () => {
+    const data = base({
+      seasonRankHistory: [
+        { week: 9, ranks: { a: 2 } },
+        { week: 10, ranks: { a: 5 } },
+        { week: 11, ranks: { a: 9 } },
+      ],
+    })
+    const scene = buildClimb(data, story(['a']))!
+    expect((scene.props as { footnote: string }).footnote).toBe('SLID 7 SPOTS')
+  })
+
+  it('pins the exact climb footnote wording', () => {
+    const scene = buildClimb(base(), story(['a']))!
+    expect((scene.props as { footnote: string }).footnote).toBe('CLIMBED 5 SPOTS')
+  })
+
+  it('uses singular SPOT, not SPOTS, for a one-rank move', () => {
+    const data = base({
+      seasonRankHistory: [
+        { week: 9, ranks: { a: 5 } },
+        { week: 10, ranks: { a: 5 } },
+        { week: 11, ranks: { a: 4 } },
+      ],
+    })
+    const scene = buildClimb(data, story(['a']))!
+    expect((scene.props as { footnote: string }).footnote).toBe('CLIMBED 1 SPOT')
+  })
 })
