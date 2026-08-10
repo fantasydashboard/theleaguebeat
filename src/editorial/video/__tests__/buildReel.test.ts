@@ -253,4 +253,100 @@ describe('buildReel', () => {
     expect(thrones).toHaveLength(1)
     expect(thrones[0].storySignature).toBe('new-throne:a:b:12')
   })
+
+  /* ───────────────────────────────────────────────────────────────
+     Fix round 2 — the throne→climb fallback direction is not
+     self-limiting the way climb→throne is: buildClimb only reads
+     teamIds[0] and has no gate on how many teams the story actually
+     names, so without a constraint at the fallback decision, a
+     two-team story whose throne slot is already taken could silently
+     drop its second team and still build a filler climb scene.
+  ─────────────────────────────────────────────────────────────── */
+
+  it('does not fall back to the climb for a two-team story once its preferred throne is taken', () => {
+    // story1 genuinely fills the-throne. story2 is also two-team and
+    // prefers the-throne, but the slot is gone. Team 'c' (story2's
+    // teamIds[0]) has ample flat rank history — more than enough to
+    // build a climb if the fallback ever tried one for a multi-team
+    // story. This test fails if the `isSingleTeam` guard in
+    // `candidatesFor` is removed.
+    const story1: SelectedStory = {
+      type: 'new-throne', category: 'standings', weight: 95, freshness: 1,
+      scope: 'matchup', teamIds: ['a', 'b'], seasonStages: ['midseason'],
+      context: {}, signature: 'new-throne:a:b:12', score: 95,
+    } as unknown as SelectedStory
+
+    const story2: SelectedStory = {
+      type: 'matchup-of-week', category: 'matchup', weight: 85, freshness: 1,
+      scope: 'matchup', teamIds: ['c', 'd'], seasonStages: ['midseason'],
+      context: {}, signature: 'matchup-of-week:c:d:12', score: 85,
+    } as unknown as SelectedStory
+
+    const data = base({
+      teams: [
+        team('a', 'Thunder Cats'), team('b', 'Bench Mob'),
+        team('c', 'Rally Caps'), team('d', 'Free Bases'),
+      ],
+      categories: catDefs,
+      matchupsCurrentWeek: [decidedMatchup('m1', 'a', 'b')],
+      seasonRankHistory: [
+        { week: 6, ranks: { c: 4 } },
+        { week: 7, ranks: { c: 4 } },
+        { week: 8, ranks: { c: 4 } },
+        { week: 9, ranks: { c: 4 } },
+        { week: 10, ranks: { c: 4 } },
+      ],
+    })
+
+    const reel = buildReel(data, context, [story1, story2])
+    const storyScenes = reel.scenes.filter(
+      (s) => s.template === 'the-throne' || s.template === 'the-climb',
+    )
+    expect(storyScenes).toHaveLength(1)
+    expect(storyScenes[0].storySignature).toBe('new-throne:a:b:12')
+  })
+
+  it('does not leak a failed story\'s teams into the board highlight', () => {
+    // `failing` names a team ('z') that no successful story touches
+    // and can build neither template (one team → throne fails; no
+    // rank history → its single-team climb fallback fails too). If
+    // `featuredTeamIds` ever accumulated before a scene actually
+    // built, 'z' would wrongly show up highlighted on the board.
+    const failing: SelectedStory = {
+      type: 'new-throne', category: 'standings', weight: 95, freshness: 1,
+      scope: 'team', teamIds: ['z'], seasonStages: ['midseason'],
+      context: {}, signature: 'new-throne:z:12', score: 95,
+    } as unknown as SelectedStory
+
+    const succeeding: SelectedStory = {
+      type: 'matchup-of-week', category: 'matchup', weight: 85, freshness: 1,
+      scope: 'matchup', teamIds: ['a', 'b'], seasonStages: ['midseason'],
+      context: {}, signature: 'matchup-of-week:a:b:12', score: 85,
+    } as unknown as SelectedStory
+
+    const data = base({
+      teams: [
+        team('a', 'Thunder Cats'), team('b', 'Bench Mob'), team('z', 'Ghost Runners'),
+      ],
+      standings: [
+        { rank: 1, teamId: 'a', catWins: 62, catLosses: 38, catTies: 0, winPct: 0.62,
+          streak: { type: 'W', length: 3 }, lastSix: [], ownsCount: 4, bleedingCount: 1 },
+        { rank: 2, teamId: 'b', catWins: 58, catLosses: 42, catTies: 0, winPct: 0.58,
+          streak: { type: 'L', length: 1 }, lastSix: [], ownsCount: 3, bleedingCount: 2 },
+        { rank: 3, teamId: 'z', catWins: 40, catLosses: 60, catTies: 0, winPct: 0.40,
+          streak: { type: 'L', length: 2 }, lastSix: [], ownsCount: 2, bleedingCount: 3 },
+      ],
+      categories: catDefs,
+      matchupsCurrentWeek: [decidedMatchup('m1', 'a', 'b')],
+      seasonRankHistory: [],
+    })
+
+    const reel = buildReel(data, context, [failing, succeeding])
+    const board = reel.scenes.find((s) => s.template === 'the-board')!
+    const rows = (board.props as { rows: { teamName: string; highlight: boolean }[] }).rows
+
+    expect(rows.find((r) => r.teamName === 'Ghost Runners')!.highlight).toBe(false)
+    expect(rows.find((r) => r.teamName === 'Thunder Cats')!.highlight).toBe(true)
+    expect(rows.find((r) => r.teamName === 'Bench Mob')!.highlight).toBe(true)
+  })
 })

@@ -8,6 +8,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { categoriesFixtureToLeagueData } from '../src/editorial/fixtureAdapter'
 import { buildReel } from '../src/editorial/video/buildReel'
 import { detectAll } from '../src/editorial/detection'
@@ -30,7 +31,10 @@ const context: IssueContext = {
 const stories = selectStoriesForIssue(detectAll(data, context), context)
 const reel = buildReel(data, context, stories)
 
-const out = resolve(process.cwd(), 'video/fixtures/reel.json')
+// Resolved relative to this file, not the shell's cwd, so running the
+// script from a subdirectory can't write the fixture somewhere else.
+const scriptDir = dirname(fileURLToPath(import.meta.url))
+const out = resolve(scriptDir, '../video/fixtures/reel.json')
 mkdirSync(dirname(out), { recursive: true })
 writeFileSync(out, JSON.stringify(reel, null, 2) + '\n')
 

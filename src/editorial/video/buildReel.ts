@@ -42,7 +42,11 @@ import { buildBoard } from './scenes/theBoard'
 import { buildThrone } from './scenes/theThrone'
 import { buildClimb } from './scenes/theClimb'
 
-/** How many story scenes sit between the cold open and the board. */
+/** How many story scenes sit between the cold open and the board. The
+ *  real ceiling today is `STORY_TEMPLATES.length` (2) — dedup means at
+ *  most one scene per story template survives, so this never actually
+ *  binds. It exists as headroom: if a third story template is ever
+ *  routed in, this is what keeps the reel from growing unbounded. */
 const MAX_STORY_SCENES = 3
 
 /** The two scene templates a story can fill, in the order fallback is
@@ -66,9 +70,32 @@ function buildStoryScene(
 
 /** Preferred template first, then whichever other story template
  *  exists — the fallback path for a story whose layout-driven section
- *  type doesn't match what its data can actually support. */
-function candidatesFor(preferred: SceneTemplate): SceneTemplate[] {
-  return [preferred, ...STORY_TEMPLATES.filter((t) => t !== preferred)]
+ *  type doesn't match what its data can actually support.
+ *
+ *  The two fallback directions are NOT symmetric. Climb → Throne is
+ *  self-limiting: `buildThrone` requires two teams, so a genuinely
+ *  single-team story always trips that guard and falls through
+ *  cleanly. Throne → Climb is not self-limiting the same way —
+ *  `buildClimb` only ever reads `teamIds[0]` and has no gate on how
+ *  many teams the story actually names, so without a constraint here
+ *  a two-team story (e.g. `matchup-of-week`) whose throne slot is
+ *  already taken would silently drop its second team and still
+ *  produce a scene — exactly the padded, non-editorial filler this
+ *  module exists to avoid. The Climb is a single-team scene by
+ *  design, so a multi-team story is never a candidate for it as a
+ *  FALLBACK, regardless of what its rank history looks like. This
+ *  gate belongs here, at the fallback decision, not inside
+ *  `buildClimb` — a team genuinely holding its rank is a legitimate
+ *  Climb when the-climb is the story's PREFERRED template. */
+function candidatesFor(
+  preferred: SceneTemplate,
+  story: SelectedStory,
+): SceneTemplate[] {
+  const isSingleTeam = (story.teamIds?.length ?? 0) === 1
+  const fallbacks = STORY_TEMPLATES.filter(
+    (t) => t !== preferred && (t !== 'the-climb' || isSingleTeam),
+  )
+  return [preferred, ...fallbacks]
 }
 
 export function buildReel(
@@ -92,7 +119,7 @@ export function buildReel(
     const preferred = templateForSection(section.type)
     if (!preferred) continue
 
-    for (const template of candidatesFor(preferred)) {
+    for (const template of candidatesFor(preferred, section.story)) {
       if (usedTemplates.has(template)) continue
 
       const scene = buildStoryScene(template, data, section.story)
