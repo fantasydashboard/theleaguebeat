@@ -32,7 +32,7 @@ export const ColdOpen: React.FC<ColdOpenProps> = ({ leagueName, week, subtitle }
         </div>
 
         <div style={{
-          width: '46%', height: 2, background: 'rgba(255,255,255,0.3)', margin: '34px 0',
+          width: '46%', height: 2, background: theme.divider, margin: '34px 0',
           transform: `scaleX(${fade(frame, 40, 22)})`, transformOrigin: 'center',
         }} />
 

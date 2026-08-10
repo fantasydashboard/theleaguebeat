@@ -57,7 +57,7 @@ export const SignOff: React.FC<SignOffProps> = ({ teamA, teamB, line, brandUrl }
         <div style={{ marginTop: 44, fontSize: 36, opacity: fade(frame, 58) }}>{line}</div>
 
         <div style={{
-          width: '40%', height: 2, background: 'rgba(255,255,255,0.25)', margin: '58px 0 34px',
+          width: '40%', height: 2, background: theme.divider, margin: '58px 0 34px',
           transform: `scaleX(${fade(frame, 70, 22)})`,
         }} />
 

@@ -12,6 +12,10 @@ export const theme = {
   accent: '#22c55e',
   down: '#f0663f',
   neutral: '#7c8496',
+  /** Divider rules on the bookend scenes. One alpha for both — they're
+   *  visually the same element (a thin rule against theme.bg) and had
+   *  drifted to two different values before this token existed. */
+  divider: 'rgba(255,255,255,0.3)',
   display: "'Barlow Condensed', sans-serif",
   body: "'Barlow', system-ui, sans-serif",
 } as const
