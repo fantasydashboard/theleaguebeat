@@ -61,3 +61,7 @@ NOTES.md
 .vercel
 .env*.local
 .superpowers/
+
+# Weekly Reel video package (isolated Remotion package)
+video/node_modules
+video/out
