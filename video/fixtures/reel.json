@@ -18,6 +18,128 @@
       "minDurationMs": 4000
     },
     {
+      "template": "the-climb",
+      "props": {
+        "team": {
+          "id": "ct",
+          "name": "Closer's Therapy",
+          "avatarColor": "oklch(0.60 0.20 0), oklch(0.48 0.18 5)",
+          "ownerInitials": "PN"
+        },
+        "points": [
+          {
+            "week": 1,
+            "rank": 1
+          },
+          {
+            "week": 2,
+            "rank": 1
+          },
+          {
+            "week": 3,
+            "rank": 1
+          },
+          {
+            "week": 4,
+            "rank": 1
+          },
+          {
+            "week": 5,
+            "rank": 3
+          },
+          {
+            "week": 6,
+            "rank": 3
+          },
+          {
+            "week": 7,
+            "rank": 5
+          },
+          {
+            "week": 8,
+            "rank": 6
+          }
+        ],
+        "fromRank": 1,
+        "toRank": 6,
+        "spanWeeks": 8,
+        "footnote": "SLID 5 SPOTS"
+      },
+      "vo": "Closer's Therapy have gone from 1st to 6th across 8 weeks.",
+      "minDurationMs": 10000,
+      "storySignature": "dynasty-falling|ct|8"
+    },
+    {
+      "template": "the-throne",
+      "props": {
+        "teamA": {
+          "id": "bt",
+          "name": "Bullpen Theology",
+          "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
+          "ownerInitials": "MD"
+        },
+        "teamB": {
+          "id": "dd",
+          "name": "Doubles Down",
+          "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
+          "ownerInitials": "RK"
+        },
+        "eyebrow": "MATCHUP OF THE WEEK",
+        "headline": "9–0",
+        "catLines": [
+          {
+            "label": "R",
+            "winner": "a",
+            "share": 0.5384615384615384
+          },
+          {
+            "label": "H",
+            "winner": "a",
+            "share": 0.5370370370370371
+          },
+          {
+            "label": "RBI",
+            "winner": "a",
+            "share": 0.5416666666666666
+          },
+          {
+            "label": "AVG",
+            "winner": "a",
+            "share": 0.5161290322580645
+          },
+          {
+            "label": "W",
+            "winner": "a",
+            "share": 0.7142857142857143
+          },
+          {
+            "label": "SV",
+            "winner": "a",
+            "share": 0.7777777777777778
+          },
+          {
+            "label": "K",
+            "winner": "a",
+            "share": 0.6067415730337079
+          },
+          {
+            "label": "HLD",
+            "winner": "a",
+            "share": 0.7692307692307693
+          },
+          {
+            "label": "ERA",
+            "winner": "a",
+            "share": 0.601526717557252
+          }
+        ],
+        "kicker": "9 CATEGORIES TO 0"
+      },
+      "vo": "Bullpen Theology and Doubles Down met with the week on the line, and Bullpen Theology took it 9 categories to 0.",
+      "minDurationMs": 11000,
+      "storySignature": "matchup-of-week|bt+dd|8"
+    },
+    {
       "template": "the-board",
       "props": {
         "rows": [
@@ -26,14 +148,14 @@
             "teamName": "Bullpen Theology",
             "record": "66–22",
             "delta": 0,
-            "highlight": false
+            "highlight": true
           },
           {
             "rank": 2,
             "teamName": "Doubles Down",
             "record": "60–26–2",
             "delta": 1,
-            "highlight": false
+            "highlight": true
           },
           {
             "rank": 3,
@@ -61,7 +183,7 @@
             "teamName": "Closer's Therapy",
             "record": "44–42–2",
             "delta": -1,
-            "highlight": false
+            "highlight": true
           },
           {
             "rank": 7,

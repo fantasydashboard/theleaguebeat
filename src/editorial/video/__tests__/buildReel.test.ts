@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildReel } from '@/editorial/video/buildReel'
-import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+import type {
+  CategoryLeagueData,
+  CategoryLeagueDataMatchup,
+  CategoryLeagueDataTeam,
+} from '@/editorial/types'
 import type { IssueContext, SelectedStory } from '@/editorial/detection/types'
 
 const team = (id: string, name: string): CategoryLeagueDataTeam => ({
@@ -124,5 +128,129 @@ describe('buildReel', () => {
   it('omits the board for a league with no standings at all', () => {
     const reel = buildReel(base({ standings: [] }), context, [])
     expect(reel.scenes.map((s) => s.template)).toEqual(['cold-open'])
+  })
+
+  /* ───────────────────────────────────────────────────────────────
+     Fallback-routing regression tests (fix round 1).
+
+     `templateForSection` gives a story's PREFERRED template based on
+     a web-layout decision (section type), which has no idea what a
+     video scene template actually needs data-wise. A single-team
+     story routed to a two-team template must be able to fall back to
+     the other story template rather than losing its slot outright.
+  ─────────────────────────────────────────────────────────────── */
+
+  const decidedMatchup = (
+    id: string,
+    home: string,
+    away: string,
+  ): CategoryLeagueDataMatchup => ({
+    id, homeTeamId: home, awayTeamId: away, status: 'final',
+    homeCatWins: 7, awayCatWins: 3, ties: 0, contestedCount: 0,
+    catLines: [
+      { catId: 'hr', homeCurrent: 18, awayCurrent: 6, status: 'decided-home' },
+      { catId: 'sb', homeCurrent: 4, awayCurrent: 11, status: 'decided-away' },
+    ],
+  })
+
+  const catDefs = [
+    { id: 'hr', label: 'HR', name: 'Home Runs', side: 'hit' as const },
+    { id: 'sb', label: 'SB', name: 'Stolen Bases', side: 'hit' as const },
+  ]
+
+  it('falls back to the climb template when the preferred throne cannot build', () => {
+    // dynasty-falling names one team → hero-faceoff by layout → prefers
+    // the-throne, which needs two teams and can never build here. It
+    // has enough rank history to be a fine Climb instead.
+    const story: SelectedStory = {
+      type: 'dynasty-falling', category: 'standings', weight: 90, freshness: 1,
+      scope: 'team', teamIds: ['a'], seasonStages: ['midseason'],
+      context: {}, signature: 'dynasty-falling:a:12', score: 90,
+    } as unknown as SelectedStory
+
+    const data = base({
+      seasonRankHistory: [
+        { week: 9, ranks: { a: 1 } },
+        { week: 10, ranks: { a: 3 } },
+        { week: 11, ranks: { a: 6 } },
+      ],
+    })
+
+    const reel = buildReel(data, context, [story])
+    const templates = reel.scenes.map((s) => s.template)
+    expect(templates).toContain('the-climb')
+    expect(templates).not.toContain('the-throne')
+
+    const climb = reel.scenes.find((s) => s.template === 'the-climb')!
+    expect(climb.storySignature).toBe('dynasty-falling:a:12')
+  })
+
+  it('regression: a story that cannot build its preferred template does not block a later story from claiming it', () => {
+    // story1 becomes hero (lower tier), prefers the-throne, but can
+    // build neither throne (only one team named) nor climb (no rank
+    // history) — it must produce nothing and release the-throne.
+    // story2 prefers the-throne too and CAN build it. Under the old
+    // pre-build dedup (dedupeByTemplate ran on section types before
+    // any builder was called), story1's hero-faceoff section would
+    // have claimed the-throne and discarded story2's matchup-of-week
+    // section outright, producing zero throne scenes. The fix must
+    // yield exactly one, sourced from story2.
+    const story1: SelectedStory = {
+      type: 'new-throne', category: 'standings', weight: 95, freshness: 1,
+      scope: 'team', teamIds: ['a'], seasonStages: ['midseason'],
+      context: {}, signature: 'new-throne:a:12', score: 95,
+    } as unknown as SelectedStory
+
+    const story2: SelectedStory = {
+      type: 'matchup-of-week', category: 'matchup', weight: 85, freshness: 1,
+      scope: 'matchup', teamIds: ['a', 'b'], seasonStages: ['midseason'],
+      context: {}, signature: 'matchup-of-week:a:b:12', score: 85,
+    } as unknown as SelectedStory
+
+    const data = base({
+      categories: catDefs,
+      matchupsCurrentWeek: [decidedMatchup('m1', 'a', 'b')],
+      seasonRankHistory: [], // no history at all → story1's climb fallback also fails
+    })
+
+    const reel = buildReel(data, context, [story1, story2])
+    const thrones = reel.scenes.filter((s) => s.template === 'the-throne')
+    expect(thrones).toHaveLength(1)
+    expect(thrones[0].storySignature).toBe('matchup-of-week:a:b:12')
+  })
+
+  it('still builds exactly one scene per template when several stories could fill it', () => {
+    // Both stories name a fully buildable throne matchup. Only one
+    // the-throne scene should ever exist, and it belongs to whichever
+    // story got there first (the higher-priority hero).
+    const hero: SelectedStory = {
+      type: 'new-throne', category: 'standings', weight: 95, freshness: 1,
+      scope: 'matchup', teamIds: ['a', 'b'], seasonStages: ['midseason'],
+      context: {}, signature: 'new-throne:a:b:12', score: 95,
+    } as unknown as SelectedStory
+
+    const other: SelectedStory = {
+      type: 'matchup-of-week', category: 'matchup', weight: 85, freshness: 1,
+      scope: 'matchup', teamIds: ['c', 'd'], seasonStages: ['midseason'],
+      context: {}, signature: 'matchup-of-week:c:d:12', score: 85,
+    } as unknown as SelectedStory
+
+    const data = base({
+      teams: [
+        team('a', 'Thunder Cats'), team('b', 'Bench Mob'),
+        team('c', 'Rally Caps'), team('d', 'Free Bases'),
+      ],
+      categories: catDefs,
+      matchupsCurrentWeek: [
+        decidedMatchup('m1', 'a', 'b'),
+        decidedMatchup('m2', 'c', 'd'),
+      ],
+      seasonRankHistory: [], // no history → 'other' can't fall back to a climb either
+    })
+
+    const reel = buildReel(data, context, [hero, other])
+    const thrones = reel.scenes.filter((s) => s.template === 'the-throne')
+    expect(thrones).toHaveLength(1)
+    expect(thrones[0].storySignature).toBe('new-throne:a:b:12')
   })
 })

@@ -9,16 +9,33 @@
  *   cold-open  →  [story scenes]  →  the-board  →  sign-off
  *
  * The fixed scenes are what guarantee a valid reel in a quiet week.
- * Story scenes come from composeIssue(), routed and deduped by scene
- * template. Any builder returning null drops its scene silently — a
- * shorter honest reel beats a padded one.
+ * Story scenes come from composeIssue(), which reflects the WEB
+ * LAYOUT's idea of section type (`hero-faceoff`, `matchup-of-week`,
+ * `hero-solo`, `streak-watch`, …) — a decision made without any
+ * awareness of what data a video scene template actually needs.
+ * `the-throne` needs two teams and a decided current-week matchup;
+ * `the-climb` needs one team and at least three rank-history points.
+ * A single-team story like `dynasty-falling` can be routed to
+ * `hero-faceoff` purely as a page-layout choice and yet have nothing
+ * to fill a Throne with.
+ *
+ * So dedup here runs on BUILT scenes, not on section types: a
+ * template slot is claimed only once a builder actually returns a
+ * scene for it. `templateForSection` gives each section's PREFERRED
+ * template; if that template is already claimed or its builder
+ * returns null, the other story template is tried as a fallback
+ * before the story is given up on. This is what lets `dynasty-falling`
+ * (throne-shaped by layout, climb-shaped by data) still produce a
+ * scene instead of silently losing a template slot to a story that
+ * can't fill it. Any builder returning null drops its scene silently
+ * — a shorter honest reel beats a padded one.
  */
 
 import type { CategoryLeagueData } from '../types'
 import type { IssueContext, SelectedStory } from '../detection/types'
 import { composeIssue } from '../composition'
-import type { Reel, ReelScene } from './types'
-import { dedupeByTemplate, templateForSection } from './sceneRouting'
+import type { Reel, ReelScene, SceneTemplate } from './types'
+import { templateForSection } from './sceneRouting'
 import { buildColdOpen } from './scenes/coldOpen'
 import { buildSignOff } from './scenes/signOff'
 import { buildBoard } from './scenes/theBoard'
@@ -28,6 +45,32 @@ import { buildClimb } from './scenes/theClimb'
 /** How many story scenes sit between the cold open and the board. */
 const MAX_STORY_SCENES = 3
 
+/** The two scene templates a story can fill, in the order fallback is
+ *  tried. Kept a flat list (not a lookup table) because with only two
+ *  members, "the other one" is simpler than a map. */
+const STORY_TEMPLATES: SceneTemplate[] = ['the-throne', 'the-climb']
+
+/** Attempt to build `template` for `story`. Unknown templates (i.e.
+ *  anything that isn't one of the two story templates) never occur
+ *  here — `candidatesFor` only ever draws from STORY_TEMPLATES — but
+ *  the null fallthrough keeps this total rather than partial. */
+function buildStoryScene(
+  template: SceneTemplate,
+  data: CategoryLeagueData,
+  story: SelectedStory,
+): ReelScene | null {
+  if (template === 'the-throne') return buildThrone(data, story)
+  if (template === 'the-climb') return buildClimb(data, story)
+  return null
+}
+
+/** Preferred template first, then whichever other story template
+ *  exists — the fallback path for a story whose layout-driven section
+ *  type doesn't match what its data can actually support. */
+function candidatesFor(preferred: SceneTemplate): SceneTemplate[] {
+  return [preferred, ...STORY_TEMPLATES.filter((t) => t !== preferred)]
+}
+
 export function buildReel(
   data: CategoryLeagueData,
   context: IssueContext,
@@ -35,23 +78,31 @@ export function buildReel(
 ): Reel {
   const scenes: ReelScene[] = [buildColdOpen(data)]
 
-  /* Story scenes — routed from the existing composition layer. */
-  const sections = dedupeByTemplate(composeIssue(stories, context))
+  /* Story scenes — routed from the existing composition layer, but
+   * deduped here (by built scene, not by section type) so a template
+   * slot is only spent once something actually fills it. */
+  const sections = composeIssue(stories, context)
   const featuredTeamIds: string[] = []
+  const usedTemplates = new Set<SceneTemplate>()
 
   for (const section of sections) {
     if (scenes.length - 1 >= MAX_STORY_SCENES) break
     if (!section.story) continue
 
-    const template = templateForSection(section.type)
-    const scene =
-      template === 'the-throne' ? buildThrone(data, section.story)
-      : template === 'the-climb' ? buildClimb(data, section.story)
-      : null
+    const preferred = templateForSection(section.type)
+    if (!preferred) continue
 
-    if (!scene) continue
-    scenes.push(scene)
-    featuredTeamIds.push(...(section.story.teamIds ?? []))
+    for (const template of candidatesFor(preferred)) {
+      if (usedTemplates.has(template)) continue
+
+      const scene = buildStoryScene(template, data, section.story)
+      if (!scene) continue
+
+      scenes.push(scene)
+      usedTemplates.add(template)
+      featuredTeamIds.push(...(section.story.teamIds ?? []))
+      break
+    }
   }
 
   /* The board — highlights whoever the story scenes were about. */
