@@ -8,7 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "../src/editorial/video/types.ts"]
+  "include": ["src", "scripts", "../src/editorial/video/types.ts"]
 }

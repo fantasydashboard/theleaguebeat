@@ -1,5 +1,10 @@
-/** Brand tokens, copied verbatim from CoverCard.vue so the video and
- *  the share card are unmistakably the same publication. */
+/** Brand tokens for the video, matching the share card so the video
+ *  and the share card are unmistakably the same publication. `bg` and
+ *  `text` are copied verbatim from CoverCard.vue's base oklch values
+ *  (src/components/share/CoverCard.vue:161-162); `accent`, `down`, and
+ *  `neutral` are the app's standing brand colors but aren't literal
+ *  values in that file — they're specified here directly per the
+ *  design brief. */
 export const theme = {
   bg: 'oklch(0.055 0.012 90)',
   text: 'oklch(0.97 0.005 90)',

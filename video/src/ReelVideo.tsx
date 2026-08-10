@@ -3,21 +3,16 @@ import { Series } from 'remotion'
 import type { Reel, ReelScene } from '../../src/editorial/video/types'
 import { Backdrop } from './chrome'
 import { theme } from './theme'
+import { sceneFrames } from './timing'
 
-const LEAD_IN_MS = 400
-const TAIL_MS = 700
-
-export function sceneDurationMs(scene: ReelScene): number {
-  const voiced = scene.voDurationMs != null
-    ? LEAD_IN_MS + scene.voDurationMs + TAIL_MS
-    : 0
-  return Math.max(scene.minDurationMs, voiced)
-}
-
-export function reelFrames(reel: Reel): number {
-  const ms = reel.scenes.reduce((t, s) => t + sceneDurationMs(s), 0)
-  return Math.max(1, Math.round((ms / 1000) * reel.fps))
-}
+/**
+ * The scene-duration formula itself lives in ./timing.ts, duplicated
+ * from src/editorial/video/timing.ts on purpose: this package must
+ * never take a runtime dependency on the app's module graph, so a
+ * small amount of duplicated logic is the accepted cost of isolation.
+ * Re-exported here so Root.tsx's existing import keeps working.
+ */
+export { sceneDurationMs, sceneFrames, reelFrames } from './timing'
 
 /** Placeholder until the scene components land in Tasks 9–12. */
 const Placeholder: React.FC<{ scene: ReelScene }> = ({ scene }) => (
@@ -32,15 +27,15 @@ const Placeholder: React.FC<{ scene: ReelScene }> = ({ scene }) => (
   </Backdrop>
 )
 
-export const ReelVideo: React.FC<{ reel: Reel }> = ({ reel }) => (
-  <Series>
-    {reel.scenes.map((scene, i) => (
-      <Series.Sequence
-        key={i}
-        durationInFrames={Math.max(1, Math.round((sceneDurationMs(scene) / 1000) * reel.fps))}
-      >
-        <Placeholder scene={scene} />
-      </Series.Sequence>
-    ))}
-  </Series>
-)
+export const ReelVideo: React.FC<{ reel: Reel }> = ({ reel }) => {
+  const frames = sceneFrames(reel)
+  return (
+    <Series>
+      {reel.scenes.map((scene, i) => (
+        <Series.Sequence key={i} durationInFrames={frames[i]}>
+          <Placeholder scene={scene} />
+        </Series.Sequence>
+      ))}
+    </Series>
+  )
+}
