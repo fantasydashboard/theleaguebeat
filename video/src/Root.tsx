@@ -3,6 +3,7 @@ import { Composition, registerRoot } from 'remotion'
 import { ReelVideo, reelFrames } from './ReelVideo'
 import type { Reel } from '../../src/editorial/video/types'
 import fixture from '../fixtures/reel.json'
+import './fonts'
 
 const reel = fixture as unknown as Reel
 
