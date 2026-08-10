@@ -102,4 +102,55 @@ describe('buildThrone', () => {
       teamB: { name: 'Thunder Cats' },
     })
   })
+
+  it('flips per-category winner attribution too when the away team won overall', () => {
+    // Same raw cat lines as the base fixture (HR decided-home, SB
+    // decided-away), but the away team (b) now wins the matchup overall.
+    // teamA is always the winner, so a category the home team (a, now the
+    // loser) took must map to 'b', and one the away team (b, now the
+    // winner) took must map to 'a' — the opposite of the un-flipped case.
+    // This exercises the two homeWon=false quadrants of the orientation
+    // XOR that the un-flipped tests never reach.
+    const flipped = matchup({ homeCatWins: 3, awayCatWins: 7 })
+    const data = base({ matchupsCurrentWeek: [flipped] })
+    const scene = buildThrone(data, story(['a', 'b']))!
+    const { catLines } = scene.props as { catLines: { label: string; winner: string }[] }
+    expect(catLines.find((c) => c.label === 'HR')!.winner).toBe('b')
+    expect(catLines.find((c) => c.label === 'SB')!.winner).toBe('a')
+  })
+
+  it('returns null when the matchup is a genuine tie', () => {
+    const tied = matchup({ homeCatWins: 5, awayCatWins: 5 })
+    const data = base({ matchupsCurrentWeek: [tied] })
+    expect(buildThrone(data, story(['a', 'b']))).toBeNull()
+  })
+
+  it('keeps the headline and the bar count consistent when every category is decided', () => {
+    const catLines = [
+      { catId: 'c1', homeCurrent: 10, awayCurrent: 2, status: 'decided-home' as const },
+      { catId: 'c2', homeCurrent: 8, awayCurrent: 1, status: 'decided-home' as const },
+      { catId: 'c3', homeCurrent: 6, awayCurrent: 3, status: 'decided-home' as const },
+      { catId: 'c4', homeCurrent: 9, awayCurrent: 4, status: 'decided-home' as const },
+      { catId: 'c5', homeCurrent: 7, awayCurrent: 2, status: 'decided-home' as const },
+      { catId: 'c6', homeCurrent: 6, awayCurrent: 5, status: 'decided-home' as const },
+      { catId: 'c7', homeCurrent: 5, awayCurrent: 4, status: 'decided-home' as const },
+      { catId: 'c8', homeCurrent: 2, awayCurrent: 8, status: 'decided-away' as const },
+      { catId: 'c9', homeCurrent: 1, awayCurrent: 7, status: 'decided-away' as const },
+      { catId: 'c10', homeCurrent: 4, awayCurrent: 10, status: 'decided-away' as const },
+    ]
+    const complete = matchup({ homeCatWins: 7, awayCatWins: 3, catLines })
+    const data = base({
+      categories: catLines.map((c, i) => ({
+        id: c.catId, label: `C${i + 1}`, name: `Cat ${i + 1}`, side: 'hit' as const,
+      })),
+      matchupsCurrentWeek: [complete],
+    })
+    const scene = buildThrone(data, story(['a', 'b']))!
+    const { catLines: builtLines } = scene.props as {
+      catLines: { winner: string }[]
+    }
+    expect(builtLines.length).toBe(10)
+    expect(builtLines.filter((c) => c.winner === 'a').length).toBe(7)
+    expect(scene.props).toMatchObject({ headline: '7–3' })
+  })
 })

@@ -42,6 +42,11 @@ export function buildThrone(
   const matchup = findMatchup(data, ids[0], ids[1])
   if (!matchup || !matchup.catLines || matchup.catLines.length === 0) return null
 
+  // A tie has no winner, and this scene's entire frame is "X beat Y" — there
+  // is no honest way to narrate a draw as a decisive category score, so skip
+  // it rather than fabricate a winner out of a level matchup.
+  if (matchup.homeCatWins === matchup.awayCatWins) return null
+
   const homeWon = matchup.homeCatWins >= matchup.awayCatWins
   const winnerId = homeWon ? matchup.homeTeamId : matchup.awayTeamId
   const loserId = homeWon ? matchup.awayTeamId : matchup.homeTeamId
