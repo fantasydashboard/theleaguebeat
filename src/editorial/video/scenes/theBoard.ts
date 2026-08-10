@@ -21,6 +21,14 @@ function formatRecord(w: number, l: number, t: number): string {
   return t > 0 ? `${w}${EN_DASH}${l}${EN_DASH}${t}` : `${w}${EN_DASH}${l}`
 }
 
+/** Spoken form of the category record, built straight from the raw
+ *  numbers — never reverse-engineered from the display string, whose
+ *  en dashes would otherwise leak into narration verbatim. */
+function spokenRecord(w: number, l: number, t: number): string {
+  if (t === 0) return `${w} and ${l}`
+  return `${w} and ${l} with ${t} tie${t === 1 ? '' : 's'}`
+}
+
 /** Most recent history entry strictly before the current week. */
 function previousRanks(data: CategoryLeagueData): Record<string, number> | null {
   const past = data.seasonRankHistory
@@ -38,21 +46,22 @@ export function buildBoard(
   const prev = previousRanks(data)
   const highlight = new Set(highlightTeamIds)
 
-  const rows: BoardRow[] = [...data.standings]
-    .sort((s1, s2) => s1.rank - s2.rank)
-    .map((s) => {
-      const team = data.teams.find((t) => t.id === s.teamId)
-      const was = prev?.[s.teamId]
-      return {
-        rank: s.rank,
-        teamName: team?.name ?? 'Unknown',
-        record: formatRecord(s.catWins, s.catLosses, s.catTies),
-        delta: was == null ? null : was - s.rank,
-        highlight: highlight.has(s.teamId),
-      }
-    })
+  const sortedStandings = [...data.standings].sort((s1, s2) => s1.rank - s2.rank)
+
+  const rows: BoardRow[] = sortedStandings.map((s) => {
+    const team = data.teams.find((t) => t.id === s.teamId)
+    const was = prev?.[s.teamId]
+    return {
+      rank: s.rank,
+      teamName: team?.name ?? 'Unknown',
+      record: formatRecord(s.catWins, s.catLosses, s.catTies),
+      delta: was == null ? null : was - s.rank,
+      highlight: highlight.has(s.teamId),
+    }
+  })
 
   const leader = rows[0]
+  const leaderStanding = sortedStandings[0]
   const cutoff = data.playoffCutoff
 
   return {
@@ -63,7 +72,7 @@ export function buildBoard(
         ? `TOP ${cutoff} MAKE THE PLAYOFFS`
         : '',
     },
-    vo: `Here's the board after ${data.currentWeek}. ${leader.teamName} on top at ${leader.record.replace(EN_DASH, ' and ')}.`,
+    vo: `Here's the board after ${data.currentWeek}. ${leader.teamName} on top at ${spokenRecord(leaderStanding.catWins, leaderStanding.catLosses, leaderStanding.catTies)}.`,
     minDurationMs: 9000,
   }
 }

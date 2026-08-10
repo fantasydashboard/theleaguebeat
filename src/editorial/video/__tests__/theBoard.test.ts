@@ -91,4 +91,36 @@ describe('buildBoard', () => {
   it('names the leader in the VO', () => {
     expect(buildBoard(base())!.vo).toContain('Thunder Cats')
   })
+
+  it('speaks the leader record as raw numbers when there are no ties', () => {
+    expect(buildBoard(base())!.vo).toContain('on top at 62 and 38.')
+  })
+
+  it('speaks the leader record with a pluralized tie count', () => {
+    const data = base({ standings: [standing('a', 1, { catTies: 2 }), standing('b', 2)] })
+    expect(buildBoard(data)!.vo).toContain('on top at 62 and 38 with 2 ties.')
+  })
+
+  it('speaks a singular tie when there is exactly one', () => {
+    const data = base({ standings: [standing('a', 1, { catTies: 1 }), standing('b', 2)] })
+    expect(buildBoard(data)!.vo).toContain('on top at 62 and 38 with 1 tie.')
+  })
+
+  it('produces the playoff-cutoff note when there are more teams than the cutoff', () => {
+    const data = base({ playoffCutoff: 1 })
+    const { note } = buildBoard(data)!.props as { note: string }
+    expect(note).toBe('TOP 1 MAKE THE PLAYOFFS')
+  })
+
+  it('omits the note when the team count exactly equals the cutoff', () => {
+    const data = base({ playoffCutoff: 2 })
+    const { note } = buildBoard(data)!.props as { note: string }
+    expect(note).toBe('')
+  })
+
+  it('omits the note when playoffCutoff is 0', () => {
+    const data = base({ playoffCutoff: 0 })
+    const { note } = buildBoard(data)!.props as { note: string }
+    expect(note).toBe('')
+  })
 })
