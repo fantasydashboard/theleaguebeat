@@ -1,0 +1,101 @@
+{
+  "leagueId": "demo-categories-2026",
+  "leagueName": "Diamond Cuts",
+  "year": 2026,
+  "week": 8,
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "scenes": [
+    {
+      "template": "cold-open",
+      "props": {
+        "leagueName": "Diamond Cuts",
+        "week": 8,
+        "subtitle": "THE WEEK IN REVIEW"
+      },
+      "vo": "Week 8 in the Diamond Cuts.",
+      "minDurationMs": 4000
+    },
+    {
+      "template": "the-board",
+      "props": {
+        "rows": [
+          {
+            "rank": 1,
+            "teamName": "Bullpen Theology",
+            "record": "66–22",
+            "delta": 0,
+            "highlight": false
+          },
+          {
+            "rank": 2,
+            "teamName": "Doubles Down",
+            "record": "60–26–2",
+            "delta": 1,
+            "highlight": false
+          },
+          {
+            "rank": 3,
+            "teamName": "The Whiff Department",
+            "record": "56–30–2",
+            "delta": -1,
+            "highlight": false
+          },
+          {
+            "rank": 4,
+            "teamName": "Quality Start",
+            "record": "50–36–2",
+            "delta": 0,
+            "highlight": false
+          },
+          {
+            "rank": 5,
+            "teamName": "Innings Eaters",
+            "record": "47–39–2",
+            "delta": 1,
+            "highlight": false
+          },
+          {
+            "rank": 6,
+            "teamName": "Closer's Therapy",
+            "record": "44–42–2",
+            "delta": -1,
+            "highlight": false
+          },
+          {
+            "rank": 7,
+            "teamName": "Mound Visitors",
+            "record": "42–44–2",
+            "delta": 0,
+            "highlight": false
+          },
+          {
+            "rank": 8,
+            "teamName": "Free Bases",
+            "record": "36–50–2",
+            "delta": 0,
+            "highlight": false
+          },
+          {
+            "rank": 9,
+            "teamName": "Cleanup Hitters",
+            "record": "30–56–2",
+            "delta": 0,
+            "highlight": false
+          },
+          {
+            "rank": 10,
+            "teamName": "The Walk-Off Society",
+            "record": "25–61–2",
+            "delta": 0,
+            "highlight": false
+          }
+        ],
+        "note": "TOP 6 MAKE THE PLAYOFFS"
+      },
+      "vo": "Here's the board after 8. Bullpen Theology on top at 66 and 22.",
+      "minDurationMs": 9000
+    }
+  ]
+}
