@@ -125,6 +125,31 @@ describe('buildThrone', () => {
     expect(buildThrone(data, story(['a', 'b']))).toBeNull()
   })
 
+  it('narrates a decided matchup in the past tense', () => {
+    const scene = buildThrone(base(), story(['a', 'b']))!
+    expect(scene.props).toMatchObject({ isFinal: true, kicker: '7 CATEGORIES TO 3' })
+    expect(scene.vo).toBe(
+      'Thunder Cats and Bench Mob met with the week on the line, and Thunder Cats took it 7 categories to 3.',
+    )
+  })
+
+  it('narrates a still-live matchup in the present tense, never as settled', () => {
+    const live = matchup({ status: 'coasting', contestedCount: 1 })
+    const data = base({ matchupsCurrentWeek: [live] })
+    const scene = buildThrone(data, story(['a', 'b']))!
+    expect(scene.props).toMatchObject({ isFinal: false, kicker: `LEADS 7${'–'}3` })
+    expect(scene.vo).toBe(
+      'Thunder Cats and Bench Mob are meeting with the week on the line, and Thunder Cats leads it 7 categories to 3.',
+    )
+  })
+
+  it('treats status="final" with contestedCount>0 as still live — defensive, inconsistent data should not be trusted', () => {
+    const inconsistent = matchup({ status: 'final', contestedCount: 1 })
+    const data = base({ matchupsCurrentWeek: [inconsistent] })
+    const scene = buildThrone(data, story(['a', 'b']))!
+    expect(scene.props).toMatchObject({ isFinal: false })
+  })
+
   it('keeps the headline and the bar count consistent when every category is decided', () => {
     const catLines = [
       { catId: 'c1', homeCurrent: 10, awayCurrent: 2, status: 'decided-home' as const },

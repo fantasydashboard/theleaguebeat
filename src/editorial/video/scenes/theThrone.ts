@@ -1,9 +1,16 @@
 /**
  * The Throne — a two-team faceoff told as a category tug-of-war.
  *
- * teamA is always the WINNER, so the scene reads left-to-right as the
- * story does. Undecided categories are dropped: a contested cat is not
- * a won cat, and drawing it as one would be a lie in motion.
+ * teamA is always the LEADER (winner, once decided), so the scene
+ * reads left-to-right as the story does. Undecided categories are
+ * dropped from the bars: a contested cat is not a won cat, and
+ * drawing it as one would be a lie in motion.
+ *
+ * Tense follows `isFinal`, not wishful thinking: a matchup with
+ * `contestedCount > 0` (or `status !== 'final'`) is still being played,
+ * so the VO and kicker say "leads", never "took it" — narrating an
+ * unfinished week as settled is exactly the bug this guard exists to
+ * prevent.
  */
 
 import type { CategoryLeagueData, CategoryLeagueDataMatchup } from '../../types'
@@ -80,6 +87,20 @@ export function buildThrone(
   const loserCats = homeWon ? matchup.awayCatWins : matchup.homeCatWins
   const headline = `${winnerCats}${EN_DASH}${loserCats}`
 
+  // A matchup is only settled once the platform says so AND nothing is
+  // still contested — belt and suspenders, since narrating an
+  // in-progress sweep in the past tense is exactly the bug this guard
+  // exists to prevent (see the field note atop this file's history).
+  const isFinal = matchup.status === 'final' && matchup.contestedCount === 0
+
+  const vo = isFinal
+    ? `${winner.name} and ${loser.name} met with the week on the line, and ${winner.name} took it ${winnerCats} categories to ${loserCats}.`
+    : `${winner.name} and ${loser.name} are meeting with the week on the line, and ${winner.name} leads it ${winnerCats} categories to ${loserCats}.`
+
+  const kicker = isFinal
+    ? `${winnerCats} CATEGORIES TO ${loserCats}`
+    : `LEADS ${winnerCats}${EN_DASH}${loserCats}`
+
   return {
     template: 'the-throne',
     props: {
@@ -88,9 +109,10 @@ export function buildThrone(
       eyebrow: 'MATCHUP OF THE WEEK',
       headline,
       catLines,
-      kicker: `${winnerCats} CATEGORIES TO ${loserCats}`,
+      kicker,
+      isFinal,
     },
-    vo: `${winner.name} and ${loser.name} met with the week on the line, and ${winner.name} took it ${winnerCats} categories to ${loserCats}.`,
+    vo,
     minDurationMs: 11000,
     storySignature: story.signature,
   }

@@ -44,6 +44,10 @@ export interface ThroneProps {
   headline: string
   catLines: ThroneCatLine[]
   kicker: string
+  /** Whether teamA's category lead is a final result or still live.
+   *  Drives tense in both the VO and the renderer's connector word
+   *  ("def." when decided, "leads" when the week is still in play). */
+  isFinal: boolean
 }
 
 export interface ClimbPoint {

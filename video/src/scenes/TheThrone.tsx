@@ -105,7 +105,7 @@ const CatBar: React.FC<{ line: ThroneCatLine; index: number; scale: number }> = 
 }
 
 export const TheThrone: React.FC<ThroneProps & { week: number }> = ({
-  teamA, teamB, eyebrow, headline, catLines, kicker, week,
+  teamA, teamB, eyebrow, headline, catLines, kicker, isFinal, week,
 }) => {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
@@ -148,7 +148,7 @@ export const TheThrone: React.FC<ThroneProps & { week: number }> = ({
           fontFamily: theme.display, fontWeight: 700,
           fontSize: 38 * nameScale(teamB.name.length), opacity: 0.55, marginTop: 6,
         }}>
-          def. {teamB.name.toUpperCase()} &nbsp;{headline}
+          {isFinal ? 'def.' : 'leads'} {teamB.name.toUpperCase()} &nbsp;{headline}
         </div>
       </div>
 
