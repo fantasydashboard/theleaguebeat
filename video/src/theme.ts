@@ -27,6 +27,17 @@ export const theme = {
    *  for The Board's highlighted-row wash. Keep the RGB triple in sync
    *  with `accent` above if that ever changes. */
   accentWash: 'rgba(34,197,94,0.14)',
+  /** Unfilled track behind each category bar in the throne scene — a
+   *  filled block, not a 1px rule like `hairline`, so it gets its own
+   *  token at a distinct alpha rather than reusing that one. */
+  trackWash: 'rgba(255,255,255,0.07)',
+  /** `bg`'s oklch triple with alpha added, for the throne scene's
+   *  lower-third scrim (a two-stop fading panel behind the winning
+   *  team's name). Same unpacking technique as `accentWash`, just two
+   *  alphas for a two-stop gradient instead of one. Keep the L C H
+   *  values in sync with `bg` above if that ever changes. */
+  scrimStrong: 'oklch(0.055 0.012 90 / 97%)',
+  scrimSoft: 'oklch(0.055 0.012 90 / 75%)',
   display: "'Barlow Condensed', sans-serif",
   body: "'Barlow', system-ui, sans-serif",
 } as const

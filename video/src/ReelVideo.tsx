@@ -5,6 +5,7 @@ import { Backdrop } from './chrome'
 import { ColdOpen } from './scenes/ColdOpen'
 import { SignOff } from './scenes/SignOff'
 import { TheBoard } from './scenes/TheBoard'
+import { TheThrone } from './scenes/TheThrone'
 import { theme } from './theme'
 import { sceneFrames } from './timing'
 
@@ -38,6 +39,8 @@ const SceneSwitch: React.FC<{ scene: ReelScene; week: number }> = ({ scene, week
       return <SignOff {...scene.props} />
     case 'the-board':
       return <TheBoard {...scene.props} week={week} />
+    case 'the-throne':
+      return <TheThrone {...scene.props} week={week} />
     default:
       return <Placeholder scene={scene} />
   }
