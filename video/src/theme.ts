@@ -16,6 +16,17 @@ export const theme = {
    *  visually the same element (a thin rule against theme.bg) and had
    *  drifted to two different values before this token existed. */
   divider: 'rgba(255,255,255,0.3)',
+  /** Row hairlines (The Board's row-separator rules). Deliberately its
+   *  own token rather than reusing `divider` at 0.3 — that alpha is
+   *  tuned for a single rule on an otherwise-empty bookend scene, and
+   *  is too heavy repeated 10-20 times down a dense table. Kept at the
+   *  original 0.10 the row rules were designed at. */
+  hairline: 'rgba(255,255,255,0.10)',
+  /** `accent` (#22c55e) unpacked to rgba so an alpha can be applied in
+   *  a CSS gradient/background — a hex literal can't carry one. Used
+   *  for The Board's highlighted-row wash. Keep the RGB triple in sync
+   *  with `accent` above if that ever changes. */
+  accentWash: 'rgba(34,197,94,0.14)',
   display: "'Barlow Condensed', sans-serif",
   body: "'Barlow', system-ui, sans-serif",
 } as const
