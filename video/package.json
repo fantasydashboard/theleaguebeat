@@ -8,6 +8,8 @@
   "scripts": {
     "studio": "remotion studio src/Root.tsx",
     "render": "remotion render src/Root.tsx Reel out/reel.mp4",
+    "render:quiet": "remotion render src/Root.tsx ReelQuiet out/reel-quiet.mp4",
+    "render:mixed": "remotion render src/Root.tsx ReelMixed out/reel-mixed.mp4",
     "check:timing": "node scripts/check-timing-invariant.ts"
   },
   "keywords": [],

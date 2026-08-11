@@ -27,14 +27,22 @@ const context: IssueContext = {
 }
 
 // detectAll is the detection orchestrator; it returns raw candidates,
-// which selectStoriesForIssue scores and trims.
-const stories = selectStoriesForIssue(detectAll(data, context), context)
+// which selectStoriesForIssue scores and trims. --quiet skips detection
+// entirely and hands buildReel an empty stories array, so the reel that
+// comes out is only the fixed spine (cold-open, the-board, sign-off if
+// eligible) — this is the quiet-week gate, not a fabricated slow week.
+const quiet = process.argv.includes('--quiet')
+const stories = quiet
+  ? []
+  : selectStoriesForIssue(detectAll(data, context), context)
 const reel = buildReel(data, context, stories)
+
+const outFile = quiet ? 'video/fixtures/reel-quiet.json' : 'video/fixtures/reel.json'
 
 // Resolved relative to this file, not the shell's cwd, so running the
 // script from a subdirectory can't write the fixture somewhere else.
 const scriptDir = dirname(fileURLToPath(import.meta.url))
-const out = resolve(scriptDir, '../video/fixtures/reel.json')
+const out = resolve(scriptDir, '..', outFile)
 mkdirSync(dirname(out), { recursive: true })
 writeFileSync(out, JSON.stringify(reel, null, 2) + '\n')
 
