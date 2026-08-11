@@ -23,6 +23,7 @@ import {
   currentSeason,
   playoffCutoff,
   matchupsWeek8,
+  matchupsWeek9,
   seasonHistory as fxSeasonHistory,
   teamCareerStats as fxTeamCareerStats,
   h2hMatrix as fxH2HMatrix,
@@ -134,6 +135,24 @@ export function categoriesFixtureToLeagueData(): CategoryLeagueData {
         isProjection: d.isProjection,
       })),
     })),
+
+    // Only week 9 (the week after currentWeek) is populated — the
+    // fixture only ever needed a schedule to preview, not a full
+    // history. Built as 'upcoming' with nothing decided yet: a
+    // matchup that hasn't been played has no score, so contestedCount
+    // is every category and cat wins are honestly zero.
+    matchupsByWeek: {
+      [String(currentWeek + 1)]: matchupsWeek9.map<CategoryLeagueDataMatchup>((m) => ({
+        id: m.id,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        status: 'upcoming',
+        homeCatWins: 0,
+        awayCatWins: 0,
+        ties: 0,
+        contestedCount: fxCategories.length,
+      })),
+    },
 
     seasonHistory: fxSeasonHistory.map<CategoryLeagueDataSeasonHistory>((s) => ({
       year: s.year,

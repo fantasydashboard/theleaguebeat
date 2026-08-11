@@ -133,9 +133,10 @@
             "share": 0.601526717557252
           }
         ],
-        "kicker": "5 CATEGORIES TO 4"
+        "kicker": "LEADS 5–4",
+        "isFinal": false
       },
-      "vo": "Bullpen Theology and Doubles Down met with the week on the line, and Bullpen Theology took it 5 categories to 4.",
+      "vo": "Bullpen Theology and Doubles Down are meeting with the week on the line, and Bullpen Theology leads it 5 categories to 4.",
       "minDurationMs": 11000,
       "storySignature": "matchup-of-week|bt+dd|8-mixed-hand-edited"
     },
@@ -216,8 +217,29 @@
         ],
         "note": "TOP 6 MAKE THE PLAYOFFS"
       },
-      "vo": "Here's the board after 8. Bullpen Theology on top at 66 and 22.",
+      "vo": "Here's the board after week 8. Bullpen Theology on top at 66 and 22.",
       "minDurationMs": 9000
+    },
+    {
+      "template": "sign-off",
+      "props": {
+        "teamA": {
+          "id": "bt",
+          "name": "Bullpen Theology",
+          "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
+          "ownerInitials": "MD"
+        },
+        "teamB": {
+          "id": "dd",
+          "name": "Doubles Down",
+          "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
+          "ownerInitials": "RK"
+        },
+        "line": "#1 vs #2",
+        "brandUrl": "theleaguebeat.com"
+      },
+      "vo": "Next week: Bullpen Theology and Doubles Down. That's the beat.",
+      "minDurationMs": 6000
     }
   ]
 }

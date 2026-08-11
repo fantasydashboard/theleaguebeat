@@ -682,6 +682,33 @@ export function getMatchup(id: string): CategoryMatchup {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   WEEK 9 SCHEDULE — pairings only, nothing played yet.
+   Deliberately NOT a full CategoryMatchup: no score, cat lines,
+   trend, or editorial prose exists for a week that hasn't started —
+   fabricating those would be the exact dishonesty this fixture set
+   avoids everywhere else. Consumers that only need "who plays whom
+   next" (e.g. the video reel's sign-off scene) read this directly;
+   nothing here claims a result.
+───────────────────────────────────────────────────────────────── */
+
+export interface CategoryScheduledMatchup {
+  id: string
+  weekNumber: number
+  homeTeamId: string
+  awayTeamId: string
+}
+
+export const matchupsWeek9: CategoryScheduledMatchup[] = [
+  // Top two in the standings (bt #1, dd #2) draw each other — the
+  // week 9 marquee.
+  { id: 'm9-1', weekNumber: 9, homeTeamId: 'bt', awayTeamId: 'dd' },
+  { id: 'm9-2', weekNumber: 9, homeTeamId: 'wd', awayTeamId: 'qs' },
+  { id: 'm9-3', weekNumber: 9, homeTeamId: 'ie', awayTeamId: 'ct' },
+  { id: 'm9-4', weekNumber: 9, homeTeamId: 'mv', awayTeamId: 'fb' },
+  { id: 'm9-5', weekNumber: 9, homeTeamId: 'ch', awayTeamId: 'ws' },
+]
+
+/* ─────────────────────────────────────────────────────────────────
    TEAM SCOUTING PROSE — 10 entries, used in the matchup modal
 ───────────────────────────────────────────────────────────────── */
 
