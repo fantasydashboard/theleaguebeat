@@ -72,7 +72,7 @@ export function buildBoard(
         ? `TOP ${cutoff} MAKE THE PLAYOFFS`
         : '',
     },
-    vo: `Here's the board after ${data.currentWeek}. ${leader.teamName} on top at ${spokenRecord(leaderStanding.catWins, leaderStanding.catLosses, leaderStanding.catTies)}.`,
+    vo: `Here's the board after week ${data.currentWeek}. ${leader.teamName} on top at ${spokenRecord(leaderStanding.catWins, leaderStanding.catLosses, leaderStanding.catTies)}.`,
     minDurationMs: 9000,
   }
 }

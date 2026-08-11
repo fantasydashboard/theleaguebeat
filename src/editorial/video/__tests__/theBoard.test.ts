@@ -96,6 +96,12 @@ describe('buildBoard', () => {
     expect(buildBoard(base())!.vo).toContain('on top at 62 and 38.')
   })
 
+  it('pins the exact VO opener — "after week N", not "after N"', () => {
+    expect(buildBoard(base())!.vo).toBe(
+      "Here's the board after week 12. Thunder Cats on top at 62 and 38.",
+    )
+  })
+
   it('speaks the leader record with a pluralized tie count', () => {
     const data = base({ standings: [standing('a', 1, { catTies: 2 }), standing('b', 2)] })
     expect(buildBoard(data)!.vo).toContain('on top at 62 and 38 with 2 ties.')
