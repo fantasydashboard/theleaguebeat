@@ -1,12 +1,11 @@
 import React from 'react'
 import { Series } from 'remotion'
 import type { Reel, ReelScene } from '../../src/editorial/video/types'
-import { Backdrop } from './chrome'
 import { ColdOpen } from './scenes/ColdOpen'
 import { SignOff } from './scenes/SignOff'
 import { TheBoard } from './scenes/TheBoard'
+import { TheClimb } from './scenes/TheClimb'
 import { TheThrone } from './scenes/TheThrone'
-import { theme } from './theme'
 import { sceneFrames } from './timing'
 
 /**
@@ -18,19 +17,13 @@ import { sceneFrames } from './timing'
  */
 export { sceneDurationMs, sceneFrames, reelFrames } from './timing'
 
-/** Placeholder until the remaining scene components land in Tasks 10–12. */
-const Placeholder: React.FC<{ scene: ReelScene }> = ({ scene }) => (
-  <Backdrop>
-    <div style={{
-      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-      justifyContent: 'center', fontFamily: theme.display, fontSize: 90,
-      fontWeight: 900, color: theme.accent,
-    }}>
-      {scene.template}
-    </div>
-  </Backdrop>
-)
-
+/**
+ * All five templates in `SceneTemplate` now have a component, so this
+ * switch is exhaustive by construction — no `default` arm. If a new
+ * template is ever added to the discriminated union without a matching
+ * case here, TypeScript reports a missing return on this function
+ * instead of the renderer silently falling through to a blank scene.
+ */
 const SceneSwitch: React.FC<{ scene: ReelScene; week: number }> = ({ scene, week }) => {
   switch (scene.template) {
     case 'cold-open':
@@ -41,8 +34,8 @@ const SceneSwitch: React.FC<{ scene: ReelScene; week: number }> = ({ scene, week
       return <TheBoard {...scene.props} week={week} />
     case 'the-throne':
       return <TheThrone {...scene.props} week={week} />
-    default:
-      return <Placeholder scene={scene} />
+    case 'the-climb':
+      return <TheClimb {...scene.props} week={week} />
   }
 }
 
