@@ -14,6 +14,7 @@ import type { CategoryLeagueData } from '../../types'
 import type { SelectedStory } from '../../detection/types'
 import type { ClimbPoint, ReelScene } from '../types'
 import { toReelTeam } from './coldOpen'
+import { rankAtWeek } from '../../detection/helpers'
 
 const MIN_POINTS = 3
 
@@ -35,10 +36,26 @@ export function buildClimb(
   const team = data.teams.find((t) => t.id === teamId)
   if (!team) return null
 
-  const points: ClimbPoint[] = [...data.seasonRankHistory]
+  const historyPoints: ClimbPoint[] = [...data.seasonRankHistory]
     .sort((h1, h2) => h1.week - h2.week)
     .filter((h) => h.ranks[teamId] != null)
     .map((h) => ({ week: h.week, rank: h.ranks[teamId] }))
+
+  // The Board derives "current rank" via `rankAtWeek`, which falls back
+  // to live `data.standings` when the in-progress current week hasn't
+  // been written to seasonRankHistory yet (ESPN only records weeks
+  // where every matchup is decided). If the Climb stopped at the last
+  // COMPLETED history week instead, its endpoint could disagree with
+  // what the Board shows moments later for the same team — two
+  // contradictory numbers for the same fact. Append the live
+  // current-week rank as the terminal point so both scenes always
+  // agree; skip it only when history already carries that week.
+  const hasCurrentWeekPoint = historyPoints.some((p) => p.week === data.currentWeek)
+  const liveRank = hasCurrentWeekPoint ? undefined : rankAtWeek(data, teamId, data.currentWeek)
+  const points: ClimbPoint[] =
+    liveRank != null
+      ? [...historyPoints, { week: data.currentWeek, rank: liveRank }]
+      : historyPoints
 
   if (points.length < MIN_POINTS) return null
 

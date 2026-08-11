@@ -1,11 +1,22 @@
 import { describe, it, expect } from 'vitest'
 import { buildClimb, ordinal } from '@/editorial/video/scenes/theClimb'
-import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
+import type {
+  CategoryLeagueData,
+  CategoryLeagueDataStanding,
+  CategoryLeagueDataTeam,
+} from '@/editorial/types'
 import type { SelectedStory } from '@/editorial/detection/types'
 
 const team = (id: string, name: string): CategoryLeagueDataTeam => ({
   id, name, ownerName: 'O', ownerInitials: 'O',
   avatarColor: '#22c55e, #0a5229', isMyTeam: false,
+})
+
+const standing = (teamId: string, rank: number): CategoryLeagueDataStanding => ({
+  rank, teamId,
+  catWins: 0, catLosses: 0, catTies: 0, winPct: 0,
+  streak: { type: 'W', length: 0 }, lastSix: [],
+  ownsCount: 0, bleedingCount: 0,
 })
 
 const story = (teamIds: string[]): SelectedStory =>
@@ -80,6 +91,20 @@ describe('buildClimb', () => {
     expect(scene.props).toMatchObject({ fromRank: 11, toRank: 6, spanWeeks: 3 })
     const { points } = scene.props as { points: { week: number }[] }
     expect(points.map((p) => p.week)).toEqual([9, 10, 11])
+  })
+
+  it('agrees with the Board when history ends before currentWeek and live standings disagree', () => {
+    // seasonRankHistory only goes through week 11 (ESPN skips any week
+    // that isn't fully decided), but the league is on week 12 and this
+    // team's LIVE rank there — same source The Board reads — is 4, not
+    // the week-11 history value of 6. The Climb's endpoint must reflect
+    // the live rank, or it would narrate a different "current" rank
+    // than The Board shows moments later in the same reel.
+    const data = base({ standings: [standing('a', 4)] })
+    const scene = buildClimb(data, story(['a']))!
+    expect(scene.props).toMatchObject({ toRank: 4 })
+    const { points } = scene.props as { points: { week: number; rank: number }[] }
+    expect(points[points.length - 1]).toEqual({ week: 12, rank: 4 })
   })
 
   it('sorts unordered history before use', () => {
