@@ -4,6 +4,7 @@ import type { Reel, ReelScene } from '../../src/editorial/video/types'
 import { Backdrop } from './chrome'
 import { ColdOpen } from './scenes/ColdOpen'
 import { SignOff } from './scenes/SignOff'
+import { TheBoard } from './scenes/TheBoard'
 import { theme } from './theme'
 import { sceneFrames } from './timing'
 
@@ -35,6 +36,8 @@ const SceneSwitch: React.FC<{ scene: ReelScene; week: number }> = ({ scene, week
       return <ColdOpen {...scene.props} />
     case 'sign-off':
       return <SignOff {...scene.props} />
+    case 'the-board':
+      return <TheBoard {...scene.props} week={week} />
     default:
       return <Placeholder scene={scene} />
   }
