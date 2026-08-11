@@ -10,6 +10,9 @@ export const theme = {
   text: 'oklch(0.97 0.005 90)',
   textMuted: 'oklch(0.62 0.010 90)',
   accent: '#22c55e',
+  /** Darker stop for the accent wipe's gradient (chrome.tsx's `Wipe`) —
+   *  the same green deepened, not a new brand color. */
+  accentDeep: '#0c6634',
   down: '#f0663f',
   neutral: '#7c8496',
   /** Divider rules on the bookend scenes. One alpha for both — they're

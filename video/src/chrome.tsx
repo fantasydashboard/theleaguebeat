@@ -35,7 +35,7 @@ export const Wipe: React.FC = () => {
     <div style={{
       position: 'absolute', inset: 0, zIndex: 20,
       transform: `translateX(${x}%)`,
-      background: `linear-gradient(115deg, ${theme.accent} 0%, #0c6634 100%)`,
+      background: `linear-gradient(115deg, ${theme.accent} 0%, ${theme.accentDeep} 100%)`,
     }} />
   )
 }
