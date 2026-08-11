@@ -2,7 +2,7 @@ import React from 'react'
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion'
 import type { ThroneCatLine, ThroneProps } from '../../../src/editorial/video/types'
 import { Backdrop, Bug } from '../chrome'
-import { theme } from '../theme'
+import { theme, CANVAS } from '../theme'
 
 const fade = (frame: number, start: number, len = 13) =>
   interpolate(frame, [start, start + len], [0, 1], {
@@ -11,28 +11,39 @@ const fade = (frame: number, start: number, len = 13) =>
 
 /**
  * The fixture this scene was designed against has 9 category lines, but
- * ESPN and Yahoo category leagues commonly run 10-12 categories and can
- * go higher still. Left alone, each bar's fixed 60px vertical footprint
- * (30px bar + 30px margin, plus the label riding in that margin) means
- * the block starts colliding with the kicker headline around 12-13
- * categories, and would run off the 1920px canvas outright well before
- * 20 — silently, since nothing clips or errors, the bars just render
- * past the visible frame. `densityScale` compresses bar height/spacing
- * and label size once a league has more categories than the layout was
- * tuned for, so every bar always lands between `top: 920` and the
- * kicker, following the same pattern `TheBoard` uses for row count.
+ * ESPN category leagues commonly run 10-12 categories, and Yahoo custom
+ * leagues have no platform cap at all — unlike TheBoard's 20-team ceiling
+ * (a real ESPN/Yahoo limit, so unreachable), a category count has no
+ * upper bound to design against.
+ *
+ * `densityScale` is therefore derived from available GEOMETRY rather
+ * than clamped against a magic constant pair: it computes how much
+ * vertical room actually sits between the bar block's top (`BAR_TOP`)
+ * and the kicker headline (reserving `KICKER_RESERVE` px for the
+ * kicker itself plus `BOTTOM_GAP` breathing room), then picks the
+ * largest scale — capped at 1 — under which `catCount` rows at
+ * `ROW_HEIGHT` each still fit inside it. Because the scale is always
+ * solved FOR the available space, every bar lands between the bar
+ * block's top and the kicker for ANY category count — there is no
+ * count past which this silently overflows, which is what made the
+ * previous MAX_CATS/MIN_SCALE clamp pair reachable (~26 categories
+ * collided with the kicker; ~30 ran off the 1920px canvas outright).
  *
  * At `catCount <= BASE_CATS` this returns exactly 1 — the 9-category
  * fixture must look pixel-identical to the original design.
  */
 const BASE_CATS = 9
-const MAX_CATS = 20
-const MIN_SCALE = 0.55
+const BAR_TOP = 920
+const ROW_HEIGHT = 60 // 30px bar + 30px margin, matches CatBar below
+const KICKER_RESERVE = 180 // room for up to ~2 lines of the 68px kicker
+const KICKER_BOTTOM = 120 // matches the kicker's own `bottom` offset
+const BOTTOM_GAP = 40 // breathing room between the last bar and the kicker
 
 const densityScale = (catCount: number) => {
-  if (catCount <= BASE_CATS) return 1
-  const over = Math.min(catCount, MAX_CATS) - BASE_CATS // 0..11
-  return 1 - (over / (MAX_CATS - BASE_CATS)) * (1 - MIN_SCALE)
+  if (catCount <= 0) return 1
+  const availableHeight =
+    CANVAS.height - KICKER_BOTTOM - KICKER_RESERVE - BAR_TOP - BOTTOM_GAP
+  return Math.min(1, availableHeight / (catCount * ROW_HEIGHT))
 }
 
 /**
@@ -152,12 +163,12 @@ export const TheThrone: React.FC<ThroneProps & { week: number }> = ({
         </div>
       </div>
 
-      <div style={{ position: 'absolute', top: 920, left: 64, right: 64 }}>
+      <div style={{ position: 'absolute', top: BAR_TOP, left: 64, right: 64 }}>
         {catLines.map((line, i) => <CatBar key={line.label} line={line} index={i} scale={scale} />)}
       </div>
 
       <div style={{
-        position: 'absolute', bottom: 120, left: 64, right: 64,
+        position: 'absolute', bottom: KICKER_BOTTOM, left: 64, right: 64,
         fontFamily: theme.display, fontWeight: 900, fontSize: 68, lineHeight: 1.05,
         opacity: fade(frame, kickerStart),
         transform: `scale(${interpolate(fade(frame, kickerStart), [0, 1], [1.07, 1])})`,
