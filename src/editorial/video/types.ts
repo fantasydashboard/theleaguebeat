@@ -21,6 +21,9 @@ export interface ReelTeam {
   /** OKLCH gradient stops, comma-separated. Straight from the adapter. */
   avatarColor: string
   ownerInitials: string
+  /** Absent for teams with no uploaded logo — renderer falls back to
+   *  initials drawn on the avatarColor gradient. Never fabricated. */
+  avatarUrl?: string
 }
 
 export interface ColdOpenProps {

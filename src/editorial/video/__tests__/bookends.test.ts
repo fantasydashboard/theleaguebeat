@@ -177,4 +177,13 @@ describe('toReelTeam', () => {
       ownerInitials: 'A',
     })
   })
+
+  it('passes an uploaded logo through as avatarUrl', () => {
+    const withLogo = { ...team('a', 'Thunder Cats'), avatarUrl: '/demo-categories-logos/bt.jpg' }
+    expect(toReelTeam(withLogo).avatarUrl).toBe('/demo-categories-logos/bt.jpg')
+  })
+
+  it('leaves avatarUrl undefined for a team with none — never fabricated', () => {
+    expect(toReelTeam(team('a', 'Thunder Cats')).avatarUrl).toBeUndefined()
+  })
 })

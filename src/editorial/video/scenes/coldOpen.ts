@@ -14,6 +14,7 @@ export function toReelTeam(team: CategoryLeagueDataTeam): ReelTeam {
     name: team.name,
     avatarColor: team.avatarColor,
     ownerInitials: team.ownerInitials,
+    avatarUrl: team.avatarUrl,
   }
 }
 
