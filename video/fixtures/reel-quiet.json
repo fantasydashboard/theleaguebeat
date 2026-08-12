@@ -101,21 +101,21 @@
       "template": "sign-off",
       "props": {
         "teamA": {
-          "id": "bt",
-          "name": "Bullpen Theology",
-          "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
-          "ownerInitials": "MD"
+          "id": "qs",
+          "name": "Quality Start",
+          "avatarColor": "oklch(0.68 0.10 220), oklch(0.55 0.08 225)",
+          "ownerInitials": "EW"
         },
         "teamB": {
-          "id": "dd",
-          "name": "Doubles Down",
-          "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
-          "ownerInitials": "RK"
+          "id": "ie",
+          "name": "Innings Eaters",
+          "avatarColor": "oklch(0.72 0.14 80), oklch(0.60 0.12 85)",
+          "ownerInitials": "HK"
         },
-        "line": "#1 vs #2",
+        "line": "#4 vs #5",
         "brandUrl": "theleaguebeat.com"
       },
-      "vo": "Next week: Bullpen Theology and Doubles Down. That's the beat.",
+      "vo": "Next week: Quality Start and Innings Eaters. That's the beat.",
       "minDurationMs": 6000
     }
   ]

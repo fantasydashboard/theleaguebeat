@@ -699,13 +699,14 @@ export interface CategoryScheduledMatchup {
 }
 
 export const matchupsWeek9: CategoryScheduledMatchup[] = [
-  // Top two in the standings (bt #1, dd #2) draw each other — the
-  // week 9 marquee.
-  { id: 'm9-1', weekNumber: 9, homeTeamId: 'bt', awayTeamId: 'dd' },
-  { id: 'm9-2', weekNumber: 9, homeTeamId: 'wd', awayTeamId: 'qs' },
-  { id: 'm9-3', weekNumber: 9, homeTeamId: 'ie', awayTeamId: 'ct' },
-  { id: 'm9-4', weekNumber: 9, homeTeamId: 'mv', awayTeamId: 'fb' },
-  { id: 'm9-5', weekNumber: 9, homeTeamId: 'ch', awayTeamId: 'ws' },
+  // Reshuffled so no pairing repeats a week 8 matchup (week 8 pairs:
+  // ct-mv, bt-dd, wd-ie, qs-fb, ch-ws) — otherwise the reel's sign-off
+  // scene would preview the exact matchup The Throne just narrated.
+  { id: 'm9-1', weekNumber: 9, homeTeamId: 'bt', awayTeamId: 'ch' },
+  { id: 'm9-2', weekNumber: 9, homeTeamId: 'dd', awayTeamId: 'ws' },
+  { id: 'm9-3', weekNumber: 9, homeTeamId: 'wd', awayTeamId: 'mv' },
+  { id: 'm9-4', weekNumber: 9, homeTeamId: 'qs', awayTeamId: 'ie' },
+  { id: 'm9-5', weekNumber: 9, homeTeamId: 'ct', awayTeamId: 'fb' },
 ]
 
 /* ─────────────────────────────────────────────────────────────────
