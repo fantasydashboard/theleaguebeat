@@ -1,7 +1,7 @@
 import React from 'react'
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion'
 import type { SignOffProps } from '../../../src/editorial/video/types'
-import { Backdrop } from '../chrome'
+import { Backdrop, TeamCrest } from '../chrome'
 import { theme } from '../theme'
 
 const fade = (frame: number, start: number, len = 14) =>
@@ -37,14 +37,6 @@ const nameScale = (len: number) => {
   return 1 - (over / (NAME_FLOOR_CHARS - NAME_BASE_CHARS)) * (1 - NAME_MIN_SCALE)
 }
 
-const Crest: React.FC<{ colors: string; scale: number }> = ({ colors, scale }) => (
-  <div style={{
-    width: 190, height: 190, borderRadius: '50%',
-    background: `linear-gradient(150deg, ${colors})`,
-    transform: `scale(${scale})`,
-  }} />
-)
-
 export const SignOff: React.FC<SignOffProps> = ({ teamA, teamB, line, brandUrl }) => {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
@@ -63,8 +55,8 @@ export const SignOff: React.FC<SignOffProps> = ({ teamA, teamB, line, brandUrl }
         </div>
 
         <div style={{ display: 'flex', gap: 72, marginBottom: 64 }}>
-          <Crest colors={teamA.avatarColor} scale={spring({ frame: frame - 26, fps, config: { damping: 12 } })} />
-          <Crest colors={teamB.avatarColor} scale={spring({ frame: frame - 32, fps, config: { damping: 12 } })} />
+          <TeamCrest team={teamA} size={190} scale={spring({ frame: frame - 26, fps, config: { damping: 12 } })} />
+          <TeamCrest team={teamB} size={190} scale={spring({ frame: frame - 32, fps, config: { damping: 12 } })} />
         </div>
 
         <div style={{ opacity: fade(frame, 42) }}>
