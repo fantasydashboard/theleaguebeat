@@ -13,7 +13,8 @@
  */
 
 import type { CategoryLeagueData } from '../../types'
-import type { BoardRow, ReelScene } from '../types'
+import type { BoardRow, ReelScene, ReelTeam } from '../types'
+import { toReelTeam } from './coldOpen'
 
 const EN_DASH = '–'
 
@@ -51,9 +52,17 @@ export function buildBoard(
   const rows: BoardRow[] = sortedStandings.map((s) => {
     const team = data.teams.find((t) => t.id === s.teamId)
     const was = prev?.[s.teamId]
+    // A standings entry can name a teamId missing from data.teams. We
+    // still owe the row a ReelTeam, but never fabricate a color or
+    // initials for a team we know nothing about — empty strings are
+    // the honest "nothing to draw" signal, same spirit as the old
+    // 'Unknown' name fallback they replace.
+    const reelTeam: ReelTeam = team
+      ? toReelTeam(team)
+      : { id: s.teamId, name: 'Unknown', avatarColor: '', ownerInitials: '' }
     return {
       rank: s.rank,
-      teamName: team?.name ?? 'Unknown',
+      team: reelTeam,
       record: formatRecord(s.catWins, s.catLosses, s.catTies),
       delta: was == null ? null : was - s.rank,
       highlight: highlight.has(s.teamId),
@@ -72,7 +81,7 @@ export function buildBoard(
         ? `TOP ${cutoff} MAKE THE PLAYOFFS`
         : '',
     },
-    vo: `Here's the board after week ${data.currentWeek}. ${leader.teamName} on top at ${spokenRecord(leaderStanding.catWins, leaderStanding.catLosses, leaderStanding.catTies)}.`,
+    vo: `Here's the board after week ${data.currentWeek}. ${leader.team.name} on top at ${spokenRecord(leaderStanding.catWins, leaderStanding.catLosses, leaderStanding.catTies)}.`,
     minDurationMs: 9000,
   }
 }

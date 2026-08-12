@@ -343,10 +343,10 @@ describe('buildReel', () => {
 
     const reel = buildReel(data, context, [failing, succeeding])
     const board = reel.scenes.find((s) => s.template === 'the-board')!
-    const rows = (board.props as { rows: { teamName: string; highlight: boolean }[] }).rows
+    const rows = (board.props as { rows: { team: { name: string }; highlight: boolean }[] }).rows
 
-    expect(rows.find((r) => r.teamName === 'Ghost Runners')!.highlight).toBe(false)
-    expect(rows.find((r) => r.teamName === 'Thunder Cats')!.highlight).toBe(true)
-    expect(rows.find((r) => r.teamName === 'Bench Mob')!.highlight).toBe(true)
+    expect(rows.find((r) => r.team.name === 'Ghost Runners')!.highlight).toBe(false)
+    expect(rows.find((r) => r.team.name === 'Thunder Cats')!.highlight).toBe(true)
+    expect(rows.find((r) => r.team.name === 'Bench Mob')!.highlight).toBe(true)
   })
 })

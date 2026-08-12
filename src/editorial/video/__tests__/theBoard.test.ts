@@ -129,4 +129,34 @@ describe('buildBoard', () => {
     const { note } = buildBoard(data)!.props as { note: string }
     expect(note).toBe('')
   })
+
+  it('nests each row\'s identity as a ReelTeam, including avatarUrl when present', () => {
+    const teams = [
+      { ...team('a', 'Thunder Cats'), avatarUrl: '/demo-categories-logos/bt.jpg' },
+      team('b', 'Bench Mob'),
+    ]
+    const data = base({ teams })
+    const rows = (buildBoard(data)!.props as {
+      rows: { team: { name: string; avatarUrl?: string; avatarColor: string; ownerInitials: string } }[]
+    }).rows
+    expect(rows[0].team).toMatchObject({
+      name: 'Thunder Cats',
+      avatarUrl: '/demo-categories-logos/bt.jpg',
+      avatarColor: '#22c55e, #0a5229',
+      ownerInitials: 'O',
+    })
+    expect(rows[1].team.avatarUrl).toBeUndefined()
+  })
+
+  it('degrades gracefully with an empty color/initials, not a fabricated one, when a standings entry names a team missing from teams[]', () => {
+    const data = base({ standings: [standing('a', 1), standing('ghost', 2)] })
+    const rows = (buildBoard(data)!.props as {
+      rows: { team: { name: string; avatarColor: string; ownerInitials: string; avatarUrl?: string } }[]
+    }).rows
+    const ghostRow = rows.find((r) => r.team.name === 'Unknown')!
+    expect(ghostRow).toBeDefined()
+    expect(ghostRow.team.avatarColor).toBe('')
+    expect(ghostRow.team.ownerInitials).toBe('')
+    expect(ghostRow.team.avatarUrl).toBeUndefined()
+  })
 })

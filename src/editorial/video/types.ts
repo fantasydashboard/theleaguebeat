@@ -69,7 +69,12 @@ export interface ClimbProps {
 
 export interface BoardRow {
   rank: number
-  teamName: string
+  /** Nested rather than flattened (teamName + 3 more fields) so the
+   *  renderer draws a row's identity the same way it draws teamA/teamB
+   *  everywhere else in the Reel. `name: 'Unknown'` with empty
+   *  avatarColor/ownerInitials is the graceful-degradation case for a
+   *  standings entry whose team is missing from data.teams. */
+  team: ReelTeam
   /** Pre-formatted category record, e.g. "62–38" or "62–38–2". */
   record: string
   /** Rank change vs the most recent history week. + climbed, - fell,
