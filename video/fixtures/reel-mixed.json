@@ -24,7 +24,8 @@
           "id": "ct",
           "name": "Closer's Therapy",
           "avatarColor": "oklch(0.60 0.20 0), oklch(0.48 0.18 5)",
-          "ownerInitials": "PN"
+          "ownerInitials": "PN",
+          "avatarUrl": "/demo-categories-logos/ct.jpg"
         },
         "points": [
           {
@@ -60,6 +61,341 @@
             "rank": 6
           }
         ],
+        "otherArcs": [
+          {
+            "teamId": "bt",
+            "points": [
+              {
+                "week": 1,
+                "rank": 4
+              },
+              {
+                "week": 2,
+                "rank": 4
+              },
+              {
+                "week": 3,
+                "rank": 3
+              },
+              {
+                "week": 4,
+                "rank": 2
+              },
+              {
+                "week": 5,
+                "rank": 2
+              },
+              {
+                "week": 6,
+                "rank": 1
+              },
+              {
+                "week": 7,
+                "rank": 1
+              },
+              {
+                "week": 8,
+                "rank": 1
+              }
+            ]
+          },
+          {
+            "teamId": "dd",
+            "points": [
+              {
+                "week": 1,
+                "rank": 10
+              },
+              {
+                "week": 2,
+                "rank": 9
+              },
+              {
+                "week": 3,
+                "rank": 8
+              },
+              {
+                "week": 4,
+                "rank": 7
+              },
+              {
+                "week": 5,
+                "rank": 5
+              },
+              {
+                "week": 6,
+                "rank": 4
+              },
+              {
+                "week": 7,
+                "rank": 3
+              },
+              {
+                "week": 8,
+                "rank": 2
+              }
+            ]
+          },
+          {
+            "teamId": "wd",
+            "points": [
+              {
+                "week": 1,
+                "rank": 7
+              },
+              {
+                "week": 2,
+                "rank": 6
+              },
+              {
+                "week": 3,
+                "rank": 6
+              },
+              {
+                "week": 4,
+                "rank": 4
+              },
+              {
+                "week": 5,
+                "rank": 4
+              },
+              {
+                "week": 6,
+                "rank": 2
+              },
+              {
+                "week": 7,
+                "rank": 2
+              },
+              {
+                "week": 8,
+                "rank": 3
+              }
+            ]
+          },
+          {
+            "teamId": "qs",
+            "points": [
+              {
+                "week": 1,
+                "rank": 5
+              },
+              {
+                "week": 2,
+                "rank": 5
+              },
+              {
+                "week": 3,
+                "rank": 2
+              },
+              {
+                "week": 4,
+                "rank": 3
+              },
+              {
+                "week": 5,
+                "rank": 1
+              },
+              {
+                "week": 6,
+                "rank": 5
+              },
+              {
+                "week": 7,
+                "rank": 4
+              },
+              {
+                "week": 8,
+                "rank": 4
+              }
+            ]
+          },
+          {
+            "teamId": "fb",
+            "points": [
+              {
+                "week": 1,
+                "rank": 3
+              },
+              {
+                "week": 2,
+                "rank": 2
+              },
+              {
+                "week": 3,
+                "rank": 5
+              },
+              {
+                "week": 4,
+                "rank": 6
+              },
+              {
+                "week": 5,
+                "rank": 6
+              },
+              {
+                "week": 6,
+                "rank": 7
+              },
+              {
+                "week": 7,
+                "rank": 8
+              },
+              {
+                "week": 8,
+                "rank": 8
+              }
+            ]
+          },
+          {
+            "teamId": "ch",
+            "points": [
+              {
+                "week": 1,
+                "rank": 2
+              },
+              {
+                "week": 2,
+                "rank": 3
+              },
+              {
+                "week": 3,
+                "rank": 4
+              },
+              {
+                "week": 4,
+                "rank": 5
+              },
+              {
+                "week": 5,
+                "rank": 8
+              },
+              {
+                "week": 6,
+                "rank": 8
+              },
+              {
+                "week": 7,
+                "rank": 9
+              },
+              {
+                "week": 8,
+                "rank": 9
+              }
+            ]
+          },
+          {
+            "teamId": "ie",
+            "points": [
+              {
+                "week": 1,
+                "rank": 8
+              },
+              {
+                "week": 2,
+                "rank": 8
+              },
+              {
+                "week": 3,
+                "rank": 9
+              },
+              {
+                "week": 4,
+                "rank": 9
+              },
+              {
+                "week": 5,
+                "rank": 9
+              },
+              {
+                "week": 6,
+                "rank": 9
+              },
+              {
+                "week": 7,
+                "rank": 6
+              },
+              {
+                "week": 8,
+                "rank": 5
+              }
+            ]
+          },
+          {
+            "teamId": "ws",
+            "points": [
+              {
+                "week": 1,
+                "rank": 9
+              },
+              {
+                "week": 2,
+                "rank": 10
+              },
+              {
+                "week": 3,
+                "rank": 10
+              },
+              {
+                "week": 4,
+                "rank": 10
+              },
+              {
+                "week": 5,
+                "rank": 10
+              },
+              {
+                "week": 6,
+                "rank": 10
+              },
+              {
+                "week": 7,
+                "rank": 10
+              },
+              {
+                "week": 8,
+                "rank": 10
+              }
+            ]
+          },
+          {
+            "teamId": "mv",
+            "points": [
+              {
+                "week": 1,
+                "rank": 6
+              },
+              {
+                "week": 2,
+                "rank": 7
+              },
+              {
+                "week": 3,
+                "rank": 7
+              },
+              {
+                "week": 4,
+                "rank": 8
+              },
+              {
+                "week": 5,
+                "rank": 7
+              },
+              {
+                "week": 6,
+                "rank": 6
+              },
+              {
+                "week": 7,
+                "rank": 7
+              },
+              {
+                "week": 8,
+                "rank": 7
+              }
+            ]
+          }
+        ],
         "fromRank": 1,
         "toRank": 6,
         "spanWeeks": 8,
@@ -76,13 +412,15 @@
           "id": "bt",
           "name": "Bullpen Theology",
           "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
-          "ownerInitials": "MD"
+          "ownerInitials": "MD",
+          "avatarUrl": "/demo-categories-logos/bt.jpg"
         },
         "teamB": {
           "id": "dd",
           "name": "Doubles Down",
           "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
-          "ownerInitials": "RK"
+          "ownerInitials": "RK",
+          "avatarUrl": "/demo-categories-logos/dd.jpg"
         },
         "eyebrow": "MATCHUP OF THE WEEK",
         "headline": "5–4",
@@ -146,70 +484,130 @@
         "rows": [
           {
             "rank": 1,
-            "teamName": "Bullpen Theology",
+            "team": {
+              "id": "bt",
+              "name": "Bullpen Theology",
+              "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
+              "ownerInitials": "MD",
+              "avatarUrl": "/demo-categories-logos/bt.jpg"
+            },
             "record": "66–22",
             "delta": 0,
             "highlight": true
           },
           {
             "rank": 2,
-            "teamName": "Doubles Down",
+            "team": {
+              "id": "dd",
+              "name": "Doubles Down",
+              "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
+              "ownerInitials": "RK",
+              "avatarUrl": "/demo-categories-logos/dd.jpg"
+            },
             "record": "60–26–2",
             "delta": 1,
             "highlight": true
           },
           {
             "rank": 3,
-            "teamName": "The Whiff Department",
+            "team": {
+              "id": "wd",
+              "name": "The Whiff Department",
+              "avatarColor": "oklch(0.66 0.20 305), oklch(0.54 0.18 310)",
+              "ownerInitials": "SP",
+              "avatarUrl": "/demo-categories-logos/wd.jpg"
+            },
             "record": "56–30–2",
             "delta": -1,
             "highlight": false
           },
           {
             "rank": 4,
-            "teamName": "Quality Start",
+            "team": {
+              "id": "qs",
+              "name": "Quality Start",
+              "avatarColor": "oklch(0.68 0.10 220), oklch(0.55 0.08 225)",
+              "ownerInitials": "EW",
+              "avatarUrl": "/demo-categories-logos/qs.jpg"
+            },
             "record": "50–36–2",
             "delta": 0,
             "highlight": false
           },
           {
             "rank": 5,
-            "teamName": "Innings Eaters",
+            "team": {
+              "id": "ie",
+              "name": "Innings Eaters",
+              "avatarColor": "oklch(0.72 0.14 80), oklch(0.60 0.12 85)",
+              "ownerInitials": "HK",
+              "avatarUrl": "/demo-categories-logos/ie.jpg"
+            },
             "record": "47–39–2",
             "delta": 1,
             "highlight": false
           },
           {
             "rank": 6,
-            "teamName": "Closer's Therapy",
+            "team": {
+              "id": "ct",
+              "name": "Closer's Therapy",
+              "avatarColor": "oklch(0.60 0.20 0), oklch(0.48 0.18 5)",
+              "ownerInitials": "PN",
+              "avatarUrl": "/demo-categories-logos/ct.jpg"
+            },
             "record": "44–42–2",
             "delta": -1,
             "highlight": true
           },
           {
             "rank": 7,
-            "teamName": "Mound Visitors",
+            "team": {
+              "id": "mv",
+              "name": "Mound Visitors",
+              "avatarColor": "oklch(0.78 0.18 92), oklch(0.70 0.27 350)",
+              "ownerInitials": "JD",
+              "avatarUrl": "/demo-categories-logos/mv.jpg"
+            },
             "record": "42–44–2",
             "delta": 0,
             "highlight": false
           },
           {
             "rank": 8,
-            "teamName": "Free Bases",
+            "team": {
+              "id": "fb",
+              "name": "Free Bases",
+              "avatarColor": "oklch(0.76 0.18 130), oklch(0.62 0.16 135)",
+              "ownerInitials": "DT",
+              "avatarUrl": "/demo-categories-logos/fb.jpg"
+            },
             "record": "36–50–2",
             "delta": 0,
             "highlight": false
           },
           {
             "rank": 9,
-            "teamName": "Cleanup Hitters",
+            "team": {
+              "id": "ch",
+              "name": "Cleanup Hitters",
+              "avatarColor": "oklch(0.60 0.21 35), oklch(0.50 0.18 40)",
+              "ownerInitials": "AL",
+              "avatarUrl": "/demo-categories-logos/ch.jpg"
+            },
             "record": "30–56–2",
             "delta": 0,
             "highlight": false
           },
           {
             "rank": 10,
-            "teamName": "The Walk-Off Society",
+            "team": {
+              "id": "ws",
+              "name": "The Walk-Off Society",
+              "avatarColor": "oklch(0.58 0.06 280), oklch(0.46 0.05 285)",
+              "ownerInitials": "CR",
+              "avatarUrl": "/demo-categories-logos/ws.jpg"
+            },
             "record": "25–61–2",
             "delta": 0,
             "highlight": false
@@ -224,21 +622,23 @@
       "template": "sign-off",
       "props": {
         "teamA": {
-          "id": "bt",
-          "name": "Bullpen Theology",
-          "avatarColor": "oklch(0.62 0.18 250), oklch(0.50 0.16 255)",
-          "ownerInitials": "MD"
+          "id": "qs",
+          "name": "Quality Start",
+          "avatarColor": "oklch(0.68 0.10 220), oklch(0.55 0.08 225)",
+          "ownerInitials": "EW",
+          "avatarUrl": "/demo-categories-logos/qs.jpg"
         },
         "teamB": {
-          "id": "dd",
-          "name": "Doubles Down",
-          "avatarColor": "oklch(0.74 0.16 165), oklch(0.62 0.14 170)",
-          "ownerInitials": "RK"
+          "id": "ie",
+          "name": "Innings Eaters",
+          "avatarColor": "oklch(0.72 0.14 80), oklch(0.60 0.12 85)",
+          "ownerInitials": "HK",
+          "avatarUrl": "/demo-categories-logos/ie.jpg"
         },
-        "line": "#1 vs #2",
+        "line": "#4 vs #5",
         "brandUrl": "theleaguebeat.com"
       },
-      "vo": "Next week: Bullpen Theology and Doubles Down. That's the beat.",
+      "vo": "Next week: Quality Start and Innings Eaters. That's the beat.",
       "minDurationMs": 6000
     }
   ]
