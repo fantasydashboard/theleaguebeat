@@ -59,6 +59,38 @@ export function buildClimb(
 
   if (points.length < MIN_POINTS) return null
 
+  // Ghost arcs for every other team, faded behind the focus line so
+  // the climb reads against the rest of the league instead of in
+  // isolation. Week-aligned with `points`: exactly the focus team's
+  // weeks, in the same order, so the x-axis matches across all lines.
+  //
+  // Two honesty rules:
+  //  - Per-point, not per-arc: a team missing a rank for one of these
+  //    weeks just has THAT point omitted, not its whole arc — this
+  //    keeps as much real comparison on screen as possible instead of
+  //    discarding a team over one gap. (The alternative — dropping the
+  //    entire arc on any missing week — was rejected because ESPN's
+  //    partial-week history makes single-week gaps common, and would
+  //    empty out the background for reasons unrelated to that team's
+  //    actual season.) An arc that ends up with zero points after this
+  //    filtering is dropped entirely — there is nothing to draw.
+  //  - Same lookup as the focus team's terminal point: rankAtWeek()
+  //    falls back to live `data.standings` for the current week, so a
+  //    ghost arc's current-week point can never contradict the focus
+  //    line's own current-week point for the same underlying fact.
+  const otherArcs = data.teams
+    .filter((t) => t.id !== teamId)
+    .map((t) => ({
+      teamId: t.id,
+      points: points
+        .map((p) => {
+          const rank = rankAtWeek(data, t.id, p.week)
+          return rank == null ? null : { week: p.week, rank }
+        })
+        .filter((p): p is ClimbPoint => p != null),
+    }))
+    .filter((arc) => arc.points.length > 0)
+
   const fromRank = points[0].rank
   const toRank = points[points.length - 1].rank
   const moved = fromRank - toRank          // positive = climbed
@@ -77,6 +109,7 @@ export function buildClimb(
     props: {
       team: toReelTeam(team),
       points,
+      otherArcs,
       fromRank,
       toRank,
       spanWeeks,

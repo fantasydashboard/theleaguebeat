@@ -189,4 +189,99 @@ describe('buildClimb', () => {
     const scene = buildClimb(data, story(['a']))!
     expect((scene.props as { footnote: string }).footnote).toBe('CLIMBED 1 SPOT')
   })
+
+  describe('otherArcs', () => {
+    it('is empty for a league of one team', () => {
+      const scene = buildClimb(base(), story(['a']))!
+      const { otherArcs } = scene.props as { otherArcs: unknown[] }
+      expect(otherArcs).toEqual([])
+    })
+
+    it('carries every other team, week-aligned with the focus points', () => {
+      const data = base({
+        teams: [team('a', 'Rally Caps'), team('b', 'Bench Mob')],
+        seasonRankHistory: [
+          { week: 9, ranks: { a: 11, b: 1 } },
+          { week: 10, ranks: { a: 9, b: 2 } },
+          { week: 11, ranks: { a: 6, b: 3 } },
+        ],
+      })
+      const scene = buildClimb(data, story(['a']))!
+      const { points, otherArcs } = scene.props as {
+        points: { week: number }[]
+        otherArcs: { teamId: string; points: { week: number; rank: number }[] }[]
+      }
+      expect(otherArcs).toHaveLength(1)
+      expect(otherArcs[0].teamId).toBe('b')
+      expect(otherArcs[0].points.map((p) => p.week)).toEqual(points.map((p) => p.week))
+      expect(otherArcs[0].points).toEqual([
+        { week: 9, rank: 1 },
+        { week: 10, rank: 2 },
+        { week: 11, rank: 3 },
+      ])
+    })
+
+    it('never names the focus team among the other arcs', () => {
+      const data = base({
+        teams: [team('a', 'Rally Caps'), team('b', 'Bench Mob')],
+        seasonRankHistory: [
+          { week: 9, ranks: { a: 11, b: 1 } },
+          { week: 10, ranks: { a: 9, b: 2 } },
+          { week: 11, ranks: { a: 6, b: 3 } },
+        ],
+      })
+      const scene = buildClimb(data, story(['a']))!
+      const { otherArcs } = scene.props as { otherArcs: { teamId: string }[] }
+      expect(otherArcs.some((arc) => arc.teamId === 'a')).toBe(false)
+    })
+
+    it('omits a team\'s point for a week it is absent from, keeping the rest of its arc', () => {
+      const data = base({
+        teams: [team('a', 'Rally Caps'), team('b', 'Bench Mob')],
+        seasonRankHistory: [
+          { week: 9, ranks: { a: 11, b: 1 } },
+          { week: 10, ranks: { a: 9 } },        // b absent this week
+          { week: 11, ranks: { a: 6, b: 3 } },
+        ],
+      })
+      const scene = buildClimb(data, story(['a']))!
+      const { otherArcs } = scene.props as {
+        otherArcs: { teamId: string; points: { week: number; rank: number }[] }[]
+      }
+      expect(otherArcs[0].points).toEqual([
+        { week: 9, rank: 1 },
+        { week: 11, rank: 3 },
+      ])
+    })
+
+    it('drops a team entirely when none of its points survive', () => {
+      const data = base({
+        teams: [team('a', 'Rally Caps'), team('b', 'Bench Mob')],
+        seasonRankHistory: [
+          { week: 9, ranks: { a: 11 } },
+          { week: 10, ranks: { a: 9 } },
+          { week: 11, ranks: { a: 6 } },
+        ],
+      })
+      const scene = buildClimb(data, story(['a']))!
+      const { otherArcs } = scene.props as { otherArcs: unknown[] }
+      expect(otherArcs).toEqual([])
+    })
+
+    it('uses the same live-standings fallback as the focus team for the current-week point', () => {
+      const data = base({
+        teams: [team('a', 'Rally Caps'), team('b', 'Bench Mob')],
+        standings: [standing('a', 4), standing('b', 7)],
+      })
+      const scene = buildClimb(data, story(['a']))!
+      const { points, otherArcs } = scene.props as {
+        points: { week: number; rank: number }[]
+        otherArcs: { teamId: string; points: { week: number; rank: number }[] }[]
+      }
+      const currentWeekPoint = points[points.length - 1]
+      expect(currentWeekPoint).toEqual({ week: 12, rank: 4 })
+      const bCurrentWeekPoint = otherArcs[0].points[otherArcs[0].points.length - 1]
+      expect(bCurrentWeekPoint).toEqual({ week: 12, rank: 7 })
+    })
+  })
 })

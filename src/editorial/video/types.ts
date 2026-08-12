@@ -61,6 +61,11 @@ export interface ClimbPoint {
 export interface ClimbProps {
   team: ReelTeam
   points: ClimbPoint[]
+  /** Every OTHER team in the league, week-aligned with `points` so the
+   *  renderer can draw them as faded background arcs behind the focus
+   *  line. Always present (possibly empty for a league of one team) —
+   *  the renderer never has to guard for undefined. */
+  otherArcs: { teamId: string; points: ClimbPoint[] }[]
   fromRank: number
   toRank: number
   spanWeeks: number
