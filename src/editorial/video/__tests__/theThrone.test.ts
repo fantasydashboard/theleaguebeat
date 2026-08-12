@@ -150,6 +150,16 @@ describe('buildThrone', () => {
     expect(scene.props).toMatchObject({ isFinal: false })
   })
 
+  it('treats a non-"final" status with contestedCount=0 as still live — pins the status leg independently of contestedCount', () => {
+    const live = matchup({ status: 'coasting', contestedCount: 0 })
+    const data = base({ matchupsCurrentWeek: [live] })
+    const scene = buildThrone(data, story(['a', 'b']))!
+    expect(scene.props).toMatchObject({ isFinal: false, kicker: `LEADS 7${'–'}3` })
+    expect(scene.vo).toBe(
+      'Thunder Cats and Bench Mob are meeting with the week on the line, and Thunder Cats leads it 7 categories to 3.',
+    )
+  })
+
   it('keeps the headline and the bar count consistent when every category is decided', () => {
     const catLines = [
       { catId: 'c1', homeCurrent: 10, awayCurrent: 2, status: 'decided-home' as const },
