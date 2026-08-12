@@ -1,5 +1,6 @@
 import React from 'react'
-import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion'
+import { Img, interpolate, staticFile, useCurrentFrame, useVideoConfig } from 'remotion'
+import type { ReelTeam } from '../../src/editorial/video/types'
 import { theme } from './theme'
 
 /** Persistent corner bug. Present on every scene but the bookends. */
@@ -51,6 +52,90 @@ export const Grain: React.FC = () => {
       </filter>
       <rect width={width} height={height} filter="url(#grain)" opacity={0.5} />
     </svg>
+  )
+}
+
+/**
+ * Resolves a `ReelTeam.avatarUrl` to something Remotion's `<Img>` can
+ * actually load. Two very different kinds of URL show up here:
+ *
+ *  - Absolute (`http://`/`https://`) — a live platform-hosted team
+ *    logo. Passed straight through; `<Img>` fetches it directly.
+ *  - Root-relative (e.g. `/demo-categories-logos/bt.jpg`) — the demo
+ *    fixture's path. That path is only meaningful inside the APP's
+ *    Vite dev server, which serves the app's own `public/` at that
+ *    root. This Remotion package is a separate project with its own,
+ *    separate `public/` and knows nothing about the app's — so a
+ *    root-relative path is resolved through Remotion's `staticFile()`
+ *    against a COPY of those same files checked into
+ *    `video/public/demo-categories-logos/` (copied, not symlinked —
+ *    Remotion's render bundler doesn't reliably follow symlinks).
+ */
+export const resolveAvatarSrc = (avatarUrl: string): string => {
+  if (/^https?:\/\//.test(avatarUrl)) return avatarUrl
+  return staticFile(avatarUrl.replace(/^\//, ''))
+}
+
+/**
+ * Team identity mark, shared by every scene that draws a circular
+ * team crest (The Throne, Sign-Off, The Board's rows, The Climb's
+ * endpoint). Renders the team's uploaded logo when `avatarUrl` is
+ * present — masked to a circle via `overflow: hidden` on a
+ * `border-radius: 50%` wrapper plus `objectFit: cover`, so a
+ * rectangular source jpg doesn't break the circular shape — otherwise
+ * falls back to the original avatarColor gradient with the owner's
+ * initials centred on it.
+ *
+ * Deliberately uses Remotion's `<Img>`, never a bare `<img>`: `<Img>`
+ * delays Remotion's frame capture until the image has actually
+ * finished loading, where a plain tag has no such guarantee — a
+ * logo that hadn't finished loading yet would get captured as a
+ * blank circle in some frames.
+ *
+ * A NOTE ON FAILURE MODE: an unreachable `avatarUrl` (404, network
+ * error, ...) FAILS THE RENDER rather than silently falling back to
+ * initials. That's deliberate, not an oversight — this component
+ * stays a pure function of props (no state, no `onError` handling),
+ * which is a standing constraint on this codebase. For Phase 0's
+ * local demo assets that's a non-issue and loud failure beats a
+ * silently broken video. It's a real Phase 1 concern once
+ * `avatarUrl` can point at a live, remote, platform-hosted logo:
+ * a transient fetch failure for one team's logo would fail an
+ * otherwise-fine render. Solving that needs error-boundary-style
+ * state this component intentionally doesn't have today.
+ */
+export const TeamCrest: React.FC<{
+  team: ReelTeam
+  size: number
+  scale?: number
+  fontSize?: number
+}> = ({ team, size, scale = 1, fontSize }) => {
+  const shellStyle: React.CSSProperties = {
+    width: size, height: size, borderRadius: '50%', overflow: 'hidden',
+    flexShrink: 0, transform: `scale(${scale})`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }
+
+  if (team.avatarUrl) {
+    return (
+      <div style={shellStyle}>
+        <Img
+          src={resolveAvatarSrc(team.avatarUrl)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      ...shellStyle,
+      background: `linear-gradient(150deg, ${team.avatarColor})`,
+      fontFamily: theme.display, fontWeight: 700, color: theme.text,
+      letterSpacing: '0.04em', fontSize: fontSize ?? size * 0.32,
+    }}>
+      {team.ownerInitials}
+    </div>
   )
 }
 
