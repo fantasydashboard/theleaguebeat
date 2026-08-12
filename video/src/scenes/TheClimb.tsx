@@ -1,7 +1,7 @@
 import React from 'react'
 import { interpolate, useCurrentFrame } from 'remotion'
-import type { ClimbProps } from '../../../src/editorial/video/types'
-import { Backdrop, Bug } from '../chrome'
+import type { ClimbPoint, ClimbProps } from '../../../src/editorial/video/types'
+import { Backdrop, Bug, TeamCrest } from '../chrome'
 import { theme } from '../theme'
 
 const fade = (frame: number, start: number, len = 13) =>
@@ -30,15 +30,66 @@ const arcColor = (fromRank: number, toRank: number) => {
   return theme.neutral
 }
 
+/** Screen geometry the chart svg is placed at (see the <svg> below) —
+ *  needed outside the svg too, to convert an endpoint's viewBox-space
+ *  coordinate into a real pixel position for the HTML crest that sits
+ *  on top of it (an <svg> viewBox doesn't apply to sibling HTML). */
+const SVG_LEFT = 64
+const SVG_TOP = 430
+const SVG_WIDTH = 952
+const SVG_HEIGHT = 600
+const VIEWBOX_PAD = 10
+const scaleX = SVG_WIDTH / (VB.w + VIEWBOX_PAD * 2)
+const scaleY = SVG_HEIGHT / (VB.h + VIEWBOX_PAD * 2)
+const toScreen = (p: { x: number; y: number }) => ({
+  x: SVG_LEFT + (p.x + VIEWBOX_PAD) * scaleX,
+  y: SVG_TOP + (p.y + VIEWBOX_PAD) * scaleY,
+})
+
+/** Ghost arcs read as texture, not competition — thin stroke, low
+ *  opacity, `theme.neutral` (this scene's existing "no direction to
+ *  report" colour) rather than the focus line's directional accent. */
+const GHOST_STROKE_WIDTH = 3
+const GHOST_OPACITY = 0.22
+
+/** Endpoint crest sizing. `CREST_GAP` sits the crest ABOVE the
+ *  endpoint dot (bottom-anchored to the point) rather than centring
+ *  it on the point — see the size comment at the JSX below for why
+ *  that anchoring, not the size, is what keeps it clear of the W{n}
+ *  axis labels at any rank. */
+const CREST_SIZE = 76
+const CREST_GAP = 18
+const CREST_RING = 4
+
 export const TheClimb: React.FC<ClimbProps & { week: number }> = ({
-  team, points, fromRank, toRank, spanWeeks, footnote, week,
+  team, points, otherArcs, fromRank, toRank, spanWeeks, footnote, week,
 }) => {
   const frame = useCurrentFrame()
   const color = arcColor(fromRank, toRank)
 
-  const ranks = points.map((p) => p.rank)
-  const best = Math.min(...ranks)
-  const worst = Math.max(...ranks)
+  // The chart's x-axis domain is the focus team's own week list — every
+  // ghost arc maps its points onto these SAME x positions by week
+  // number (not by array index: otherArcs points can have individual
+  // weeks omitted per-team, per buildClimb, so index and week diverge).
+  const weeks = points.map((p) => p.week)
+  const weekToX = (weekNum: number) => {
+    const idx = weeks.indexOf(weekNum)
+    return (idx / Math.max(1, weeks.length - 1)) * VB.w
+  }
+
+  // The y-axis must cover the full rank range across the focus team
+  // AND every ghost arc, not just the focus team's own best/worst.
+  // Normalising against only `points` (the original, pre-ghost-arc
+  // behaviour) would map any other team's rank outside the focus
+  // team's own range to a y coordinate outside [0, VB.h] — e.g. a team
+  // that spent the season around 10th would draw far below the plot
+  // area if the focus team only ever ranged 1-6.
+  const allRanks = [
+    ...points.map((p) => p.rank),
+    ...otherArcs.flatMap((arc) => arc.points.map((p) => p.rank)),
+  ]
+  const best = Math.min(...allRanks)
+  const worst = Math.max(...allRanks)
   // Guards the case buildClimb can legitimately emit: a team that never
   // moved, where best === worst. Without the floor, (rank - best) / span
   // divides by zero and every y coordinate becomes NaN, which SVG
@@ -49,12 +100,19 @@ export const TheClimb: React.FC<ClimbProps & { week: number }> = ({
 
   // Rank 1 sits at the top, so y is inverted: the best (lowest) rank
   // number maps to y = 0.
-  const xy = points.map((p, i) => ({
-    x: (i / Math.max(1, points.length - 1)) * VB.w,
+  const toXY = (pts: ClimbPoint[]) => pts.map((p) => ({
+    x: weekToX(p.week),
     y: ((p.rank - best) / span) * VB.h,
   }))
+
+  const xy = toXY(points)
   const path = xy.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const last = xy[xy.length - 1]
+  const lastScreen = toScreen(last)
+
+  const ghostArcs = otherArcs
+    .map((arc) => ({ teamId: arc.teamId, xy: toXY(arc.points.filter((p) => weeks.includes(p.week))) }))
+    .filter((arc) => arc.xy.length >= 2)
 
   // The brief's draft used a fixed LINE_LENGTH=3000 "safely longer than
   // any path we draw" for the stroke-dasharray sweep. That's only true
@@ -109,6 +167,20 @@ export const TheClimb: React.FC<ClimbProps & { week: number }> = ({
             style={{ opacity: fade(frame, 26) }}
           />
         ))}
+
+        {/* Ghost arcs render FIRST (before the focus polyline below) so
+         *  the focus line always paints on top of them in SVG's
+         *  document-order stacking — texture behind, story in front. */}
+        {ghostArcs.map((arc) => (
+          <polyline
+            key={arc.teamId}
+            points={arc.xy.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none" stroke={theme.neutral} strokeWidth={GHOST_STROKE_WIDTH}
+            strokeLinecap="round" strokeLinejoin="round"
+            style={{ opacity: GHOST_OPACITY * fade(frame, 26) }}
+          />
+        ))}
+
         <polyline
           points={path}
           fill="none" stroke={color} strokeWidth={9}
@@ -122,6 +194,26 @@ export const TheClimb: React.FC<ClimbProps & { week: number }> = ({
           style={{ opacity: fade(frame, 110) }}
         />
       </svg>
+
+      {/* The focus team's crest, so the arc has an owner — bottom-anchored
+       *  ABOVE the endpoint dot (not centred on it) rather than sized to
+       *  fit: a point at the very top of the chart (best rank across the
+       *  whole league) can't push the crest off-canvas since it only
+       *  grows upward, and a point at the very bottom can't reach the
+       *  W{n} axis labels below the chart since the crest never extends
+       *  past the point itself. Positioned in real pixel space (`toScreen`)
+       *  rather than inside the svg's viewBox, since <Img> inside an SVG
+       *  viewBox scales oddly across browsers — plain HTML avoids that. */}
+      <div style={{
+        position: 'absolute',
+        left: lastScreen.x - CREST_SIZE / 2,
+        top: lastScreen.y - CREST_GAP - CREST_SIZE,
+        width: CREST_SIZE, height: CREST_SIZE, borderRadius: '50%',
+        boxShadow: `0 0 0 ${CREST_RING}px ${color}, 0 0 16px ${color}`,
+        opacity: fade(frame, 110),
+      }}>
+        <TeamCrest team={team} size={CREST_SIZE} />
+      </div>
 
       <div style={{
         position: 'absolute', top: 1060, left: 64, right: 64,
