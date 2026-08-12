@@ -1,7 +1,7 @@
 import React from 'react'
 import { interpolate, useCurrentFrame } from 'remotion'
 import type { BoardProps, BoardRow } from '../../../src/editorial/video/types'
-import { Backdrop, Bug } from '../chrome'
+import { Backdrop, Bug, TeamCrest } from '../chrome'
 import { theme } from '../theme'
 
 const fade = (frame: number, start: number, len = 13) =>
@@ -70,8 +70,12 @@ const Row: React.FC<{ row: BoardRow; index: number; scale: number }> = ({ row, i
       }}>
         {String(row.rank).padStart(2, '0')}
       </span>
-      <span style={{ fontFamily: theme.display, fontWeight: 700, fontSize: 42 * scale, flex: 1 }}>
-        {row.teamName}
+      <TeamCrest team={row.team} size={64 * scale} />
+      <span style={{
+        fontFamily: theme.display, fontWeight: 700, fontSize: 42 * scale, flex: 1,
+        minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {row.team.name}
       </span>
       <span style={{ fontFamily: theme.display, fontWeight: 700, fontSize: 34 * scale, opacity: 0.5 }}>
         {row.record}
