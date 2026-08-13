@@ -1,5 +1,6 @@
 import React from 'react'
 import { Composition, registerRoot } from 'remotion'
+import type { CalculateMetadataFunction } from 'remotion'
 import { ReelVideo, reelFrames } from './ReelVideo'
 import type { Reel } from '../../src/editorial/video/types'
 import fixture from '../fixtures/reel.json'
@@ -14,34 +15,40 @@ const quietReel = quietFixture as unknown as Reel
 // storySignature ("-mixed-hand-edited") for the tell. Not pipeline output.
 const mixedReel = mixedFixture as unknown as Reel
 
+/**
+ * Derives duration/fps/width/height from whatever `reel` is in the
+ * RESOLVED props, not from the statically-imported fixture used for
+ * `defaultProps`. This is what makes `--props=<file>.json` render a
+ * different reel at the correct length: Remotion calls this after
+ * merging CLI-supplied props over `defaultProps`, so `props.reel` here
+ * is the one actually being rendered.
+ */
+const calculateReelMetadata: CalculateMetadataFunction<{ reel: Reel }> = ({ props }) => ({
+  durationInFrames: reelFrames(props.reel),
+  fps: props.reel.fps,
+  width: props.reel.width,
+  height: props.reel.height,
+})
+
 const RemotionRoot: React.FC = () => (
   <>
     <Composition
       id="Reel"
       component={ReelVideo}
       defaultProps={{ reel }}
-      durationInFrames={reelFrames(reel)}
-      fps={reel.fps}
-      width={reel.width}
-      height={reel.height}
+      calculateMetadata={calculateReelMetadata}
     />
     <Composition
       id="ReelQuiet"
       component={ReelVideo}
       defaultProps={{ reel: quietReel }}
-      durationInFrames={reelFrames(quietReel)}
-      fps={quietReel.fps}
-      width={quietReel.width}
-      height={quietReel.height}
+      calculateMetadata={calculateReelMetadata}
     />
     <Composition
       id="ReelMixed"
       component={ReelVideo}
       defaultProps={{ reel: mixedReel }}
-      durationInFrames={reelFrames(mixedReel)}
-      fps={mixedReel.fps}
-      width={mixedReel.width}
-      height={mixedReel.height}
+      calculateMetadata={calculateReelMetadata}
     />
   </>
 )
