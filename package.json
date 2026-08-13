@@ -12,7 +12,8 @@
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "export:reel": "vite-node scripts/export-reel-fixture.ts"
+    "export:reel": "vite-node scripts/export-reel-fixture.ts",
+    "export:reel:live": "vite-node scripts/export-reel-from-league.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

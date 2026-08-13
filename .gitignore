@@ -65,3 +65,11 @@ NOTES.md
 # Weekly Reel video package (isolated Remotion package)
 video/node_modules
 video/out
+
+# Real league captures — never commit actual league data.
+# .local/ is already covered by the `*.local` rule above (the pattern
+# matches the bare directory name too), listed here explicitly so the
+# intent is obvious: this is where docs/REAL_LEAGUE_CAPTURE.md tells
+# you to save a downloaded league_issues.data blob before exporting it.
+.local/
+video/fixtures/reel-live.json
