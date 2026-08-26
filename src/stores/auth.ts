@@ -8,6 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { handleAuthStateChange } from '@/stores/authStateChange'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Profile } from '@/types/supabase'
 
@@ -20,14 +21,26 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   if (typeof err === 'string' && err.trim()) return err
   if (typeof err === 'object') {
     const e = err as Record<string, unknown>
-    // Supabase AuthError shape
-    if (typeof e.message === 'string' && e.message.trim()) return e.message
+    // Supabase AuthError shape.
+    //
+    // auth-js builds this message as
+    //   err.msg || err.message || err.error_description || err.error || JSON.stringify(err)
+    // (auth-js/lib/fetch.js), so a non-JSON error body — notably the Vercel
+    // gateway's plain-text "upstream request timeout" on a 504 — collapses
+    // to the literal string "{}" and used to be rendered to the user as-is.
+    // Treat that as no message at all so a real explanation surfaces.
+    if (typeof e.message === 'string' && e.message.trim() && e.message.trim() !== '{}')
+      return e.message
     // Some Supabase errors nest under .error_description (OAuth)
     if (typeof e.error_description === 'string' && (e.error_description as string).trim())
       return e.error_description as string
     // Proxy returned a JSON body with an error field
     if (typeof e.error === 'string' && (e.error as string).trim())
       return e.error as string
+    // A 5xx from the gateway carries no usable body, so say something the
+    // reader can act on instead of a generic failure.
+    if (typeof e.status === 'number' && e.status >= 500)
+      return 'The server took too long to respond. Please try again.'
     // Last resort: try JSON stringifying — at least shows something useful in dev
     try {
       const s = JSON.stringify(err)
@@ -90,30 +103,40 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = currentSession.user
         console.log('[Auth] User set, isAuthenticated should be:', !!user.value)
         
-        try {
-          await fetchProfile()
-          console.log('[Auth] Profile fetched successfully')
-        } catch (profileErr) {
-          console.error('[Auth] Profile fetch failed (non-fatal):', profileErr)
-          // Don't throw - user is still authenticated even if profile fails
-        }
+        // Started, not awaited. The profile is decoration; the session is
+        // what makes the app usable. Awaiting it here held `loading` true
+        // for as long as the profile request took — 20-40s through the
+        // Supabase proxy on a cold start — so the whole app looked hung on
+        // boot for an already-authenticated user.
+        void fetchProfile()
+          .then(() => console.log('[Auth] Profile fetched'))
+          .catch((profileErr) => {
+            console.error('[Auth] Profile fetch failed (non-fatal):', profileErr)
+            // Never rethrown — a user is authenticated with or without it.
+          })
       }
 
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (event, newSession) => {
+      // Listen for auth changes.
+      //
+      // This callback is deliberately NOT async. auth-js awaits every
+      // subscriber before signInWithPassword resolves, so anything awaited
+      // here sits on the critical path of signing in — an earlier version
+      // awaited fetchProfile() and a slow profile request held the sign-in
+      // spinner open for 20-40s. See src/stores/authStateChange.ts.
+      supabase.auth.onAuthStateChange((event, newSession) => {
         console.log('[Auth] State changed:', event, newSession?.user?.email || 'no user')
-        session.value = newSession
-        user.value = newSession?.user || null
-
-        if (newSession?.user) {
-          try {
-            await fetchProfile()
-          } catch (err) {
-            console.error('[Auth] Profile fetch on state change failed:', err)
-          }
-        } else {
-          profile.value = null
-        }
+        handleAuthStateChange(
+          { session: newSession, user: newSession?.user ?? null },
+          {
+            setSession: (s) => { session.value = s },
+            setUser: (u) => { user.value = u },
+            clearProfile: () => { profile.value = null },
+            loadProfile: fetchProfile,
+            onProfileError: (err) => {
+              console.error('[Auth] Profile fetch on state change failed:', err)
+            },
+          },
+        )
       })
       
       console.log('[Auth] Initialization complete. isAuthenticated:', !!user.value)
