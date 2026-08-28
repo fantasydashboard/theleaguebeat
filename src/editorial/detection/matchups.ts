@@ -17,6 +17,7 @@
 import type {
   CategoryLeagueData,
   CategoryLeagueDataMatchup,
+  LeagueData,
 } from '../types'
 import { ALL_ACTIVE_STAGES, type IssueContext, type SeasonStage, type StoryCandidate } from './types'
 import {
@@ -935,9 +936,14 @@ function detectLineupMistake(
 ───────────────────────────────────────────────────────────────── */
 
 export function detect(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
+  // Category-only. These stories are built from per-category matchup
+  // data (catWins, ties, h2hMatrix), which a points league has no
+  // equivalent of. Football's stories live in points.ts.
+  if (data.format !== 'h2h-category') return []
+
   // Every detector here requires at least one matchup to evaluate.
   if (!data.matchupsCurrentWeek || data.matchupsCurrentWeek.length === 0) {
     return []

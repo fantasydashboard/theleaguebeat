@@ -12,6 +12,7 @@
 import type {
   CategoryLeagueData,
   CategoryLeagueDataStanding,
+  LeagueData,
 } from '../types'
 import {
   freshnessForWeekAge,
@@ -415,9 +416,14 @@ function detectDivisionalWildCardImplication(
 /** Orchestrator for the divisions module. Bails immediately when the
  *  league has no usable division metadata. */
 export function detect(
-  data: CategoryLeagueData,
+  data: LeagueData,
   _context: IssueContext,
 ): StoryCandidate[] {
+  // Category-only. Division race/lock/streak framing reads winPct and
+  // streak shape off per-category standings; a points league doesn't
+  // share that shape yet. Football's stories live in points.ts.
+  if (data.format !== 'h2h-category') return []
+
   if (!hasUsableDivisions(data)) return []
   if (!data.standings || data.standings.length === 0) return []
 

@@ -17,7 +17,7 @@
  * See docs/EDITORIAL_ARCHITECTURE.md for the full spec.
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { CategoryLeagueData, LeagueData } from '../types'
 import type { IssueContext, SeasonStage, StoryCandidate } from './types'
 import {
   consecutiveWeeksAtRank,
@@ -1067,9 +1067,14 @@ function detectDethronedRivalry(
  * always produce identical output.
  */
 export function detect(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
+  // Category-only. These stories are built from per-category standings
+  // (ownsCount, bleedingCount, categoryRanks), which a points league
+  // has no equivalent of. Football's stories live in points.ts.
+  if (data.format !== 'h2h-category') return []
+
   return [
     ...detectNewThrone(data, context),
     ...detectDynastyFalling(data, context),

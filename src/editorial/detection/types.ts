@@ -340,7 +340,14 @@ export interface SelectedStory extends StoryCandidate {
    this signature. The orchestrator calls each in parallel.
 ───────────────────────────────────────────────────────────────── */
 
+/** Every detector module exports a single `detect()` with this shape.
+ *
+ *  It takes the FULL LeagueData union, not CategoryLeagueData. A
+ *  detector that only makes sense for one format narrows on
+ *  `data.format` as its first statement; a format-agnostic one projects
+ *  through `asLeagueCore()`. This is what lets one detector list serve
+ *  both baseball and football. */
 export type DetectFn = (
-  data: import('../types').CategoryLeagueData,
+  data: import('../types').LeagueData,
   context: IssueContext,
 ) => StoryCandidate[]
