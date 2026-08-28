@@ -41,6 +41,8 @@ import type {
   CategoryLeagueDataTeam,
   CategoryLeagueDataTeamCareerStats,
   CategoryLeagueDataWeeklyRanks,
+  LeagueDataH2HPoints,
+  LeagueDataPointsMatchup,
   WLT,
 } from '../types'
 import type {
@@ -1718,4 +1720,335 @@ function clampWeek(n: number): number {
   if (!Number.isFinite(n) || n < 1) return 1
   if (n > 30) return 30
   return Math.floor(n)
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SLEEPER → LeagueDataH2HPoints (football, H2H points)
+
+   Split from the category adapter above rather than sharing steps
+   with it: a points league has no per-category data, so the "real
+   cat records" machinery above doesn't apply. Reuses `buildTeams`
+   (naming + avatar) and `groupByMatchupId` from the category path —
+   both are format-agnostic.
+
+   `buildSleeperPointsData` is a PURE function of its `raw` argument:
+   no I/O, no clock, no randomness. `sleeperLeagueToPointsData` is the
+   only piece that talks to the network; it fetches then delegates.
+───────────────────────────────────────────────────────────────── */
+
+/**
+ * Sleeper splits point totals into an integer part and hundredths:
+ * `{ fpts: 1807, fpts_decimal: 6 }` means **1807.06**, not 1807 + 6.
+ * The same encoding applies to `fpts_against` and `ppts`, which this
+ * adapter doesn't consume yet. Exported for direct unit testing.
+ */
+export function sleeperPoints(intPart?: number, hundredths?: number): number {
+  return (intPart ?? 0) + (hundredths ?? 0) / 100
+}
+
+/** The shape `buildSleeperPointsData` consumes — identical to the
+ *  fixture's top-level shape, so the fixture is a valid test input
+ *  with zero adaptation. `matchupsByWeek` is a plain object keyed by
+ *  week number as a string (Sleeper's own `/matchups/{week}` calls
+ *  are one week at a time; this is how the results get assembled). */
+export interface SleeperPointsRaw {
+  league: SleeperLeague
+  rosters: SleeperRoster[]
+  users: SleeperUser[]
+  matchupsByWeek: Record<string, SleeperMatchup[]>
+}
+
+/**
+ * Pairs a week's raw Sleeper matchup entries into two-sided games.
+ *
+ * A `matchup_id` of `null` means "not part of a paired game this
+ * week" (e.g., a team that finished outside the playoff bracket).
+ * Filtering those out has to happen BEFORE grouping-by-id: grouping
+ * first is unsafe two ways. Either every null entry gets lumped into
+ * one oversized bucket (harmless — the length check below drops it),
+ * or — the dangerous case — exactly two null entries in some week
+ * would satisfy the length-2 check and get reported as a real game
+ * between two teams that were never actually matched up. Verified
+ * against the real captured league: week 17 has 6 of 10 entries with
+ * `matchup_id: null`, which must yield zero phantom games, not one.
+ */
+function pairSleeperMatchups(list: SleeperMatchup[]): [SleeperMatchup, SleeperMatchup][] {
+  const paired = list.filter((m) => m.matchup_id != null)
+  const byId = groupByMatchupId(paired)
+  const out: [SleeperMatchup, SleeperMatchup][] = []
+  for (const group of byId.values()) {
+    if (group.length !== 2) continue
+    out.push([group[0], group[1]])
+  }
+  return out
+}
+
+/**
+ * Per-roster chronological W/L/T sequence, derived from head-to-head
+ * `points` comparisons across every captured week. Powers streak /
+ * lastSix on the standings row.
+ *
+ * This is deliberately NOT the source of the season win/loss totals —
+ * those come from `roster.settings` (see `buildSleeperPointsStandings`
+ * below), which is Sleeper's authoritative record and can include
+ * extra wins a league-average scoring rule grants that a pure
+ * head-to-head walk can't see. This walk is a recent-form signal only.
+ */
+function pointsWeeklyOutcomes(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+): Map<number, WLT[]> {
+  const out = new Map<number, WLT[]>()
+  const weeks = Object.keys(matchupsByWeek).map(Number).sort((a, b) => a - b)
+  for (const week of weeks) {
+    const pairs = pairSleeperMatchups(matchupsByWeek[String(week)] ?? [])
+    for (const [a, b] of pairs) {
+      const ap = a.points ?? 0
+      const bp = b.points ?? 0
+      let aResult: WLT = 'T'
+      let bResult: WLT = 'T'
+      if (ap > bp) { aResult = 'W'; bResult = 'L' }
+      else if (ap < bp) { aResult = 'L'; bResult = 'W' }
+      pushOutcome(out, a.roster_id, aResult)
+      pushOutcome(out, b.roster_id, bResult)
+    }
+  }
+  return out
+}
+
+/**
+ * Standings from `roster.settings` — Sleeper's authoritative season
+ * record — not a matchup-by-matchup replay. Ranking is the standard
+ * Sleeper ordering: wins desc, then season points desc, dense 1..N.
+ */
+function buildSleeperPointsStandings(
+  rosters: SleeperRoster[],
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+): CategoryLeagueDataStanding[] {
+  const outcomesByRoster = pointsWeeklyOutcomes(matchupsByWeek)
+
+  const rows = rosters.map((r) => ({
+    rosterId: r.roster_id,
+    wins: r.settings?.wins ?? 0,
+    losses: r.settings?.losses ?? 0,
+    ties: r.settings?.ties ?? 0,
+    fpts: sleeperPoints(r.settings?.fpts, r.settings?.fpts_decimal),
+  }))
+
+  rows.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins
+    if (b.fpts !== a.fpts) return b.fpts - a.fpts
+    return a.rosterId - b.rosterId
+  })
+
+  return rows.map((row, idx) => {
+    const outcomes = outcomesByRoster.get(row.rosterId) ?? []
+    const denom = row.wins + row.losses + row.ties
+    return {
+      rank: idx + 1,
+      teamId: String(row.rosterId),
+      // catWins/catLosses/catTies hold MATCHUP wins/losses/ties here —
+      // a points league has no categories. Naming wart shared with the
+      // Yahoo / ESPN points adapters; kept for consistency rather than
+      // introducing a third name for the same concept.
+      catWins: row.wins,
+      catLosses: row.losses,
+      catTies: row.ties,
+      winPct: denom > 0 ? (row.wins + row.ties * 0.5) / denom : 0,
+      streak: computeStreak(outcomes),
+      lastSix: outcomes.slice(-6),
+      ownsCount: 0,
+      bleedingCount: 0,
+    }
+  })
+}
+
+/**
+ * Season rank history: per-week standings as the season unfolded,
+ * from cumulative head-to-head record (see `pointsWeeklyOutcomes` for
+ * why this is a separate walk from the final standings' win totals).
+ */
+function buildSleeperSeasonRankHistory(
+  rosters: SleeperRoster[],
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+): CategoryLeagueDataWeeklyRanks[] {
+  const weeks = Object.keys(matchupsByWeek).map(Number).sort((a, b) => a - b)
+  const cumulative = new Map<number, { wins: number; points: number }>()
+  for (const r of rosters) cumulative.set(r.roster_id, { wins: 0, points: 0 })
+
+  const history: CategoryLeagueDataWeeklyRanks[] = []
+  for (const week of weeks) {
+    const pairs = pairSleeperMatchups(matchupsByWeek[String(week)] ?? [])
+    for (const [a, b] of pairs) {
+      const aRec = cumulative.get(a.roster_id)
+      const bRec = cumulative.get(b.roster_id)
+      if (!aRec || !bRec) continue
+      const ap = a.points ?? 0
+      const bp = b.points ?? 0
+      aRec.points += ap
+      bRec.points += bp
+      if (ap > bp) aRec.wins++
+      else if (bp > ap) bRec.wins++
+    }
+
+    const snapshot = rosters
+      .map((r) => {
+        const rec = cumulative.get(r.roster_id)!
+        return { teamId: String(r.roster_id), wins: rec.wins, points: rec.points }
+      })
+      .sort((a, b) => {
+        if (b.wins !== a.wins) return b.wins - a.wins
+        if (b.points !== a.points) return b.points - a.points
+        return Number(a.teamId) - Number(b.teamId)
+      })
+
+    const ranks: Record<string, number> = {}
+    snapshot.forEach((row, idx) => (ranks[row.teamId] = idx + 1))
+    history.push({ week, ranks })
+  }
+  return history
+}
+
+/** Current week's matchups for the Matchups page. `seasonComplete`
+ *  (from `league.status`) picks between 'final' and 'live' — there's
+ *  no partial-week signal available from this data shape alone. */
+function buildSleeperCurrentWeekMatchups(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  currentWeek: number,
+  seasonComplete: boolean,
+): LeagueDataPointsMatchup[] {
+  const list = matchupsByWeek[String(currentWeek)] ?? []
+  const pairs = pairSleeperMatchups(list)
+  return pairs.map(([a, b]) => ({
+    id: `wk${currentWeek}-${a.matchup_id}`,
+    homeTeamId: String(a.roster_id),
+    awayTeamId: String(b.roster_id),
+    status: seasonComplete ? 'final' : 'live',
+    homePoints: a.points ?? 0,
+    awayPoints: b.points ?? 0,
+  }))
+}
+
+/** Mean points scored across every captured team-week. `undefined`
+ *  when no weeks have been captured — never fabricated as 0. */
+function computeWeeklyPointsAverage(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+): number | undefined {
+  let sum = 0
+  let count = 0
+  for (const week of Object.keys(matchupsByWeek)) {
+    for (const m of matchupsByWeek[week] ?? []) {
+      if (typeof m.points === 'number') {
+        sum += m.points
+        count++
+      }
+    }
+  }
+  return count > 0 ? sum / count : undefined
+}
+
+/**
+ * Pure transform: raw Sleeper league/rosters/users/matchups → the
+ * universal points-league contract. No I/O — see
+ * `sleeperLeagueToPointsData` for the fetching counterpart.
+ */
+export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoints {
+  const { league, rosters, users, matchupsByWeek } = raw
+
+  const currentSeason = Number(league.season) || new Date().getFullYear()
+  const currentWeek = clampWeek(league.settings?.leg ?? 1)
+
+  // Sleeper returns 0 for playoff_week_start when the commissioner
+  // never configured playoffs — that means "not configured", not "no
+  // playoffs" (verified against the real captured league The
+  // Megalabowl, which has playoff_week_start: 0 alongside a real
+  // playoff_teams: 6 and a fully played-out season). A naive `- 1`
+  // yields -1, which would stage the entire season as offseason.
+  // Leave it undefined and let deriveSeasonStage's NFL fallback (14)
+  // supply it — that fallback belongs in exactly one place.
+  const pws = league.settings?.playoff_week_start
+  const regularSeasonEndWeek = typeof pws === 'number' && pws > 0 ? pws - 1 : undefined
+
+  const playoffCutoff =
+    typeof league.settings?.playoff_teams === 'number' ? league.settings.playoff_teams : undefined
+
+  // Reuse the category adapter's team-naming + avatar helper as-is —
+  // it already implements the three-tier fallback this format needs
+  // (metadata.team_name → display_name/username → `Team <roster_id>`)
+  // and already resolves to a non-empty name for orphaned rosters
+  // (owner_id: null → no user match → falls straight to the id form).
+  const teams = buildTeams(rosters, users)
+
+  const standings = buildSleeperPointsStandings(rosters, matchupsByWeek)
+  const seasonRankHistory = buildSleeperSeasonRankHistory(rosters, matchupsByWeek)
+  const currentWeekMatchups = buildSleeperCurrentWeekMatchups(
+    matchupsByWeek,
+    currentWeek,
+    league.status === 'complete',
+  )
+  const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
+
+  return {
+    format: 'h2h-points',
+    sport: 'nfl',
+    leagueId: league.league_id,
+    leagueName: league.name || 'Sleeper League',
+    currentWeek,
+    currentSeason,
+    playoffCutoff,
+    regularSeasonEndWeek,
+    teams,
+    currentWeekMatchups,
+    weeklyPointsAverage,
+    standings,
+    seasonRankHistory,
+  }
+}
+
+/**
+ * Fetch a Sleeper league's raw shapes and delegate to the pure
+ * builder above. All I/O lives here; `buildSleeperPointsData` never
+ * touches the network.
+ */
+export async function sleeperLeagueToPointsData(
+  leagueId: string,
+): Promise<LeagueDataH2HPoints> {
+  let league: SleeperLeague
+  try {
+    league = await withCache(cacheKey(leagueId, 'league'), () =>
+      sleeperService.getLeague(leagueId),
+    )
+  } catch {
+    throw new Error(`Sleeper league ${leagueId} not found`)
+  }
+
+  const [users, rosters] = await Promise.all([
+    withCache(cacheKey(leagueId, 'users'), () =>
+      sleeperService.getLeagueUsers(leagueId),
+    ),
+    withCache(cacheKey(leagueId, 'rosters'), () =>
+      sleeperService.getLeagueRosters(leagueId),
+    ),
+  ])
+
+  if (!rosters || rosters.length === 0) {
+    throw new Error(`Sleeper league ${leagueId} not found or has no rosters`)
+  }
+
+  const currentWeek = clampWeek(league.settings?.leg ?? 1)
+  const matchupsByWeek = await fetchAllMatchupsAsRecord(leagueId, currentWeek)
+
+  return buildSleeperPointsData({ league, rosters, users, matchupsByWeek })
+}
+
+/** Same fetch-with-cache-and-stop-on-404 behavior as `fetchAllMatchups`
+ *  above, just returned as a plain object keyed by week — the shape
+ *  `buildSleeperPointsData` (and the fixture) use. */
+async function fetchAllMatchupsAsRecord(
+  leagueId: string,
+  upToWeek: number,
+): Promise<Record<string, SleeperMatchup[]>> {
+  const map = await fetchAllMatchups(leagueId, upToWeek)
+  const out: Record<string, SleeperMatchup[]> = {}
+  for (const [week, list] of map) out[String(week)] = list
+  return out
 }
