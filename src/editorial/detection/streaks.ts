@@ -10,7 +10,8 @@
  * taxonomy.
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { LeagueData } from '../types'
+import { asLeagueCore, type LeagueCore } from '../leagueCore'
 import {
   consecutiveWeeksAtRank,
   consistentlyAtOrAbove,
@@ -73,7 +74,7 @@ const SETTLING_TO_FINAL: SeasonStage[] = [
 ───────────────────────────────────────────────────────────────── */
 
 function detectStreakBroken(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -134,7 +135,7 @@ function detectStreakBroken(
 ───────────────────────────────────────────────────────────────── */
 
 function detectStreakBuilt(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -180,7 +181,7 @@ function detectStreakBuilt(
 ───────────────────────────────────────────────────────────────── */
 
 function detectConsistencyAward(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -229,7 +230,7 @@ function detectConsistencyAward(
 ───────────────────────────────────────────────────────────────── */
 
 function detectInconsistencyAward(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -285,7 +286,7 @@ function detectInconsistencyAward(
 ───────────────────────────────────────────────────────────────── */
 
 function detectBasementStreak(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -340,7 +341,7 @@ function detectBasementStreak(
 ───────────────────────────────────────────────────────────────── */
 
 function detectThroneStreak(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -388,7 +389,7 @@ function detectThroneStreak(
 ───────────────────────────────────────────────────────────────── */
 
 function detectThreeWeekComeback(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -447,7 +448,7 @@ function detectThreeWeekComeback(
 ───────────────────────────────────────────────────────────────── */
 
 function detectThreeWeekCollapse(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   _context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
@@ -504,14 +505,19 @@ function detectThreeWeekCollapse(
 ───────────────────────────────────────────────────────────────── */
 
 /** Orchestrator for the streaks module. Runs every streak detector
- *  and returns the merged candidate list. */
+ *  and returns the merged candidate list.
+ *
+ *  Works for both formats: every story below is about wins, losses
+ *  and rank movement, none of which care how a week was scored. */
 export function detect(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
-  // Defensive shortcut — without standings or rank history, none of
-  // the streak detectors have anything to look at.
-  if (!data.standings || data.standings.length === 0) return []
+  // Projects either format onto the narrow core shape these
+  // detectors need. Returns [] when standings aren't available yet
+  // (e.g. a points league that hasn't accrued them).
+  const core = asLeagueCore(data)
+  if (!core) return []
 
   const out: StoryCandidate[] = []
 
@@ -528,7 +534,7 @@ export function detect(
 
   for (const run of runners) {
     try {
-      out.push(...run(data, context))
+      out.push(...run(core, context))
     } catch (err) {
       // Detectors must never throw — but if one does, swallow it so
       // the rest of the issue still composes.

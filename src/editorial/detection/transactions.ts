@@ -13,7 +13,7 @@
  * front-page material; a trade from 4 weeks ago is footnote.
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { CategoryLeagueData, LeagueData } from '../types'
 import type { IssueContext, StoryCandidate } from './types'
 import { ALL_ACTIVE_STAGES } from './types'
 import { signature } from './helpers'
@@ -30,9 +30,20 @@ import {
 ───────────────────────────────────────────────────────────────── */
 
 export function detectTransactionStories(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
+  // Guarded, not widened: unlike injury/slump reports, trades and
+  // waiver claims are genuinely cross-sport -- Sleeper exposes a
+  // transactions feed for football leagues too. But `transactions`
+  // isn't on `LeagueDataH2HPoints` yet, and adding it means both
+  // extending that contract AND wiring a points-side adapter to
+  // populate it -- real feature work, not a type-annotation change.
+  // Gating here is a "not yet plumbed" guard, not a "doesn't apply"
+  // guard: this is expected to widen cleanly once that adapter work
+  // lands, with nothing built here needing to be redone.
+  if (data.format !== 'h2h-category') return []
+
   const txs = data.transactions
   if (!txs || txs.length === 0) return []
 

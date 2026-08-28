@@ -9,6 +9,7 @@ import type {
   CategoryLeagueDataStanding,
   CategoryLeagueDataTeam,
 } from '../types'
+import type { LeagueCore } from '../leagueCore'
 import type { SeasonStage } from './types'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -58,9 +59,14 @@ export function teamFor(
 
 /** Rank for a team at a specific week. Falls back to current
  *  standings when the in-progress week isn't in history yet
- *  (ESPN only writes history for fully-decided weeks). */
+ *  (ESPN only writes history for fully-decided weeks).
+ *
+ *  Accepts `LeagueCore` as well as `CategoryLeagueData` — it only
+ *  ever touches `seasonRankHistory`, `currentWeek` and `standings`,
+ *  which both shapes carry identically, so format-agnostic callers
+ *  (e.g. streaks.ts) can pass a projected core through unchanged. */
 export function rankAtWeek(
-  data: CategoryLeagueData,
+  data: CategoryLeagueData | LeagueCore,
   teamId: string,
   week: number,
 ): number | undefined {
@@ -114,9 +120,10 @@ export function previousWeekTopTeam(data: CategoryLeagueData): string | undefine
 ───────────────────────────────────────────────────────────────── */
 
 /** How many consecutive weeks (ending at `endWeek`) the team held a
- *  given rank. */
+ *  given rank. Accepts `LeagueCore` for the same reason as
+ *  `rankAtWeek` above — it only calls through to that function. */
 export function consecutiveWeeksAtRank(
-  data: CategoryLeagueData,
+  data: CategoryLeagueData | LeagueCore,
   teamId: string,
   rank: number,
   endWeek: number,
@@ -159,9 +166,11 @@ export function rankDeltaSinceWeek1(
   return week1 - current
 }
 
-/** Has this team been at or above a given rank for the last N weeks? */
+/** Has this team been at or above a given rank for the last N weeks?
+ *  Accepts `LeagueCore` for the same reason as `rankAtWeek` above —
+ *  it only reads `currentWeek` and calls through to `rankAtWeek`. */
 export function consistentlyAtOrAbove(
-  data: CategoryLeagueData,
+  data: CategoryLeagueData | LeagueCore,
   teamId: string,
   rank: number,
   weeks: number,

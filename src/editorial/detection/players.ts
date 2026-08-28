@@ -14,7 +14,7 @@
  * "your guy did X" beats "some guy did X."
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { CategoryLeagueData, LeagueData } from '../types'
 import type { IssueContext, StoryCandidate } from './types'
 import { ALL_ACTIVE_STAGES } from './types'
 import { signature } from './helpers'
@@ -28,9 +28,22 @@ import { normalizeName } from '../players/buildPlayerNights'
 ───────────────────────────────────────────────────────────────── */
 
 export function detectPlayerStories(
-  data: CategoryLeagueData,
+  data: LeagueData,
   _context: IssueContext,
 ): StoryCandidate[] {
+  // Guarded, not widened: `injuryReports` and `slumpReports` are MLB
+  // Stats API products (IL placements, rolling batting-average /
+  // ERA windows) -- they're baseball-only in substance, not merely
+  // absent from the points type because nobody's plumbed it yet.
+  // There is no football equivalent to widen toward, so this
+  // detector stays category-only until (if ever) a sport-specific
+  // feed exists for points leagues. `playerNights` itself IS shared
+  // across formats, but the injury/slump/bench sub-features that
+  // make up most of this file are not, so gating the whole entry
+  // point is more honest than threading format checks through every
+  // helper below.
+  if (data.format !== 'h2h-category') return []
+
   const nights = data.playerNights
   if (!nights || nights.length === 0) return []
 

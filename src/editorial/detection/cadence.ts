@@ -11,7 +11,8 @@
  * See docs/EDITORIAL_ARCHITECTURE.md (section "H. Day-of-week cadence").
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { LeagueData } from '../types'
+import { asLeagueCore, type LeagueCore } from '../leagueCore'
 import { freshnessForAgeHours, signature } from './helpers'
 import type { IssueContext, SeasonStage, StoryCandidate } from './types'
 
@@ -83,7 +84,7 @@ function cadenceFreshness(): number {
 
 /** Compose the shared context payload every cadence story carries. */
 function cadenceContext(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
   extra?: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -100,7 +101,7 @@ function cadenceContext(
 
 function sigFor(
   type: string,
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): string {
   // Date stamp the signature down to the day so the same cadence
@@ -114,7 +115,7 @@ function sigFor(
 ───────────────────────────────────────────────────────────────── */
 
 function detectMondayRecap(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.issueDate.getDay() !== MON) return []
@@ -138,7 +139,7 @@ function detectMondayRecap(
 ───────────────────────────────────────────────────────────────── */
 
 function detectMidweekTradeTalk(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   const dow = context.issueDate.getDay()
@@ -162,7 +163,7 @@ function detectMidweekTradeTalk(
 ───────────────────────────────────────────────────────────────── */
 
 function detectFridayPreview(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.issueDate.getDay() !== FRI) return []
@@ -185,7 +186,7 @@ function detectFridayPreview(
 ───────────────────────────────────────────────────────────────── */
 
 function detectSundayFinalPush(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.issueDate.getDay() !== SUN) return []
@@ -209,7 +210,7 @@ function detectSundayFinalPush(
 ───────────────────────────────────────────────────────────────── */
 
 function detectOffDayDeepDive(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.issueDate.getDay() !== THU) return []
@@ -231,12 +232,21 @@ function detectOffDayDeepDive(
    EXPORT
 ───────────────────────────────────────────────────────────────── */
 
-/** Orchestrator for the cadence module. */
+/** Orchestrator for the cadence module.
+ *
+ *  Works for both formats: cadence stories key off the day of week,
+ *  not how a week was scored. */
 export function detect(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
   if (!context || !context.issueDate) return []
+
+  // Projects either format onto the narrow core shape these
+  // detectors need. Returns [] when standings aren't available yet
+  // (e.g. a points league that hasn't accrued them).
+  const core = asLeagueCore(data)
+  if (!core) return []
 
   const out: StoryCandidate[] = []
   const runners = [
@@ -248,7 +258,7 @@ export function detect(
   ]
   for (const run of runners) {
     try {
-      out.push(...run(data, context))
+      out.push(...run(core, context))
     } catch (err) {
       console.warn('[detection/cadence] detector threw:', err)
     }
