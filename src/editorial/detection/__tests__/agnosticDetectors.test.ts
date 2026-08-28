@@ -76,4 +76,31 @@ describe('format-agnostic detectors', () => {
     const bare = { ...football, standings: undefined } as unknown as LeagueDataH2HPoints
     expect(detectStreaks(bare, context)).toEqual([])
   })
+
+  /* Regression pin for Fix round 1: cadence.ts must NOT route through
+   * asLeagueCore(). asLeagueCore() returns null when standings are
+   * absent, which would silently kill cadence stories for a league
+   * that has never built standings at all -- e.g. a real Sleeper
+   * football league sitting in `pre_draft`. Cadence only reads
+   * currentWeek/currentSeason/leagueId plus context.issueDate, none
+   * of which need standings, so it must keep firing here. */
+  it('cadence still fires for a points league with no standings at all (pre-draft)', () => {
+    const preDraft = {
+      format: 'h2h-points',
+      sport: 'nfl',
+      leagueId: 'lg-predraft',
+      leagueName: 'Pre-Draft League',
+      currentWeek: 0,
+      currentSeason: 2026,
+      teams,
+      // No `standings` key at all -- not undefined, absent -- matching
+      // a real pre-draft Sleeper league where standings have never
+      // been built.
+    } as unknown as LeagueDataH2HPoints
+
+    const out = detectCadence(preDraft, context)
+    // context.issueDate (2026-10-05) is a Monday, so monday-recap
+    // should fire regardless of the missing standings.
+    expect(out.some((s) => s.type === 'monday-recap')).toBe(true)
+  })
 })
