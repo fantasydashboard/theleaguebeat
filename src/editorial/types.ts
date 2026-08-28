@@ -32,6 +32,11 @@ export type WLT = 'W' | 'L' | 'T'
 
 export type CatSide = 'hit' | 'pit'
 
+/** Which sport a league plays. Drives copy selection and season-shape
+ *  defaults. Optional on the data contract — see LeagueSport usage in
+ *  leagueCore.ts for why. */
+export type LeagueSport = 'mlb' | 'nfl' | 'nba' | 'nhl'
+
 /* ─────────────────────────────────────────────────────────────────
    CORE LEAGUE DATA
 ───────────────────────────────────────────────────────────────── */
@@ -312,6 +317,11 @@ export interface LeagueDataH2HCategory {
    *  directly, so existing code keeps compiling without narrowing. */
   format: 'h2h-category'
 
+  /** Optional: snapshots persisted in `league_issues` predate this
+   *  field, so it can be absent on real stored data. Never read it
+   *  directly — go through `sportOf()`, which owns the fallback. */
+  sport?: LeagueSport
+
   // Meta
   leagueId: string
   leagueName: string
@@ -534,6 +544,11 @@ export interface LeagueDataH2HPoints {
   /** Discriminator literal — what makes a points league a points
    *  league. Every consumer can narrow against this. */
   format: 'h2h-points'
+
+  /** Optional: snapshots persisted in `league_issues` predate this
+   *  field, so it can be absent on real stored data. Never read it
+   *  directly — go through `sportOf()`, which owns the fallback. */
+  sport?: LeagueSport
 
   // Meta (mirrors the category variant so the panel + masthead can
   // reuse the same fields).
