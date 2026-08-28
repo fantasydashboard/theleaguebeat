@@ -972,10 +972,45 @@ Add to `src/editorial/adapters/sleeperAdapter.ts`. Build it in this order so eac
 Read the existing `sleeperLeagueToCategoryData` in the same file first and reuse its team-naming and avatar helpers rather than writing new ones.
 
 Requirements the tests above encode:
-- Ranks are dense and 1-based: sort by `wins` desc, then `fpts` desc as the tiebreak (the standard Sleeper ordering), then assign 1..N.
-- A roster with no matching user still yields a named team — fall back to `Team <roster_id>`, never an empty string.
-- `matchupsByWeek[w]` is a flat array where two entries share a `matchup_id`; pair them. An unpaired entry (odd team count, or a bye) is **skipped**, not paired with itself.
+- Ranks are dense and 1-based: sort by `wins` desc, then total points desc as the tiebreak (the standard Sleeper ordering), then assign 1..N.
 - `weeklyPointsAverage` is the mean across all team-weeks present. With no weeks captured, leave it `undefined` rather than emitting `0`.
+
+**Three corrections from the real captured data.** Each of these would have been a
+silent defect had the adapter been written against the assumed shapes:
+
+**(a) `fpts` is a split-integer encoding, not a float.** Sleeper stores points as
+an integer part plus hundredths: `{ fpts: 1807, fpts_decimal: 6 }` means
+**1807.06**, not 1813. Adding the two fields is wrong by up to 99 points a season.
+
+```ts
+/** Sleeper splits point totals into an integer part and hundredths.
+ *  fpts: 1807 + fpts_decimal: 6 → 1807.06 (NOT 1813). */
+function sleeperPoints(intPart?: number, hundredths?: number): number {
+  return (intPart ?? 0) + (hundredths ?? 0) / 100
+}
+```
+
+The same encoding applies to the `fpts_against` and `ppts` pairs, which this task
+does not consume but a later one may. Add a test asserting `1807 + 6 → 1807.06`.
+
+**(b) A `matchup_id` of `null` is not a game.** In week 17 of the captured league,
+6 of 10 entries carry `matchup_id: null` — teams outside the playoff bracket that
+week. Grouping naively by `matchup_id` collects all six into a single phantom
+"game". **Skip entries whose `matchup_id` is null before grouping**, then skip any
+resulting group that does not have exactly two entries. Add a test using the real
+week-17 data asserting exactly **2** matchups are produced, not 3.
+
+**(c) Rosters can be orphaned.** 2 of the 10 captured rosters have
+`owner_id: null` with no user record and no `metadata` fallback anywhere — real,
+active franchises with no linked account. Team naming therefore needs three tiers,
+not two:
+
+1. `users[].metadata.team_name` (8 of 10 in the capture)
+2. `users[].display_name`
+3. `Team <roster_id>` — for orphaned rosters, never an empty string
+
+Add a test asserting the two orphaned rosters still produce non-empty, distinct
+names.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
