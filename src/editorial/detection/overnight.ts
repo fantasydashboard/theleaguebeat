@@ -17,15 +17,34 @@
  * team get +15 weight so they outrank generic league movement.
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { CategoryLeagueData, LeagueData } from '../types'
 import type { IssueContext, StoryCandidate } from './types'
 import { ALL_ACTIVE_STAGES } from './types'
 import { signature } from './helpers'
+import { sportOf } from '../leagueCore'
 
 export function detectOvernightStories(
-  data: CategoryLeagueData,
+  data: LeagueData,
   _context: IssueContext,
 ): StoryCandidate[] {
+  // Two gates below, for two different reasons — they look redundant
+  // today (nfl is the only sport on the points format) but they will
+  // diverge the moment a daily sport (nba/nhl) lands on points, so
+  // don't collapse them into one:
+
+  // 1) EDITORIAL: overnight beats answer "what changed since
+  // yesterday". That is a daily-sport question. Football plays once
+  // a week, so these would either fire as noise or restate Sunday's
+  // result every day until Thursday. Sports that play daily get
+  // them; football does not.
+  if (sportOf(data) === 'nfl') return []
+
+  // 2) DATA SHAPE: snapshot deltas (cat-by-cat overnight movement)
+  // only exist for category leagues today — `snapshotDelta` isn't
+  // declared on the points contract at all, so this also narrows
+  // `data` to `CategoryLeagueData` for the rest of this function.
+  if (data.format !== 'h2h-category') return []
+
   const delta = data.snapshotDelta
   if (!delta) return []
 

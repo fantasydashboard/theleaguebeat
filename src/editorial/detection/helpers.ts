@@ -9,24 +9,33 @@ import type {
   CategoryLeagueDataStanding,
   CategoryLeagueDataTeam,
 } from '../types'
-import type { LeagueCore } from '../leagueCore'
+import type { LeagueCore, LeagueSport } from '../leagueCore'
 import type { SeasonStage } from './types'
 
 /* ─────────────────────────────────────────────────────────────────
    STAGE DERIVATION
 ───────────────────────────────────────────────────────────────── */
 
+/** Regular-season length per sport, used ONLY when the adapter could
+ *  not supply `regularSeasonEndWeek`. Platform data always wins — these
+ *  are the last resort, not the primary source. */
+export const DEFAULT_END_WEEK_BY_SPORT: Record<LeagueSport, number> = {
+  mlb: 12,   // unchanged: what the baseball pipeline has always used
+  nfl: 14,   // 14-game regular season, playoffs weeks 15-17
+  nba: 20,
+  nhl: 20,
+}
+
 /** Bucket the current week into a season stage. Drives which
  *  detectors fire and how composition composes the page. */
 export function deriveSeasonStage(
   currentWeek: number,
   regularSeasonEndWeek: number | undefined,
+  sport: LeagueSport = 'mlb',
 ): SeasonStage {
   if (currentWeek < 1) return 'preseason'
 
-  // Fall back to 12 if the adapter didn't populate end week (legacy
-  // demo fixture). Same fallback as in detect.ts today.
-  const endWeek = regularSeasonEndWeek ?? 12
+  const endWeek = regularSeasonEndWeek ?? DEFAULT_END_WEEK_BY_SPORT[sport]
 
   if (currentWeek > endWeek + 3) return 'offseason'
   if (currentWeek > endWeek) return 'playoffs'

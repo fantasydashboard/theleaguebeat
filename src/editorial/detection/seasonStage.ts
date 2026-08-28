@@ -8,14 +8,17 @@
  * league passes the relevant boundary.
  *
  * All detectors here are PURE and NEVER THROW. Missing
- * `regularSeasonEndWeek` falls back to 12 (matches the demo fixture +
- * `deriveSeasonStage` helper).
+ * `regularSeasonEndWeek` falls back to the sport's default season
+ * length (`DEFAULT_END_WEEK_BY_SPORT` in helpers.ts — 12 for MLB,
+ * matching `deriveSeasonStage`'s fallback).
  *
  * See docs/EDITORIAL_ARCHITECTURE.md (section "G. Season stage").
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { LeagueData } from '../types'
+import { asLeagueCore, type LeagueCore } from '../leagueCore'
 import {
+  DEFAULT_END_WEEK_BY_SPORT,
   freshnessForWeekAge,
   signature,
   weeksRemaining,
@@ -45,27 +48,20 @@ const W_SEMIFINAL_WEEK = 92
 const W_CHAMPIONSHIP_WEEK = 100
 
 /* ─────────────────────────────────────────────────────────────────
-   CONSTANTS
-───────────────────────────────────────────────────────────────── */
-
-/** Default end-of-regular-season week when adapter doesn't populate
- *  it. Matches `deriveSeasonStage`'s fallback. */
-const DEFAULT_END_WEEK = 12
-
-/* ─────────────────────────────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────────────────────────────── */
 
-/** Resolves the regular-season end week with a 12 fallback. */
-function endWeekOf(data: CategoryLeagueData): number {
-  return data.regularSeasonEndWeek ?? DEFAULT_END_WEEK
+/** Resolves the regular-season end week, falling back to the
+ *  sport's default length when the adapter didn't populate it. */
+function endWeekOf(data: LeagueCore): number {
+  return data.regularSeasonEndWeek ?? DEFAULT_END_WEEK_BY_SPORT[data.sport]
 }
 
 /** Builds a stable signature scoped to (storyType + season + week)
  *  so the same calendar event in the same season hashes consistently. */
 function sigFor(
   type: string,
-  data: CategoryLeagueData,
+  data: LeagueCore,
   week?: number,
 ): string {
   return signature([type, data.currentSeason, week ?? data.currentWeek])
@@ -78,7 +74,7 @@ function leagueCandidate(args: {
   type: StoryCandidate['type']
   weight: number
   stages: SeasonStage[]
-  data: CategoryLeagueData
+  data: LeagueCore
   extraContext?: Record<string, unknown>
 }): StoryCandidate {
   const endWeek = endWeekOf(args.data)
@@ -103,7 +99,7 @@ function leagueCandidate(args: {
    1. OPENING WEEK
 ───────────────────────────────────────────────────────────────── */
 
-function detectOpeningWeek(data: CategoryLeagueData): StoryCandidate[] {
+function detectOpeningWeek(data: LeagueCore): StoryCandidate[] {
   if (data.currentWeek !== 1) return []
   return [
     leagueCandidate({
@@ -121,7 +117,7 @@ function detectOpeningWeek(data: CategoryLeagueData): StoryCandidate[] {
    enough to have at least one week of evidence to score it.
 ───────────────────────────────────────────────────────────────── */
 
-function detectPostDraftAutopsy(data: CategoryLeagueData): StoryCandidate[] {
+function detectPostDraftAutopsy(data: LeagueCore): StoryCandidate[] {
   if (data.currentWeek !== 2 && data.currentWeek !== 3) return []
   return [
     leagueCandidate({
@@ -138,7 +134,7 @@ function detectPostDraftAutopsy(data: CategoryLeagueData): StoryCandidate[] {
    The exact week where 1/4 of the regular season has elapsed.
 ───────────────────────────────────────────────────────────────── */
 
-function detectQuarterPole(data: CategoryLeagueData): StoryCandidate[] {
+function detectQuarterPole(data: LeagueCore): StoryCandidate[] {
   const endWeek = endWeekOf(data)
   const target = Math.round(endWeek / 4)
   if (data.currentWeek !== target) return []
@@ -162,7 +158,7 @@ function detectQuarterPole(data: CategoryLeagueData): StoryCandidate[] {
 ───────────────────────────────────────────────────────────────── */
 
 function detectAllStarBreak(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   // We don't have a `sport` field exposed on CategoryLeagueData, so
@@ -204,7 +200,7 @@ function detectAllStarBreak(
 ───────────────────────────────────────────────────────────────── */
 
 function detectTradeDeadlineWeek(
-  data: CategoryLeagueData,
+  data: LeagueCore,
 ): StoryCandidate[] {
   const endWeek = endWeekOf(data)
   const mid = Math.round(endWeek / 2)
@@ -229,7 +225,7 @@ function detectTradeDeadlineWeek(
    The exact mid-point of the regular season.
 ───────────────────────────────────────────────────────────────── */
 
-function detectHalfwayPoint(data: CategoryLeagueData): StoryCandidate[] {
+function detectHalfwayPoint(data: LeagueCore): StoryCandidate[] {
   const endWeek = endWeekOf(data)
   const target = Math.round(endWeek / 2)
   if (data.currentWeek !== target) return []
@@ -249,7 +245,7 @@ function detectHalfwayPoint(data: CategoryLeagueData): StoryCandidate[] {
 ───────────────────────────────────────────────────────────────── */
 
 function detectThreeQuarterMark(
-  data: CategoryLeagueData,
+  data: LeagueCore,
 ): StoryCandidate[] {
   const endWeek = endWeekOf(data)
   const target = Math.round((3 * endWeek) / 4)
@@ -270,7 +266,7 @@ function detectThreeQuarterMark(
    Fires when 4 or 3 weeks remain in the regular season.
 ───────────────────────────────────────────────────────────────── */
 
-function detectLastFourWeeks(data: CategoryLeagueData): StoryCandidate[] {
+function detectLastFourWeeks(data: LeagueCore): StoryCandidate[] {
   const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
   if (remaining !== 4 && remaining !== 3) return []
   return [
@@ -288,7 +284,7 @@ function detectLastFourWeeks(data: CategoryLeagueData): StoryCandidate[] {
    9. LAST TWO WEEKS
 ───────────────────────────────────────────────────────────────── */
 
-function detectLastTwoWeeks(data: CategoryLeagueData): StoryCandidate[] {
+function detectLastTwoWeeks(data: LeagueCore): StoryCandidate[] {
   const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
   if (remaining !== 2 && remaining !== 1) return []
   return [
@@ -307,7 +303,7 @@ function detectLastTwoWeeks(data: CategoryLeagueData): StoryCandidate[] {
    The closing week of the regular season.
 ───────────────────────────────────────────────────────────────── */
 
-function detectFinalWeek(data: CategoryLeagueData): StoryCandidate[] {
+function detectFinalWeek(data: LeagueCore): StoryCandidate[] {
   const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
   if (remaining !== 0) return []
   // Also guard against the playoff weeks — `weeksRemaining` clamps
@@ -330,7 +326,7 @@ function detectFinalWeek(data: CategoryLeagueData): StoryCandidate[] {
 ───────────────────────────────────────────────────────────────── */
 
 function detectPlayoffOpener(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.seasonStage !== 'playoffs') return []
@@ -350,7 +346,7 @@ function detectPlayoffOpener(
 ───────────────────────────────────────────────────────────────── */
 
 function detectSemifinalWeek(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.seasonStage !== 'playoffs') return []
@@ -370,7 +366,7 @@ function detectSemifinalWeek(
 ───────────────────────────────────────────────────────────────── */
 
 function detectChampionshipWeek(
-  data: CategoryLeagueData,
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (context.seasonStage !== 'playoffs') return []
@@ -389,9 +385,9 @@ function detectChampionshipWeek(
    EXPORT
 ───────────────────────────────────────────────────────────────── */
 
-/** Orchestrator for the season-stage module. */
-export function detect(
-  data: CategoryLeagueData,
+/** Runs every season-stage detector against a projected `LeagueCore`. */
+function detectFromCore(
+  data: LeagueCore,
   context: IssueContext,
 ): StoryCandidate[] {
   if (data.currentWeek == null || data.currentWeek < 1) return []
@@ -399,7 +395,7 @@ export function detect(
   const out: StoryCandidate[] = []
 
   // Detectors that only need `data`:
-  const dataOnly: Array<(d: CategoryLeagueData) => StoryCandidate[]> = [
+  const dataOnly: Array<(d: LeagueCore) => StoryCandidate[]> = [
     detectOpeningWeek,
     detectPostDraftAutopsy,
     detectQuarterPole,
@@ -420,7 +416,7 @@ export function detect(
 
   // Detectors that need both `data` and `context`:
   const dataAndContext: Array<
-    (d: CategoryLeagueData, c: IssueContext) => StoryCandidate[]
+    (d: LeagueCore, c: IssueContext) => StoryCandidate[]
   > = [
     detectAllStarBreak,
     detectPlayoffOpener,
@@ -436,4 +432,19 @@ export function detect(
   }
 
   return out
+}
+
+/** Orchestrator for the season-stage module.
+ *
+ *  Works for both formats: every story below is a calendar/week
+ *  boundary, none of which care how a week was scored. Projects
+ *  through `asLeagueCore` and returns [] when standings aren't
+ *  available yet (e.g. a points league that hasn't accrued them). */
+export function detect(
+  data: LeagueData,
+  context: IssueContext,
+): StoryCandidate[] {
+  const core = asLeagueCore(data)
+  if (!core) return []
+  return detectFromCore(core, context)
 }
