@@ -822,7 +822,7 @@ console.log(`\nWrote ${out}`)
 Run with a real Sleeper league id — a **completed prior season** is strongly preferred, because it has full standings and matchup history where the current preseason has none:
 
 ```bash
-npx vite-node scripts/capture-sleeper-league.ts <leagueId> 14
+npx vite-node scripts/capture-sleeper-league.ts 1186844188245356544 17
 ```
 
 If no league id is available, **stop and ask** rather than inventing one. A fabricated fixture defeats the purpose of this task.
@@ -858,7 +858,7 @@ Key mappings, from the real Sleeper shapes:
 | `format` | `'h2h-points'` |
 | `leagueName` | `league.name` |
 | `currentSeason` | `Number(league.season)` |
-| `regularSeasonEndWeek` | `league.settings.playoff_week_start - 1` |
+| `regularSeasonEndWeek` | `playoff_week_start - 1`, **but `playoff_week_start` of `0` means UNSET** — see below |
 | `playoffCutoff` | `league.settings.playoff_teams` |
 | `teams[]` | one per roster; name from `users[].metadata.team_name` falling back to `display_name`; avatar via `sleeperService.getAvatarUrl` |
 | `standings[]` | derived from `rosters[].settings` `{ wins, losses, ties, fpts, fpts_decimal }` |
@@ -867,6 +867,28 @@ Key mappings, from the real Sleeper shapes:
 | `seasonRankHistory` | rank per week, recomputed from cumulative record after each week |
 
 **On `standings`:** `CategoryLeagueDataStanding` names its fields `catWins`/`catLosses`/`catTies`. For a points league these hold **matchup** wins/losses/ties. That is an existing naming wart shared with the Yahoo and ESPN points adapters — follow the established convention rather than introducing a divergent one, and comment it at the mapping site.
+
+**On `playoff_week_start` — a real edge case, verified against live data.** Sleeper
+returns `0` when the commissioner never configured a playoff start week. It does
+**not** mean "no playoffs": the captured league *The Megalabowl*
+(`1268981869060296704`) reports `playoff_week_start: 0` alongside
+`playoff_teams: 6` and `last_scored_leg: 18`. A naive `playoff_week_start - 1`
+yields `regularSeasonEndWeek: -1`, which would stage every week of that league as
+`offseason`.
+
+Treat any `playoff_week_start` **≤ 0 as absent**: leave `regularSeasonEndWeek`
+`undefined` and let `deriveSeasonStage`'s sport-aware fallback (14 for NFL, Task 4)
+supply it. Do not substitute a literal 14 at the adapter — the fallback belongs in
+one place.
+
+```ts
+const pws = raw.league.settings?.playoff_week_start
+// 0 means "not configured", not "no playoffs" — see above.
+const regularSeasonEndWeek = typeof pws === 'number' && pws > 0 ? pws - 1 : undefined
+```
+
+Add a test pinning this: a league with `playoff_week_start: 0` must produce
+`regularSeasonEndWeek === undefined`, never `-1`.
 
 - [ ] **Step 1: Write the failing test**
 
