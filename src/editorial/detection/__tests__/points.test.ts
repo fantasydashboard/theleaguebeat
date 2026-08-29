@@ -56,21 +56,48 @@ describe('detectPointsStories', () => {
     expect(types(league([game('m1', 'a', 'b', 101, 99)]))).toContain('points-photo-finish')
   })
 
+  /* Mirrors the blowout "scales with the league" test: the same tiny
+   * margin must qualify at one average and not at another, proving the
+   * threshold is relative rather than a bare point value. */
+  it('scales with the league: a 10-point margin is a photo finish at a 500 average but not at 100', () => {
+    // cutoff at avg 500 is 15 -> margin 10 qualifies.
+    expect(types(league([game('m1', 'a', 'b', 255, 245)], 500))).toContain('points-photo-finish')
+    // cutoff at avg 100 is 3 -> the same 10-point margin does not.
+    expect(types(league([game('m1', 'a', 'b', 105, 95)]))).not.toContain('points-photo-finish')
+  })
+
   it('detects a shootout when both sides clear 125% of the average', () => {
     expect(types(league([game('m1', 'a', 'b', 140, 132)]))).toContain('points-shootout')
+  })
+
+  /* AND, not OR: one side clearing the cutoff alone is not a shootout —
+   * both offenses have to have gone off. */
+  it('does not call it a shootout when only one side clears 125%', () => {
+    expect(types(league([game('m1', 'a', 'b', 140, 100)]))).not.toContain('points-shootout')
   })
 
   it('detects a rock fight when both sides are under 75%', () => {
     expect(types(league([game('m1', 'a', 'b', 70, 66)]))).toContain('points-rock-fight')
   })
 
-  it('names the week high and low across all games', () => {
-    const out = types(league([
+  /* AND, not OR: one side staying under the cutoff alone is not a rock
+   * fight — neither offense can be moving the ball. */
+  it('does not call it a rock fight when only one side stays under 75%', () => {
+    expect(types(league([game('m1', 'a', 'b', 70, 90)]))).not.toContain('points-rock-fight')
+  })
+
+  it('names the week high and low across all games, by team, not by position in the list', () => {
+    // A detector that always picked totals[0] for both high and low
+    // would pass a "both types present" check but get the actual
+    // teams wrong — assert the teamIds directly.
+    const out = detectPointsStories(league([
       game('m1', 'a', 'b', 150, 90),
       game('m2', 'c', 'd', 88, 60),
-    ]))
-    expect(out).toContain('points-high-score')
-    expect(out).toContain('points-low-score')
+    ]), context)
+    const high = out.find((s) => s.type === 'points-high-score')
+    const low = out.find((s) => s.type === 'points-low-score')
+    expect(high?.teamIds).toEqual(['a'])
+    expect(low?.teamIds).toEqual(['d'])
   })
 
   it('ignores matchups that are not final', () => {
@@ -78,9 +105,14 @@ describe('detectPointsStories', () => {
   })
 
   /* Never fabricate a baseline: with no average and only one game there
-   * is nothing to compute a relative threshold against. */
+   * is nothing to compute a relative threshold against. Uses a lopsided
+   * (200, 10) score on purpose -- a fabricated baseline averaging this
+   * single game's own two scores (105) would call the 190-point margin
+   * a blowout (0.4 * 105 = 42 < 190), so this only stays green if the
+   * "too thin to average" guard actually holds regardless of the
+   * numbers involved. */
   it('emits no margin stories when the weekly average is unknown and history is too thin', () => {
-    const noAvg = { ...league([game('m1', 'a', 'b', 145, 100)]), weeklyPointsAverage: undefined }
+    const noAvg = { ...league([game('m1', 'a', 'b', 200, 10)]), weeklyPointsAverage: undefined }
     expect(types(noAvg as LeagueDataH2HPoints)).not.toContain('points-blowout')
   })
 
