@@ -197,12 +197,20 @@ export function consistentlyAtOrAbove(
    PLAYOFF / ELIMINATION MATH
 ───────────────────────────────────────────────────────────────── */
 
-/** Remaining matchup weeks (excluding current). */
+/** Remaining matchup weeks (excluding current).
+ *
+ *  `sport` defaults to 'mlb' -- same shape as `deriveSeasonStage` --
+ *  so every pre-existing baseball caller (which never passes it) keeps
+ *  getting the original hardcoded 12. Sport-aware callers (see
+ *  seasonStage.ts's `endWeekOf`, which already looks this up per
+ *  sport) should pass it explicitly so both functions agree on the
+ *  same end-of-season fallback within one module. */
 export function weeksRemaining(
   currentWeek: number,
   regularSeasonEndWeek: number | undefined,
+  sport: LeagueSport = 'mlb',
 ): number {
-  const end = regularSeasonEndWeek ?? 12
+  const end = regularSeasonEndWeek ?? DEFAULT_END_WEEK_BY_SPORT[sport]
   return Math.max(0, end - currentWeek)
 }
 

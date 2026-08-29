@@ -282,7 +282,7 @@ function detectThreeQuarterMark(
 ───────────────────────────────────────────────────────────────── */
 
 function detectLastFourWeeks(data: SeasonStageData): StoryCandidate[] {
-  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
+  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek, data.sport)
   if (remaining !== 4 && remaining !== 3) return []
   return [
     leagueCandidate({
@@ -300,7 +300,7 @@ function detectLastFourWeeks(data: SeasonStageData): StoryCandidate[] {
 ───────────────────────────────────────────────────────────────── */
 
 function detectLastTwoWeeks(data: SeasonStageData): StoryCandidate[] {
-  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
+  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek, data.sport)
   if (remaining !== 2 && remaining !== 1) return []
   return [
     leagueCandidate({
@@ -319,7 +319,7 @@ function detectLastTwoWeeks(data: SeasonStageData): StoryCandidate[] {
 ───────────────────────────────────────────────────────────────── */
 
 function detectFinalWeek(data: SeasonStageData): StoryCandidate[] {
-  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek)
+  const remaining = weeksRemaining(data.currentWeek, data.regularSeasonEndWeek, data.sport)
   if (remaining !== 0) return []
   // Also guard against the playoff weeks — `weeksRemaining` clamps
   // to 0 once we're past the regular season, but the stage gate keeps
