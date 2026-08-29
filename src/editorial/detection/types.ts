@@ -201,6 +201,14 @@ export type StoryType =
   | 'cross-division-power-shift'
   | 'divisional-wild-card-implication'
 
+  /* I. Points (football) */
+  | 'points-blowout'
+  | 'points-photo-finish'
+  | 'points-high-score'
+  | 'points-low-score'
+  | 'points-shootout'
+  | 'points-slugfest'
+
 /* ─────────────────────────────────────────────────────────────────
    SEASON STAGES
    Time-of-season buckets. Most detectors gate on these.
