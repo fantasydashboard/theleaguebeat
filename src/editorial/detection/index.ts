@@ -9,7 +9,7 @@
  * See docs/EDITORIAL_ARCHITECTURE.md for the full spec.
  */
 
-import type { CategoryLeagueData } from '../types'
+import type { LeagueData } from '../types'
 import type { DetectFn, IssueContext, StoryCandidate } from './types'
 
 import { detect as detectStandings } from './standings'
@@ -21,6 +21,7 @@ import { detect as detectDivisions } from './divisions'
 import { detectTransactionStories } from './transactions'
 import { detectPlayerStories } from './players'
 import { detectOvernightStories } from './overnight'
+import { detectPointsStories } from './points'
 
 /** Every detector module that's wired in. New modules get added here. */
 const DETECTORS: DetectFn[] = [
@@ -33,6 +34,7 @@ const DETECTORS: DetectFn[] = [
   detectTransactionStories,
   detectPlayerStories,
   detectOvernightStories,
+  detectPointsStories,
   // Future tiers:
   //   detectCategories — needs categoryRanksHistory (Tier 2)
   //   detectPersonalization — needs impression infra (Tier 4)
@@ -45,7 +47,7 @@ const DETECTORS: DetectFn[] = [
  *  list. Detectors are pure synchronous functions; the loop is just
  *  to keep the orchestrator readable. */
 export function detectAll(
-  data: CategoryLeagueData,
+  data: LeagueData,
   context: IssueContext,
 ): StoryCandidate[] {
   const out: StoryCandidate[] = []
