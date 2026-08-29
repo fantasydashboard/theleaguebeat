@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { detect as detectStreaks } from '@/editorial/detection/streaks'
 import { detect as detectCadence } from '@/editorial/detection/cadence'
+import { detect as detectSeasonStage } from '@/editorial/detection/seasonStage'
 import type { LeagueDataH2HPoints, LeagueDataH2HCategory } from '@/editorial/types'
 import type { IssueContext } from '@/editorial/detection/types'
 
@@ -102,5 +103,38 @@ describe('format-agnostic detectors', () => {
     // context.issueDate (2026-10-05) is a Monday, so monday-recap
     // should fire regardless of the missing standings.
     expect(out.some((s) => s.type === 'monday-recap')).toBe(true)
+  })
+
+  /* Regression pin for Fix 2 (final whole-branch review): seasonStage.ts
+   * has the IDENTICAL defect that was caught and fixed in cadence.ts
+   * (b8c7841) -- routing through asLeagueCore() invents a standings
+   * precondition none of its thirteen detectors actually has (none of
+   * them reads standings, teams, or rank history; only currentWeek /
+   * currentSeason / regularSeasonEndWeek / sport). A week-1 category
+   * league with empty standings used to emit 'opening-week' and, with
+   * the asLeagueCore projection in place, silently emits nothing. */
+  it('season-stage still fires for a category league at week 1 with empty standings', () => {
+    const openingNoStandings = {
+      format: 'h2h-category',
+      sport: 'mlb',
+      leagueId: 'lg-opening',
+      leagueName: 'Diamond Cuts',
+      currentWeek: 1,
+      currentSeason: 2026,
+      teams,
+      standings: [],
+      seasonRankHistory: [],
+      categories: [],
+      categoryRanks: [],
+    } as unknown as LeagueDataH2HCategory
+
+    const openingContext: IssueContext = {
+      currentWeek: 1,
+      seasonStage: 'opening',
+      issueDate: new Date('2026-04-02T12:00:00Z'),
+    }
+
+    const out = detectSeasonStage(openingNoStandings, openingContext)
+    expect(out.some((s) => s.type === 'opening-week')).toBe(true)
   })
 })
