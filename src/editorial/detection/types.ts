@@ -207,7 +207,7 @@ export type StoryType =
   | 'points-high-score'
   | 'points-low-score'
   | 'points-shootout'
-  | 'points-slugfest'
+  | 'points-rock-fight'
 
 /* ─────────────────────────────────────────────────────────────────
    SEASON STAGES

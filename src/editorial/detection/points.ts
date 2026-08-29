@@ -2,7 +2,7 @@
  * Points detectors — the six story types that exist ONLY because
  * football (and any other h2h-points sport) is scored on a continuous
  * points scale rather than discrete category wins: blowouts, photo
- * finishes, shootouts, slugfests, and the week's high/low score.
+ * finishes, shootouts, rock fights, and the week's high/low score.
  *
  * THE CENTRAL RULE: every threshold here is a MULTIPLE of the
  * league's own weekly scoring average, never a bare point value. A
@@ -44,7 +44,7 @@ const W = {
   blowout: 60,      // mirrors category `blowout` — common-ish, not always lead-worthy
   photoFinish: 70,  // tied-or-near-tied final = high drama
   shootout: 65,     // both offenses went off — strong angle
-  slugfest: 45,     // grind-it-out low scorer — quieter angle
+  rockFight: 45,    // nobody could move the ball — quieter angle
   highScore: 55,    // week's top output — solid secondary
   lowScore: 35,     // week's bottom output — quiet-humor angle, low priority
 } as const
@@ -53,7 +53,7 @@ const THRESHOLD = {
   blowoutMult: 0.40,
   photoFinishMult: 0.03,
   shootoutMult: 1.25,
-  slugfestMult: 0.75,
+  rockFightMult: 0.75,
 } as const
 
 /** Stages where weekly matchup stories make sense — same set the
@@ -240,12 +240,16 @@ function detectShootout(
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   4. SLUGFEST
-   Both sides stayed at or below 75% of the weekly average — a
-   grind-it-out week where neither offense showed up.
+   4. ROCK FIGHT
+   Both sides stayed at or below 75% of the weekly average — an ugly,
+   nobody-can-move-the-ball week where neither offense showed up.
+   (Not "slugfest" — that idiom means the opposite, a high-scoring
+   brawl. "Rock fight" is the real sports term for this end of the
+   scale, and it pairs correctly against `points-shootout` as its
+   natural opposite.)
 ───────────────────────────────────────────────────────────────── */
 
-function detectSlugfest(
+function detectRockFight(
   data: LeagueDataH2HPoints,
   context: IssueContext,
   finalGames: LeagueDataPointsMatchup[],
@@ -254,15 +258,15 @@ function detectSlugfest(
   const out: StoryCandidate[] = []
   if (baseline == null || baseline <= 0) return out
 
-  const cutoff = THRESHOLD.slugfestMult * baseline
+  const cutoff = THRESHOLD.rockFightMult * baseline
   for (const m of finalGames) {
     if (m.homePoints > cutoff || m.awayPoints > cutoff) continue
 
     const pair = [m.homeTeamId, m.awayTeamId]
     out.push({
-      type: 'points-slugfest',
+      type: 'points-rock-fight',
       category: 'matchup',
-      weight: W.slugfest,
+      weight: W.rockFight,
       freshness: freshnessForWeekAge(0),
       scope: 'matchup',
       teamIds: pair,
@@ -277,7 +281,7 @@ function detectSlugfest(
         week: context.currentWeek,
       },
       signature: signature([
-        'points-slugfest',
+        'points-rock-fight',
         data.currentSeason,
         context.currentWeek,
         ...[...pair].sort(),
@@ -395,7 +399,7 @@ export function detectPointsStories(
     ...detectBlowout(data, context, finalGames, baseline),
     ...detectPhotoFinish(data, context, finalGames, baseline),
     ...detectShootout(data, context, finalGames, baseline),
-    ...detectSlugfest(data, context, finalGames, baseline),
+    ...detectRockFight(data, context, finalGames, baseline),
     ...detectHighLowScore(data, context, finalGames),
   ]
 }

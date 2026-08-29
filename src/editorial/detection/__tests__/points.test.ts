@@ -18,7 +18,7 @@ const game = (
   ({ id, homeTeamId: home, awayTeamId: away, status, homePoints: hp, awayPoints: ap })
 
 /** avg 100 makes the multiples easy to read: blowout ≥40, photo ≤3,
- *  shootout ≥125 each, slugfest ≤75 each. */
+ *  shootout ≥125 each, rock fight ≤75 each. */
 const league = (games: LeagueDataPointsMatchup[], avg = 100): LeagueDataH2HPoints =>
   ({
     format: 'h2h-points', sport: 'nfl',
@@ -60,8 +60,8 @@ describe('detectPointsStories', () => {
     expect(types(league([game('m1', 'a', 'b', 140, 132)]))).toContain('points-shootout')
   })
 
-  it('detects a slugfest when both sides are under 75%', () => {
-    expect(types(league([game('m1', 'a', 'b', 70, 66)]))).toContain('points-slugfest')
+  it('detects a rock fight when both sides are under 75%', () => {
+    expect(types(league([game('m1', 'a', 'b', 70, 66)]))).toContain('points-rock-fight')
   })
 
   it('names the week high and low across all games', () => {
