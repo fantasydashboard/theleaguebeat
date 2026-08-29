@@ -1961,9 +1961,36 @@ function buildSleeperSeasonRankHistory(
   return history
 }
 
-/** Current week's matchups for the Matchups page. `seasonComplete`
- *  (from `league.status`) picks between 'final' and 'live' — there's
- *  no partial-week signal available from this data shape alone. */
+/**
+ * Status is a per-WEEK property, not a per-LEAGUE one. `league.status`
+ * ('pre_draft' | 'drafting' | 'in_season' | 'complete') tells you where
+ * the SEASON is, not whether THIS week's games have been played and
+ * closed out — during the entire `in_season` phase (i.e. the whole time
+ * anyone is reading the magazine), the old `seasonComplete ? 'final' :
+ * 'live'` mapping marked every current-week matchup 'live' forever,
+ * which starved every points detector (they only look at 'final'
+ * games) for the entire season.
+ *
+ *  - No scoring at all yet (`weekHasBeenPlayed` false) → 'upcoming'.
+ *  - Every roster has a real score → the week is fully decided →
+ *    'final'. Also 'final' once the season itself is marked complete,
+ *    so a genuine end-of-season 0-point roster (all bench, no scoring)
+ *    still resolves rather than sitting at 'live' forever.
+ *  - Otherwise (some scores in, some rosters still at zero — mid-week,
+ *    early games done, late games pending) → 'live'.
+ */
+function weekMatchupStatus(
+  list: SleeperMatchup[],
+  seasonComplete: boolean,
+): LeagueDataPointsMatchup['status'] {
+  if (!weekHasBeenPlayed(list)) return 'upcoming'
+  const everyRosterScored = list.every((m) => (m.points ?? 0) !== 0)
+  return everyRosterScored || seasonComplete ? 'final' : 'live'
+}
+
+/** Current week's matchups for the Matchups page. Status is derived
+ *  per-week from the scoring itself (see `weekMatchupStatus`), not
+ *  from the league-level `seasonComplete` flag alone. */
 function buildSleeperCurrentWeekMatchups(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   currentWeek: number,
@@ -1971,11 +1998,12 @@ function buildSleeperCurrentWeekMatchups(
 ): LeagueDataPointsMatchup[] {
   const list = matchupsByWeek[String(currentWeek)] ?? []
   const pairs = pairSleeperMatchups(list)
+  const status = weekMatchupStatus(list, seasonComplete)
   return pairs.map(([a, b]) => ({
     id: `wk${currentWeek}-${a.matchup_id}`,
     homeTeamId: String(a.roster_id),
     awayTeamId: String(b.roster_id),
-    status: seasonComplete ? 'final' : 'live',
+    status,
     homePoints: a.points ?? 0,
     awayPoints: b.points ?? 0,
   }))

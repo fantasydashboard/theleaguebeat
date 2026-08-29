@@ -4,7 +4,9 @@ import {
   pointsWeeklyOutcomes,
   sleeperPoints,
 } from '@/editorial/adapters/sleeperAdapter'
+import { detectPointsStories } from '@/editorial/detection/points'
 import { sleeperFootballFixture } from '@/fixtures/sleeperFootball'
+import type { IssueContext } from '@/editorial/detection/types'
 
 const raw = sleeperFootballFixture as unknown as Parameters<typeof buildSleeperPointsData>[0]
 const data = buildSleeperPointsData(raw)
@@ -258,6 +260,70 @@ describe('buildSleeperPointsData — orphaned rosters', () => {
     })
     for (const name of names) expect(name.trim().length).toBeGreaterThan(0)
     expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+describe('buildSleeperPointsData — matchup status is per-week, not per-league (Fix 1)', () => {
+  // The captured fixture is a COMPLETED season (league.status: 'complete'),
+  // which is exactly why this bug was invisible to every other test: the
+  // buggy code (`status: seasonComplete ? 'final' : 'live'`) reads
+  // league.status directly, so it only ever looks correct when the whole
+  // season has already ended. Forcing status back to 'in_season' here
+  // reproduces a real live league mid-season — the case that matters,
+  // since NFL leagues are in_season for the entire time anyone is
+  // reading the magazine.
+  const inSeasonRaw = {
+    ...raw,
+    league: { ...raw.league, status: 'in_season' },
+  } as unknown as Parameters<typeof buildSleeperPointsData>[0]
+
+  it('still marks the fully-scored current week final, not live, for a live season', () => {
+    const inSeasonData = buildSleeperPointsData(inSeasonRaw)
+    const finals = (inSeasonData.currentWeekMatchups ?? []).filter((m) => m.status === 'final')
+    // Week 17 in the fixture is fully scored (every roster has a
+    // nonzero total) — a genuinely closed week regardless of whether
+    // Sleeper has separately marked the whole league 'complete'.
+    expect(finals.length).toBeGreaterThan(0)
+  })
+
+  it('detectPointsStories still produces stories for a live (in_season) league', () => {
+    // This is the actual end-to-end regression: the six points
+    // detectors only ever look at status === 'final' games. Before the
+    // fix, an in_season league produces zero 'final' matchups and thus
+    // zero stories for the ENTIRE season — football would ship dead.
+    const inSeasonData = buildSleeperPointsData(inSeasonRaw)
+    const context: IssueContext = {
+      currentWeek: inSeasonData.currentWeek,
+      seasonStage: 'playoffs',
+      issueDate: new Date('2026-01-05T12:00:00Z'),
+    }
+    expect(detectPointsStories(inSeasonData, context).length).toBeGreaterThan(0)
+  })
+
+  it('marks a week with no scoring at all as upcoming, not final', () => {
+    const upcomingRaw = {
+      ...raw,
+      league: { ...raw.league, status: 'in_season', settings: { ...raw.league.settings, leg: 18 } },
+      matchupsByWeek: {
+        ...raw.matchupsByWeek,
+        '18': raw.rosters.map((r) => ({
+          roster_id: r.roster_id,
+          matchup_id: null,
+          points: 0,
+          starters: [],
+          starters_points: [],
+          players: [],
+          players_points: {},
+          custom_points: null,
+        })),
+      },
+    } as unknown as Parameters<typeof buildSleeperPointsData>[0]
+
+    const upcomingData = buildSleeperPointsData(upcomingRaw)
+    // No pairs exist (all matchup_id: null), so currentWeekMatchups is
+    // empty either way — this pins that an unplayed week never sneaks
+    // through as 'final' via some other path, not the pairing itself.
+    expect(upcomingData.currentWeekMatchups ?? []).toEqual([])
   })
 })
 
