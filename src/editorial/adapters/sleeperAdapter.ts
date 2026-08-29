@@ -726,8 +726,15 @@ function computeWeeklyOutcomes(
   const weeks = [...matchupsByWeek.keys()].sort((a, b) => a - b)
   for (const week of weeks) {
     const list = matchupsByWeek.get(week) ?? []
-    // Group by matchup_id; compare points within each pair.
-    const byMatchupId = new Map<number, SleeperMatchup[]>()
+    // Group by matchup_id; compare points within each pair. Key is
+    // `number | null` -- matching the real Sleeper shape (a bye or
+    // out-of-bracket entry carries `matchup_id: null`) -- but this is
+    // a type-only widening: a JS Map already accepts a null key at
+    // runtime, so grouping behavior here (including the pre-existing,
+    // deliberately-untouched null-collision case -- see
+    // `pairSleeperMatchups`'s doc comment) is unchanged. Category-only;
+    // baseball's fix is a separate, later change.
+    const byMatchupId = new Map<number | null, SleeperMatchup[]>()
     for (const m of list) {
       const arr = byMatchupId.get(m.matchup_id) ?? []
       arr.push(m)
@@ -1096,7 +1103,9 @@ function buildSeasonRankHistory(
 
   for (const week of weeks) {
     const list = matchupsByWeek.get(week) ?? []
-    const byMatchupId = new Map<number, SleeperMatchup[]>()
+    // Type-only widening -- see the identical comment in
+    // computeWeeklyOutcomes above. Category-only.
+    const byMatchupId = new Map<number | null, SleeperMatchup[]>()
     for (const m of list) {
       const arr = byMatchupId.get(m.matchup_id) ?? []
       arr.push(m)
@@ -1279,8 +1288,15 @@ function buildPerTeamCatRecord(
   return out
 }
 
-function groupByMatchupId(matchups: SleeperMatchup[]): Map<number, SleeperMatchup[]> {
-  const byMatchupId = new Map<number, SleeperMatchup[]>()
+/** Shared by the category path (unfiltered -- carries the same latent
+ *  null-matchup_id phantom-pair bug baseball has always had, not
+ *  touched here) and `pairSleeperMatchups` (pre-filters nulls before
+ *  calling, so the `null` key branch below is never reached from that
+ *  caller). Key type is `number | null` to match the real Sleeper
+ *  shape; purely type-level, a JS Map already accepted a null key at
+ *  runtime before this widening. */
+function groupByMatchupId(matchups: SleeperMatchup[]): Map<number | null, SleeperMatchup[]> {
+  const byMatchupId = new Map<number | null, SleeperMatchup[]>()
   for (const m of matchups) {
     const arr = byMatchupId.get(m.matchup_id) ?? []
     arr.push(m)

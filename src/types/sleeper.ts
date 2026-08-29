@@ -57,7 +57,12 @@ export interface SleeperRoster {
 
 export interface SleeperMatchup {
   roster_id: number
-  matchup_id: number
+  // Real data: teams outside the playoff bracket (or on a bye) carry
+  // matchup_id: null -- verified against a real capture (6 of 10
+  // entries in week 17, 2 in week 15). Previously typed as a bare
+  // `number`, which made `pairSleeperMatchups`'s null-filter in
+  // sleeperAdapter.ts look like provably-dead code.
+  matchup_id: number | null
   points: number
   starters: string[]
   starters_points: number[]
