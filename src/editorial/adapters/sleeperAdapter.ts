@@ -56,6 +56,7 @@ import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
+import { DEFAULT_END_WEEK_BY_SPORT } from '../detection/helpers'
 
 /* ─────────────────────────────────────────────────────────────────
    CATEGORY MAPPING
@@ -1784,23 +1785,54 @@ function pairSleeperMatchups(list: SleeperMatchup[]): [SleeperMatchup, SleeperMa
 }
 
 /**
- * Per-roster chronological W/L/T sequence, derived from head-to-head
- * `points` comparisons across every captured week. Powers streak /
- * lastSix on the standings row.
- *
- * This is deliberately NOT the source of the season win/loss totals —
- * those come from `roster.settings` (see `buildSleeperPointsStandings`
- * below), which is Sleeper's authoritative record and can include
- * extra wins a league-average scoring rule grants that a pure
- * head-to-head walk can't see. This walk is a recent-form signal only.
+ * A week where every entry has `points === 0` hasn't actually been
+ * played yet — Sleeper returns zeroed entries for the upcoming week
+ * from Tuesday until kickoff. Treat it as absent rather than as a
+ * real (and league-wide impossible) 0-0 result; otherwise every
+ * team's streak collapses to a fake tie and any average that sums
+ * over it gets diluted by weeks that haven't happened.
  */
-function pointsWeeklyOutcomes(
+function weekHasBeenPlayed(list: SleeperMatchup[]): boolean {
+  return list.some((m) => (m.points ?? 0) !== 0)
+}
+
+/**
+ * Per-roster chronological W/L/T sequence, derived from head-to-head
+ * `points` comparisons across completed regular-season weeks only
+ * (weeks 1..`maxWeek`, skipping any week that hasn't been played).
+ * Powers streak / lastSix on the standings row.
+ *
+ * `maxWeek` matters: Sleeper's own `roster.settings.wins/losses/ties`
+ * — and its cached `metadata.record`/`metadata.streak` — never include
+ * playoff weeks (verified against the real capture: `record` is 14
+ * characters long because the regular season is 14 weeks, not because
+ * the field is stale). Walking past `maxWeek` would tally playoff
+ * results into a "record" that Sleeper's own data never does, putting
+ * this walk's streak/lastSix out of sync with the row's own catWins/
+ * catLosses (which do come from `roster.settings`) on the exact same
+ * standings row.
+ *
+ * This walk is also deliberately NOT the source of the season W/L/T
+ * totals — those come from `roster.settings` (see
+ * `buildSleeperPointsStandings` below), which is Sleeper's
+ * authoritative record and can include extra wins a league-average
+ * scoring rule grants that a pure head-to-head walk can't see. This
+ * walk is a recent-form signal only, bounded to agree with the totals
+ * rather than to reproduce them independently.
+ */
+export function pointsWeeklyOutcomes(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
+  maxWeek: number,
 ): Map<number, WLT[]> {
   const out = new Map<number, WLT[]>()
-  const weeks = Object.keys(matchupsByWeek).map(Number).sort((a, b) => a - b)
+  const weeks = Object.keys(matchupsByWeek)
+    .map(Number)
+    .filter((w) => w <= maxWeek)
+    .sort((a, b) => a - b)
   for (const week of weeks) {
-    const pairs = pairSleeperMatchups(matchupsByWeek[String(week)] ?? [])
+    const list = matchupsByWeek[String(week)] ?? []
+    if (!weekHasBeenPlayed(list)) continue
+    const pairs = pairSleeperMatchups(list)
     for (const [a, b] of pairs) {
       const ap = a.points ?? 0
       const bp = b.points ?? 0
@@ -1817,14 +1849,17 @@ function pointsWeeklyOutcomes(
 
 /**
  * Standings from `roster.settings` — Sleeper's authoritative season
- * record — not a matchup-by-matchup replay. Ranking is the standard
- * Sleeper ordering: wins desc, then season points desc, dense 1..N.
+ * record — not a matchup-by-matchup replay. Ranking sorts on win%
+ * (wins + half of ties, so a 9-4-1 team doesn't rank below a plain
+ * 9-5 team), then season points desc, dense 1..N — matching the
+ * category path's own tiebreak order.
  */
 function buildSleeperPointsStandings(
   rosters: SleeperRoster[],
   matchupsByWeek: Record<string, SleeperMatchup[]>,
+  regularSeasonBoundWeek: number,
 ): CategoryLeagueDataStanding[] {
-  const outcomesByRoster = pointsWeeklyOutcomes(matchupsByWeek)
+  const outcomesByRoster = pointsWeeklyOutcomes(matchupsByWeek, regularSeasonBoundWeek)
 
   const rows = rosters.map((r) => ({
     rosterId: r.roster_id,
@@ -1835,7 +1870,9 @@ function buildSleeperPointsStandings(
   }))
 
   rows.sort((a, b) => {
-    if (b.wins !== a.wins) return b.wins - a.wins
+    const aScore = a.wins + 0.5 * a.ties
+    const bScore = b.wins + 0.5 * b.ties
+    if (bScore !== aScore) return bScore - aScore
     if (b.fpts !== a.fpts) return b.fpts - a.fpts
     return a.rosterId - b.rosterId
   })
@@ -1864,20 +1901,31 @@ function buildSleeperPointsStandings(
 
 /**
  * Season rank history: per-week standings as the season unfolded,
- * from cumulative head-to-head record (see `pointsWeeklyOutcomes` for
- * why this is a separate walk from the final standings' win totals).
+ * from cumulative head-to-head record, bounded to the same completed
+ * regular-season weeks as `buildSleeperPointsStandings` (see
+ * `pointsWeeklyOutcomes` for why this is a separate walk from the
+ * final standings' win totals). Using the same bound + the same
+ * win%-based ordering as the standings sort means the two can't
+ * disagree about who's in third place the way an unbounded,
+ * wins-only version could.
  */
 function buildSleeperSeasonRankHistory(
   rosters: SleeperRoster[],
   matchupsByWeek: Record<string, SleeperMatchup[]>,
+  regularSeasonBoundWeek: number,
 ): CategoryLeagueDataWeeklyRanks[] {
-  const weeks = Object.keys(matchupsByWeek).map(Number).sort((a, b) => a - b)
-  const cumulative = new Map<number, { wins: number; points: number }>()
-  for (const r of rosters) cumulative.set(r.roster_id, { wins: 0, points: 0 })
+  const weeks = Object.keys(matchupsByWeek)
+    .map(Number)
+    .filter((w) => w <= regularSeasonBoundWeek)
+    .sort((a, b) => a - b)
+  const cumulative = new Map<number, { wins: number; ties: number; points: number }>()
+  for (const r of rosters) cumulative.set(r.roster_id, { wins: 0, ties: 0, points: 0 })
 
   const history: CategoryLeagueDataWeeklyRanks[] = []
   for (const week of weeks) {
-    const pairs = pairSleeperMatchups(matchupsByWeek[String(week)] ?? [])
+    const list = matchupsByWeek[String(week)] ?? []
+    if (!weekHasBeenPlayed(list)) continue
+    const pairs = pairSleeperMatchups(list)
     for (const [a, b] of pairs) {
       const aRec = cumulative.get(a.roster_id)
       const bRec = cumulative.get(b.roster_id)
@@ -1888,15 +1936,20 @@ function buildSleeperSeasonRankHistory(
       bRec.points += bp
       if (ap > bp) aRec.wins++
       else if (bp > ap) bRec.wins++
+      else { aRec.ties++; bRec.ties++ }
     }
 
     const snapshot = rosters
       .map((r) => {
         const rec = cumulative.get(r.roster_id)!
-        return { teamId: String(r.roster_id), wins: rec.wins, points: rec.points }
+        return {
+          teamId: String(r.roster_id),
+          score: rec.wins + 0.5 * rec.ties,
+          points: rec.points,
+        }
       })
       .sort((a, b) => {
-        if (b.wins !== a.wins) return b.wins - a.wins
+        if (b.score !== a.score) return b.score - a.score
         if (b.points !== a.points) return b.points - a.points
         return Number(a.teamId) - Number(b.teamId)
       })
@@ -1928,15 +1981,22 @@ function buildSleeperCurrentWeekMatchups(
   }))
 }
 
-/** Mean points scored across every captured team-week. `undefined`
- *  when no weeks have been captured — never fabricated as 0. */
+/** Mean points scored across every captured team-week that has
+ *  actually been played (see `weekHasBeenPlayed` — a week where every
+ *  entry is still zeroed hasn't happened yet and would silently drag
+ *  the average down). Not bounded to the regular season: playoff
+ *  weeks are real scoring weeks too, and this is a league-wide
+ *  scoring-pace stat, not a record. `undefined` when no weeks have
+ *  been captured — never fabricated as 0. */
 function computeWeeklyPointsAverage(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
 ): number | undefined {
   let sum = 0
   let count = 0
   for (const week of Object.keys(matchupsByWeek)) {
-    for (const m of matchupsByWeek[week] ?? []) {
+    const list = matchupsByWeek[week] ?? []
+    if (!weekHasBeenPlayed(list)) continue
+    for (const m of list) {
       if (typeof m.points === 'number') {
         sum += m.points
         count++
@@ -1978,8 +2038,20 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   // (owner_id: null → no user match → falls straight to the id form).
   const teams = buildTeams(rosters, users)
 
-  const standings = buildSleeperPointsStandings(rosters, matchupsByWeek)
-  const seasonRankHistory = buildSleeperSeasonRankHistory(rosters, matchupsByWeek)
+  // Both the standings walk (streak/lastSix) and the season rank
+  // history must stop where Sleeper's own settings.wins/losses/ties
+  // stop — the regular season — or they silently disagree with each
+  // other and with the row's own catWins/catLosses. When the league
+  // never configured playoffs (regularSeasonEndWeek undefined), fall
+  // back to the NFL default rather than walking the entire capture.
+  const regularSeasonBoundWeek = regularSeasonEndWeek ?? DEFAULT_END_WEEK_BY_SPORT.nfl
+
+  const standings = buildSleeperPointsStandings(rosters, matchupsByWeek, regularSeasonBoundWeek)
+  const seasonRankHistory = buildSleeperSeasonRankHistory(
+    rosters,
+    matchupsByWeek,
+    regularSeasonBoundWeek,
+  )
   const currentWeekMatchups = buildSleeperCurrentWeekMatchups(
     matchupsByWeek,
     currentWeek,
