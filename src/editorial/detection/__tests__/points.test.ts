@@ -128,6 +128,25 @@ describe('detectPointsStories', () => {
     expect(out).toContain('points-photo-finish')
   })
 
+  it('prefers previousWeekMatchups over a live currentWeekMatchups', () => {
+    // The current week is live (no final games there at all); the
+    // detectors must fall back to the closed previous week rather than
+    // finding nothing.
+    const data = {
+      ...league([game('m1', 'a', 'b', 100, 100, 'live')]),
+      previousWeekMatchups: [game('p1', 'a', 'b', 145, 100, 'final')],
+    } as LeagueDataH2HPoints
+    expect(types(data)).toContain('points-blowout')
+  })
+
+  it('falls back to final entries in currentWeekMatchups when previousWeekMatchups is absent', () => {
+    // Covers a completed season: there is no "next" week to have
+    // closed the current one out, so the current week's own final
+    // games are the only source available.
+    const data = league([game('m1', 'a', 'b', 145, 100, 'final')])
+    expect(types(data)).toContain('points-blowout')
+  })
+
   it('gives every story a stable signature', () => {
     const out = detectPointsStories(league([game('m1', 'a', 'b', 145, 100)]), context)
     for (const s of out) expect(s.signature.length).toBeGreaterThan(0)

@@ -1987,21 +1987,34 @@ function buildSleeperSeasonRankHistory(
  * which starved every points detector (they only look at 'final'
  * games) for the entire season.
  *
+ * A tempting "fix" is to call the week closed once every roster has
+ * scored something nonzero. That's wrong: Sleeper points ACCUMULATE
+ * LIVE all game day, so "everyone has scored" is true within minutes
+ * of the Sunday 1pm slate kicking off — from then until Tuesday
+ * rollover (including the entire Monday delivery window, before
+ * Monday Night Football) that heuristic would stamp the live week
+ * 'final' and print a closed scoreboard over a game still being
+ * played. Worse, `list.every(...)` is league-wide, so a single
+ * abandoned 0-point roster pins the WHOLE league at 'live' forever —
+ * the original bug in miniature. "Everyone has scored something" is
+ * simply not a closure signal, so it plays no part here.
+ *
  *  - No scoring at all yet (`weekHasBeenPlayed` false) → 'upcoming'.
- *  - Every roster has a real score → the week is fully decided →
- *    'final'. Also 'final' once the season itself is marked complete,
- *    so a genuine end-of-season 0-point roster (all bench, no scoring)
- *    still resolves rather than sitting at 'live' forever.
- *  - Otherwise (some scores in, some rosters still at zero — mid-week,
- *    early games done, late games pending) → 'live'.
+ *  - The season itself is marked complete → 'final' (a genuinely
+ *    closed season really is over, current week included).
+ *  - Otherwise → 'live'. The current week is ALWAYS live while the
+ *    season is in_season — closure for the current week is not
+ *    something this function can honestly determine from Sleeper's
+ *    per-roster point totals alone. Callers that need a genuinely
+ *    finished week should look at the PREVIOUS week instead (see
+ *    `buildSleeperPreviousWeekMatchups`), which is unambiguously over.
  */
 function weekMatchupStatus(
   list: SleeperMatchup[],
   seasonComplete: boolean,
 ): LeagueDataPointsMatchup['status'] {
   if (!weekHasBeenPlayed(list)) return 'upcoming'
-  const everyRosterScored = list.every((m) => (m.points ?? 0) !== 0)
-  return everyRosterScored || seasonComplete ? 'final' : 'live'
+  return seasonComplete ? 'final' : 'live'
 }
 
 /** Current week's matchups for the Matchups page. Status is derived
@@ -2020,6 +2033,42 @@ function buildSleeperCurrentWeekMatchups(
     homeTeamId: String(a.roster_id),
     awayTeamId: String(b.roster_id),
     status,
+    homePoints: a.points ?? 0,
+    awayPoints: b.points ?? 0,
+  }))
+}
+
+/**
+ * Previous week's matchups, unconditionally stamped 'final'. Unlike
+ * the current week (which can't be honestly called closed from
+ * per-roster point totals — see `weekMatchupStatus` above), a
+ * completed PRIOR week genuinely is final: Sleeper only moves
+ * `leg`/the current week forward once the prior week's games are
+ * done. Mirrors the Yahoo (`yahooAdapter.ts`) / ESPN
+ * (`espnAdapter.ts`) adapters' `previousWeekMatchups` pattern, which
+ * is what the football points detectors (`detection/points.ts`) and
+ * the Beat's Monday recap (`render-beat-points.ts`) are built around:
+ * a Monday recap is about the week that FINISHED, not the one still
+ * in progress.
+ *
+ * Returns `[]` when there is no prior week (`currentWeek <= 1`) or
+ * Sleeper hasn't returned that week's data yet (early-season visits) —
+ * never fabricated.
+ */
+function buildSleeperPreviousWeekMatchups(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  currentWeek: number,
+): LeagueDataPointsMatchup[] {
+  const previousWeek = currentWeek - 1
+  if (previousWeek < 1) return []
+  const list = matchupsByWeek[String(previousWeek)] ?? []
+  if (!weekHasBeenPlayed(list)) return []
+  const pairs = pairSleeperMatchups(list)
+  return pairs.map(([a, b]) => ({
+    id: `wk${previousWeek}-${a.matchup_id}`,
+    homeTeamId: String(a.roster_id),
+    awayTeamId: String(b.roster_id),
+    status: 'final' as const,
     homePoints: a.points ?? 0,
     awayPoints: b.points ?? 0,
   }))
@@ -2061,9 +2110,18 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   // No clock fallback here -- this function is documented PURE (see
   // the section header above: "no I/O, no clock, no randomness").
   // `league.season` is always present on real Sleeper data; if it's
-  // ever missing, Number(undefined) honestly resolves to NaN rather
-  // than silently fabricating "the current year" as a season.
-  const currentSeason = Number(league.season)
+  // ever missing or unparseable, Number(...) would silently resolve
+  // to NaN, which then poisons every story signature downstream
+  // (`NaN` joined into a string is the literal text "NaN"). Since a
+  // `new Date()` clock read is off the table for a function documented
+  // pure, fail loudly instead of smuggling NaN through.
+  const seasonNum = Number(league.season)
+  if (!Number.isFinite(seasonNum)) {
+    throw new Error(
+      `buildSleeperPointsData: league.season "${league.season}" did not parse to a finite number`,
+    )
+  }
+  const currentSeason = seasonNum
   const currentWeek = clampWeek(league.settings?.leg ?? 1)
 
   // Sleeper returns 0 for playoff_week_start when the commissioner
@@ -2106,6 +2164,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     currentWeek,
     league.status === 'complete',
   )
+  const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
 
   return {
@@ -2119,6 +2178,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     regularSeasonEndWeek,
     teams,
     currentWeekMatchups,
+    previousWeekMatchups,
     weeklyPointsAverage,
     standings,
     seasonRankHistory,

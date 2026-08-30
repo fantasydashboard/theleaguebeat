@@ -389,8 +389,18 @@ export function detectPointsStories(
   // blowout, etc. in matchups.ts.
   if (data.format !== 'h2h-points') return []
 
-  const allGames = data.currentWeekMatchups ?? []
-  const finalGames = allGames.filter(isFinal)
+  // Source from the last CLOSED week, not the one in progress — a
+  // Monday recap is about the week that FINISHED, not the live one.
+  // `previousWeekMatchups` (populated by the Yahoo / ESPN / Sleeper
+  // adapters as a completed, unconditionally-final prior week) is
+  // preferred; fall back to any 'final' entries already sitting in
+  // `currentWeekMatchups`, which covers a completed season where the
+  // "current" week really is final and there is no later week to defer
+  // to.
+  const previousFinalGames = (data.previousWeekMatchups ?? []).filter(isFinal)
+  const finalGames = previousFinalGames.length > 0
+    ? previousFinalGames
+    : (data.currentWeekMatchups ?? []).filter(isFinal)
   if (finalGames.length === 0) return []
 
   const baseline = resolveBaseline(data, finalGames)

@@ -61,4 +61,16 @@ describe('renderPointsMatchupsPage', () => {
     const r = renderPointsMatchupsPage(base([live('m', 't1', 't2', 30, 28, 100, 98)]))
     expect(JSON.stringify(r)).not.toMatch(/—/)
   })
+
+  it('gives an all-upcoming week its own honest framing, not "Week sealed"', () => {
+    const upcoming = (id: string, h: string, a: string): LeagueDataPointsMatchup => ({
+      id, homeTeamId: h, awayTeamId: a, status: 'upcoming', homePoints: 0, awayPoints: 0,
+    })
+    const r = renderPointsMatchupsPage(base([upcoming('m1', 't1', 't2')]))
+    expect(r.subHeadline).not.toMatch(/sealed/i)
+    expect(r.matchupOfWeek?.eyebrow).toContain('UPCOMING')
+    expect(r.matchupCopy.m1.eyebrow).toBe('UPCOMING')
+    expect(r.quickReads.find((q) => q.label === 'upcoming')?.value).toBe('1')
+    expect(JSON.stringify(r)).not.toMatch(/—/)
+  })
 })

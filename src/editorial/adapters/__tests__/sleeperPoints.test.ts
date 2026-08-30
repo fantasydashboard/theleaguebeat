@@ -277,21 +277,31 @@ describe('buildSleeperPointsData — matchup status is per-week, not per-league 
     league: { ...raw.league, status: 'in_season' },
   } as unknown as Parameters<typeof buildSleeperPointsData>[0]
 
-  it('still marks the fully-scored current week final, not live, for a live season', () => {
+  it('marks the fully-scored CURRENT week live, not final, for a live season', () => {
+    // This is the regression pin for the failed fix: Sleeper points
+    // accumulate live all game day, so "every roster has scored
+    // something nonzero" is true within minutes of the Sunday slate
+    // kicking off — from then until Tuesday rollover (including the
+    // entire Monday delivery window, before Monday Night Football) the
+    // week is very much still live, not decided. Only `league.status
+    // === 'complete'` may promote the CURRENT week to 'final'.
     const inSeasonData = buildSleeperPointsData(inSeasonRaw)
-    const finals = (inSeasonData.currentWeekMatchups ?? []).filter((m) => m.status === 'final')
-    // Week 17 in the fixture is fully scored (every roster has a
-    // nonzero total) — a genuinely closed week regardless of whether
-    // Sleeper has separately marked the whole league 'complete'.
-    expect(finals.length).toBeGreaterThan(0)
+    const currentMatchups = inSeasonData.currentWeekMatchups ?? []
+    expect(currentMatchups.length).toBeGreaterThan(0)
+    for (const m of currentMatchups) expect(m.status).toBe('live')
   })
 
-  it('detectPointsStories still produces stories for a live (in_season) league', () => {
+  it('detectPointsStories still produces stories for a live (in_season) league, sourced from the previous week', () => {
     // This is the actual end-to-end regression: the six points
-    // detectors only ever look at status === 'final' games. Before the
-    // fix, an in_season league produces zero 'final' matchups and thus
-    // zero stories for the ENTIRE season — football would ship dead.
+    // detectors need at least one 'final' game to work from. The
+    // current week is never final while the season is in_season, so
+    // detection has to fall back to the last CLOSED week
+    // (previousWeekMatchups) — a completed prior week genuinely is
+    // final. Before the original bug's fix, an in_season league
+    // produced zero 'final' matchups anywhere and thus zero stories
+    // for the ENTIRE season — football would ship dead.
     const inSeasonData = buildSleeperPointsData(inSeasonRaw)
+    expect(inSeasonData.previousWeekMatchups?.length).toBeGreaterThan(0)
     const context: IssueContext = {
       currentWeek: inSeasonData.currentWeek,
       seasonStage: 'playoffs',
@@ -300,15 +310,53 @@ describe('buildSleeperPointsData — matchup status is per-week, not per-league 
     expect(detectPointsStories(inSeasonData, context).length).toBeGreaterThan(0)
   })
 
-  it('marks a week with no scoring at all as upcoming, not final', () => {
+  it('still produces stories when one current-week roster is an abandoned 0-point team', () => {
+    // The mirror-image regression: `list.every(...)` is league-wide, so
+    // ONE abandoned 0-point roster used to pin the WHOLE league at
+    // 'live' forever (the original bug, in miniature). Since detection
+    // now sources from the previous (closed) week rather than the
+    // current one, an abandoned roster in the current week must not
+    // block story production at all.
+    const abandonedRaw = {
+      ...inSeasonRaw,
+      matchupsByWeek: {
+        ...inSeasonRaw.matchupsByWeek,
+        '17': (inSeasonRaw.matchupsByWeek['17'] ?? []).map((m: any, i: number) =>
+          i === 0 ? { ...m, points: 0 } : m,
+        ),
+      },
+    } as unknown as Parameters<typeof buildSleeperPointsData>[0]
+    const abandonedData = buildSleeperPointsData(abandonedRaw)
+    const context: IssueContext = {
+      currentWeek: abandonedData.currentWeek,
+      seasonStage: 'playoffs',
+      issueDate: new Date('2026-01-05T12:00:00Z'),
+    }
+    expect(detectPointsStories(abandonedData, context).length).toBeGreaterThan(0)
+  })
+
+  it('populates previousWeekMatchups, every entry final', () => {
+    const inSeasonData = buildSleeperPointsData(inSeasonRaw)
+    const prev = inSeasonData.previousWeekMatchups ?? []
+    expect(prev.length).toBeGreaterThan(0)
+    for (const m of prev) expect(m.status).toBe('final')
+  })
+
+  it('marks a week with no scoring at all as upcoming, asserted on a real built matchup', () => {
+    // The previous version of this test set every entry's matchup_id
+    // to null, so `pairSleeperMatchups` filtered everything out and it
+    // asserted `toEqual([])` — which passes even if the status logic
+    // were deleted entirely. Give the entries REAL matchup_ids (paired
+    // 2-by-2, all at zero points) so 'upcoming' is actually asserted
+    // against a matchup the pairing logic actually built.
     const upcomingRaw = {
       ...raw,
       league: { ...raw.league, status: 'in_season', settings: { ...raw.league.settings, leg: 18 } },
       matchupsByWeek: {
         ...raw.matchupsByWeek,
-        '18': raw.rosters.map((r) => ({
+        '18': raw.rosters.map((r, i) => ({
           roster_id: r.roster_id,
-          matchup_id: null,
+          matchup_id: Math.floor(i / 2) + 1,
           points: 0,
           starters: [],
           starters_points: [],
@@ -320,10 +368,24 @@ describe('buildSleeperPointsData — matchup status is per-week, not per-league 
     } as unknown as Parameters<typeof buildSleeperPointsData>[0]
 
     const upcomingData = buildSleeperPointsData(upcomingRaw)
-    // No pairs exist (all matchup_id: null), so currentWeekMatchups is
-    // empty either way — this pins that an unplayed week never sneaks
-    // through as 'final' via some other path, not the pairing itself.
-    expect(upcomingData.currentWeekMatchups ?? []).toEqual([])
+    const currentMatchups = upcomingData.currentWeekMatchups ?? []
+    expect(currentMatchups.length).toBeGreaterThan(0)
+    for (const m of currentMatchups) expect(m.status).toBe('upcoming')
+  })
+})
+
+describe('buildSleeperPointsData — NaN season guard (Fix 6)', () => {
+  it('fails loudly rather than producing a NaN season from an unparseable league.season', () => {
+    // Number(league.season) with no fallback silently yields NaN on
+    // any unparseable value, which then poisons every story signature
+    // downstream. No `new Date()` clock read is allowed here (the
+    // function is documented pure) — the only honest option left is to
+    // fail loudly.
+    const badRaw = {
+      ...raw,
+      league: { ...raw.league, season: 'TBD' },
+    } as unknown as Parameters<typeof buildSleeperPointsData>[0]
+    expect(() => buildSleeperPointsData(badRaw)).toThrow()
   })
 })
 

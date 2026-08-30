@@ -75,6 +75,10 @@ function renderSubHeadline(matchups: LeagueDataPointsMatchup[]): string {
   if (matchups.length === 0) {
     return 'Weekly points. Today\'s scoreboard. Coverage opens when the schedule lights up.'
   }
+  const upcoming = matchups.filter((m) => m.status === 'upcoming').length
+  if (upcoming === matchups.length) {
+    return 'Weekly points. Kickoff hasn\'t happened yet. Check back once the games get going.'
+  }
   const live = matchups.filter((m) => m.status === 'live').length
   if (live === 0) {
     return 'Week sealed. The scoreboard, in order — who pulled away, who was caught.'
@@ -373,6 +377,16 @@ function renderMatchupOfWeek(
     }
   }
 
+  if (hero.status === 'upcoming') {
+    return {
+      matchupId: hero.id,
+      eyebrow: 'Matchup of the week · UPCOMING',
+      headline: `${homeName} meets ${awayName}. Kickoff hasn't happened yet.`,
+      body: 'The week is still ahead. Check back once the games get going.',
+      subContext: `${homeName} vs. ${awayName}`,
+    }
+  }
+
   const leaderProj = homeAhead ? hero.homeProjected : hero.awayProjected
   const trailerProj = homeAhead ? hero.awayProjected : hero.homeProjected
   const leaderCur = homeAhead ? hero.homePoints : hero.awayPoints
@@ -484,6 +498,15 @@ function renderLine(
     }
   }
 
+  if (m.status === 'upcoming') {
+    const home = teamName(m.homeTeamId)
+    const away = teamName(m.awayTeamId)
+    return {
+      eyebrow: 'UPCOMING',
+      status: `${home} vs. ${away}. Kickoff hasn't happened yet.`,
+    }
+  }
+
   const leaderProj = homeAhead ? m.homeProjected : m.awayProjected
   const trailerProj = homeAhead ? m.awayProjected : m.homeProjected
   const leaderCur = homeAhead ? m.homePoints : m.awayPoints
@@ -520,8 +543,10 @@ function renderQuickReads(
   const out: RenderedPointsQuickRead[] = []
   const live = matchups.filter((m) => m.status === 'live').length
   const final = matchups.filter((m) => m.status === 'final').length
+  const upcoming = matchups.filter((m) => m.status === 'upcoming').length
   if (live > 0) out.push({ label: 'live', value: String(live) })
   if (final > 0) out.push({ label: 'final', value: String(final) })
+  if (upcoming > 0) out.push({ label: 'upcoming', value: String(upcoming) })
   if (leagueAverage != null && Number.isFinite(leagueAverage)) {
     out.push({ label: 'league avg', value: leagueAverage.toFixed(1) })
   }
