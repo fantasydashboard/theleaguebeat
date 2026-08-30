@@ -2058,7 +2058,12 @@ function computeWeeklyPointsAverage(
 export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoints {
   const { league, rosters, users, matchupsByWeek } = raw
 
-  const currentSeason = Number(league.season) || new Date().getFullYear()
+  // No clock fallback here -- this function is documented PURE (see
+  // the section header above: "no I/O, no clock, no randomness").
+  // `league.season` is always present on real Sleeper data; if it's
+  // ever missing, Number(undefined) honestly resolves to NaN rather
+  // than silently fabricating "the current year" as a season.
+  const currentSeason = Number(league.season)
   const currentWeek = clampWeek(league.settings?.leg ?? 1)
 
   // Sleeper returns 0 for playoff_week_start when the commissioner
