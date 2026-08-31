@@ -66,9 +66,13 @@
       >
         <span class="sport-card-art" aria-hidden="true">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Seams bow along the LEFT and RIGHT edges, the way a real
+                 baseball's do. They previously ran corner-to-corner through
+                 the middle, which at 40px merged into one diagonal slash and
+                 read as a "prohibited" sign on the one sport that is live. -->
             <circle cx="12" cy="12" r="9"/>
-            <path d="M6.3 6.3c2.4 1 4.2 2.8 5.2 5.2"/>
-            <path d="M17.7 17.7c-2.4-1-4.2-2.8-5.2-5.2"/>
+            <path d="M6.2 5.4C8.8 8.2 8.8 15.8 6.2 18.6"/>
+            <path d="M17.8 5.4C15.2 8.2 15.2 15.8 17.8 18.6"/>
           </svg>
         </span>
         <span class="sport-card-name">Baseball</span>
