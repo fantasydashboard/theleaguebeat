@@ -12,18 +12,21 @@
  * "Decided in the final at-bats." was found sitting in the POINTS render
  * path, where football reads it. This checker makes that class of leak a
  * test failure rather than something a reader discovers.
+ *
+ * WHAT THIS IS AND ISN'T: a TEST-TIME lint over the football variant
+ * corpus (Tasks 2-4's copy libraries), not a runtime filter over
+ * anything a real user types. Nothing here ever runs against live
+ * league data — leagues don't get to name themselves through this
+ * checker. That's what lets it be strict about sport nouns: it can't
+ * tell a proper noun from a common one, and it shouldn't try. The
+ * corpus side of that deal is that fixture and demo team names must
+ * avoid wrong-sport nouns ("Bullpen Theology" is a fine baseball team
+ * name and a bad choice to test football copy against).
  */
 
 /** Words that always signal a different sport. Kept deliberately short:
  *  only terms with no football meaning at all. "Sweep" and "rally" are
- *  cross-sport and are NOT listed.
- *
- *  Matched case-sensitively against the ORIGINAL string, lowercase only.
- *  Team names are Title Case throughout this codebase ("Bullpen
- *  Theology" is a canonical example team in EDITORIAL.md itself), so a
- *  capitalized "Bullpen" is a mascot name, not the narrative noun. Only
- *  the lowercase, mid-sentence usage ("the bullpen collapsed") is what
- *  the leak this checker guards against actually looks like. */
+ *  cross-sport and are NOT listed. */
 const WRONG_SPORT = [
   'at-bat', 'at-bats', 'inning', 'innings', 'bullpen', 'dinger',
   'strikeout', 'strikeouts', 'mound', 'batting', 'pitcher', 'pitchers',
@@ -61,9 +64,7 @@ export function voiceViolations(s: string): string[] {
   }
 
   for (const w of WRONG_SPORT) {
-    // No 'i' flag, matched against `s` (not lowercased): see the note on
-    // WRONG_SPORT above for why case sensitivity is load-bearing here.
-    if (new RegExp(`\\b${w}\\b`).test(s)) {
+    if (new RegExp(`\\b${w}\\b`, 'i').test(s)) {
       // Report the singular stem so callers see one label per concept.
       out.push(`wrong-sport:${w.replace(/s$/, '')}`)
     }

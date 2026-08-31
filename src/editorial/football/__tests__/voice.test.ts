@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { voiceViolations, assertVoiceClean, wordCount } from '@/editorial/football/voice'
 
 describe('voiceViolations', () => {
-  it('passes a canonical sentence from EDITORIAL.md', () => {
-    expect(voiceViolations('Bullpen Theology just took the throne.')).toEqual([])
+  it('passes canonical football sentences from EDITORIAL.md', () => {
     expect(voiceViolations('Nabers vanished. Three catches on seven targets.')).toEqual([])
+    expect(voiceViolations('Reign Delay needed a real game. They got eighty-four.')).toEqual([])
   })
 
   it('catches em dashes', () => {
@@ -55,6 +55,15 @@ describe('voiceViolations', () => {
     expect(voiceViolations('Decided in the final at-bats.')).toContain('wrong-sport:at-bat')
     expect(voiceViolations('The bullpen collapsed.')).toContain('wrong-sport:bullpen')
     expect(voiceViolations('Seven innings of work.')).toContain('wrong-sport:inning')
+  })
+
+  /* This checker is a test-time lint over copy WE write, not a runtime
+   * filter over data users supply — so it has no obligation to guess
+   * whether a capitalized wrong-sport word is a proper noun. It flags
+   * the word regardless. The corpus keeps its half of the bargain by
+   * never giving a football fixture team a baseball-punning name. */
+  it('flags a wrong-sport noun even when capitalized, by design', () => {
+    expect(voiceViolations('Bullpen collapsed after the ninth.')).toContain('wrong-sport:bullpen')
   })
 
   it('catches sentences over 30 words', () => {
