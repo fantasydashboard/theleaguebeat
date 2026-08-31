@@ -20,6 +20,15 @@
  *   - A bad week costs more here than in a 162-game sport. There are
  *     only 14, and the low-score line says so out loud.
  *
+ * A LOSING WEEK IS NOT AUTOMATICALLY A BAD WEEK. Whether the loser gets
+ * written down is a question about the LOSER'S score against the league
+ * average, never about the margin. 131.7 in a 109.4 league is a good
+ * week that ran into a monster, and calling it "never in it" because the
+ * winner hung 170 is factually wrong, not merely unkind. Everything
+ * disparaging gates on `canDisparage`; the above-average loser gets
+ * their own variants instead, because "put up 131.7 and still lost" is
+ * the true story of that game.
+ *
  * HONESTY LIMITS. The engine sees final weekly totals and nothing else.
  * It does not know when a lead was built, who was on the bench, or what
  * the projections said. So there is no "up 40 by the 4pm slate" and no
@@ -64,6 +73,7 @@ export function footballFinalHeadlines(a: FinalArgs): Array<string | null> {
   const wp = pts(a.winnerPts)
   const lp = pts(a.loserPts)
   const margin = pts(a.winnerPts - a.loserPts)
+  const avg = pts(a.leagueAvg)
 
   // A loser who scored nothing, or a scoreline with no gap at all, is
   // missing data rather than a story. Neither framing runs on it, and
@@ -74,20 +84,31 @@ export function footballFinalHeadlines(a: FinalArgs): Array<string | null> {
   const played = a.loserPts > 0 && decided
   const isBlowout = played && gap >= a.leagueAvg * BLOWOUT_SHARE
   const isPhotoFinish = played && gap <= a.leagueAvg * PHOTO_FINISH_SHARE
+  const canDisparage = a.loserPts < a.leagueAvg
+  const loserWentOff = a.loserPts >= a.leagueAvg && decided
 
   return [
-    // "who managed 108.9" is a put-down, so it stays off the games where
-    // the loser did not deserve one.
-    isPhotoFinish ? null : `${w} hung ${wp} on ${l}, who managed ${lp}.`,
+    // "who managed 131.7" is a put-down. Whether the loser earned one is
+    // a question about the LOSER'S score, not about the margin: 131.7 on
+    // a 109.4 average is a good week that ran into a monster.
+    isPhotoFinish || !canDisparage ? null : `${w} hung ${wp} on ${l}, who managed ${lp}.`,
     `${wp} to ${lp}. ${w} over ${l}, week ${week}.`,
     `${w} took week ${week} from ${l}, ${wp} to ${lp}.`,
     `Final: ${w} ${wp}, ${l} ${lp}.`,
+    `${w} ${wp}. ${l} ${lp}. Week ${week}.`,
     decided ? `${w} outscored ${l} by ${margin}. ${wp} to ${lp}.` : null,
     `${l} put up ${lp}. ${w} answered with ${wp}.`,
 
-    isBlowout ? `Never a game. ${w} ${wp}, ${l} ${lp}.` : null,
+    // A loser above the league average lost to a big week, not to their
+    // own bad one, and gets a headline that says so.
+    loserWentOff ? `${l} cleared the ${avg} average and lost. ${w} ${wp} to ${lp}.` : null,
+
+    // "Never a game" and "no contest" describe the loser's week as
+    // irrelevant, so they answer to canDisparage. "Ran past" and "buried
+    // by 63.8" are claims about the margin and stand on any blowout.
+    isBlowout && canDisparage ? `Never a game. ${w} ${wp}, ${l} ${lp}.` : null,
     isBlowout ? `${w} ran past ${l}, ${wp} to ${lp}.` : null,
-    isBlowout ? `No contest: ${w} ${wp}, ${l} ${lp}.` : null,
+    isBlowout && canDisparage ? `No contest: ${w} ${wp}, ${l} ${lp}.` : null,
     isBlowout ? `${w} buried ${l} by ${margin}. ${wp} to ${lp}.` : null,
 
     isPhotoFinish ? `${margin} points decided it. ${w} ${wp}, ${l} ${lp}.` : null,
@@ -109,31 +130,49 @@ export function footballFinalBodies(a: FinalArgs): Array<string | null> {
   const isBlowout = played && gap >= a.leagueAvg * BLOWOUT_SHARE
   const isPhotoFinish = played && gap <= a.leagueAvg * PHOTO_FINISH_SHARE
 
+  const canDisparage = a.loserPts < a.leagueAvg
+  const loserWentOff = a.loserPts >= a.leagueAvg && decided
+
   const streak = a.winnerStreak
   const hot = streak?.type === 'W' && streak.length >= STREAK_MIN ? streak.length : null
 
   // 5% over the average, so a 0.7 edge does not get called a ceiling.
   const overPerformed = a.winnerPts >= a.leagueAvg * 1.05
+  const record = a.winnerRecord
 
   return [
     decided ? `${l} fell ${margin} short at ${lp}.` : null,
     `${w} finished on ${wp}. ${l} on ${lp}.`,
     decided ? `Week ${week} to ${w}, ${margin} points clear.` : null,
+    decided ? `${l} needed ${margin} more.` : null,
 
     overPerformed ? `${w} cleared the ${avg} league average by ${overAvg}.` : null,
     a.winnerPts < a.leagueAvg ? `${w} won on ${wp}, under the ${avg} average.` : null,
-    a.loserPts < a.leagueAvg ? `Only 14 weeks. ${l} just spent one on ${lp}.` : null,
+    canDisparage ? `Only 14 weeks. ${l} just spent one on ${lp}.` : null,
+
+    loserWentOff ? `${l} put up ${lp} and still lost.` : null,
+    loserWentOff ? `${lp} beat the ${avg} league average. ${l} lost anyway, by ${margin}.` : null,
 
     hot ? `${hot} straight for ${w}. ${wp} in week ${week}.` : null,
     hot && hot >= 4 ? `${w} has won ${hot} in a row. Latest: ${wp} on ${l}.` : null,
 
-    a.winnerRecord ? `${w} is ${a.winnerRecord} after ${wp} in week ${week}.` : null,
+    record ? `${w} sits at ${record}.` : null,
+    record ? `${w} is ${record} after ${wp} in week ${week}.` : null,
+
+    // The one long line, and it earns the length: record, score, the
+    // gap to the league average and the gap to the loser, in a single
+    // analytical sentence. EDITORIAL.md allows 5% in the 20-30 band.
+    record && overPerformed && decided
+      ? `${w} is ${record} after ${wp}, ${overAvg} clear of the ${avg} league average, with ${l} finishing ${margin} back at ${lp}.`
+      : null,
 
     isPhotoFinish ? `${margin} points, and it came down to Monday night.` : null,
     isPhotoFinish ? `It came down to Monday night. ${margin} points between ${w} and ${l}.` : null,
 
-    isBlowout ? `${margin} points. ${l} was never in it.` : null,
-    isBlowout ? `${l} never got close to ${wp}.` : null,
+    // Both blowout bodies now carry the margin instead of asserting the
+    // loser was absent, which keeps them true when the loser scored well.
+    isBlowout ? `${margin} points of daylight.` : null,
+    isBlowout ? `${l} stopped at ${lp}, ${margin} short of ${w}.` : null,
   ]
 }
 

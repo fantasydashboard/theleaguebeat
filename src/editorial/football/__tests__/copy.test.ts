@@ -16,6 +16,11 @@ const base: FinalArgs = {
 const blowout: FinalArgs = { ...base, winnerPts: 160.0, loserPts: 96.2 }
 const close: FinalArgs = { ...base, winnerPts: 110.1, loserPts: 108.9 }
 
+/* 131.7 is 20% above this league's average. The margin clears the
+ * blowout threshold, so margin-gated framing would call a good week a
+ * bad one. */
+const loserWentOff: FinalArgs = { ...base, winnerPts: 170.0, loserPts: 131.7 }
+
 const real = (xs: Array<string | null>) => xs.filter((s): s is string => !!s)
 
 /* One regex, used by both the positive and the negative blowout test.
@@ -35,7 +40,7 @@ describe('football finals copy', () => {
   /* The draft checked the winner's score only, on one shape. A build that
    * never printed the loser's score passed it. */
   it('every headline names both teams and both scores', () => {
-    for (const shape of [base, blowout, close]) {
+    for (const shape of [base, blowout, close, loserWentOff]) {
       for (const h of real(footballFinalHeadlines(shape))) {
         expect(h).toContain(shape.winner)
         expect(h).toContain(shape.loser)
@@ -94,10 +99,70 @@ describe('football finals copy', () => {
     expect(real(footballFinalBodies(warm)).join(' ')).not.toMatch(/\b2 (straight|in a row)\b/)
   })
 
+  /* A losing week above the league average is a good week that ran into
+   * a monster. The margin says blowout; the loser's score says otherwise,
+   * and the loser's score is the one that decides whether copy is allowed
+   * to write them down. */
+  it('never writes down a loser who beat the league average', () => {
+    const all = [
+      ...real(footballFinalHeadlines(loserWentOff)),
+      ...real(footballFinalBodies(loserWentOff)),
+    ].join(' ').toLowerCase()
+    expect(all).not.toContain('who managed')
+    expect(all).not.toContain('never in it')
+    expect(all).not.toContain('never got close')
+    expect(all).not.toContain('never a game')
+    expect(all).not.toContain('no contest')
+    expect(all).not.toMatch(/only 14 weeks/)
+  })
+
+  it('says out loud that the above-average loser went off', () => {
+    const all = [
+      ...real(footballFinalHeadlines(loserWentOff)),
+      ...real(footballFinalBodies(loserWentOff)),
+    ].join(' ')
+    expect(all).toMatch(/131\.7 and still lost|cleared the 109\.4 average and lost/)
+    // Still available: the margin is real even when the loser played well.
+    expect(all.toLowerCase()).toMatch(/ran past|buried/)
+  })
+
+  it('keeps the put-down when the loser actually earned it', () => {
+    const all = real(footballFinalHeadlines(blowout)).join(' ').toLowerCase()
+    expect(all).toContain('who managed')
+    expect(all).toContain('never a game')
+  })
+
   it('works the record in when one is supplied', () => {
     const withRecord = { ...base, winnerRecord: '6-2' }
     expect(real(footballFinalBodies(withRecord)).join(' ')).toContain('6-2')
     expect(real(footballFinalBodies(base)).join(' ')).not.toContain('6-2')
+  })
+})
+
+/* points.ts promises in its header that nothing prints a margin of 0.0
+ * as a claim. Without this, a future edit could reintroduce "outscored
+ * Scuttlebucs by 0.0" and the corpus tests would stay green: they only
+ * check voice rules and length, neither of which a false margin breaks. */
+describe('zero-margin games never get a margin claim', () => {
+  const zeroMargin: FinalArgs[] = [
+    { ...base, winnerPts: 0, loserPts: 0 },
+    { ...base, winnerPts: 100.0, loserPts: 100.0 },
+  ]
+
+  it('emits nothing containing a 0.0 margin', () => {
+    for (const shape of zeroMargin) {
+      const emitted = [
+        ...real(footballFinalHeadlines(shape)),
+        ...real(footballFinalBodies(shape)),
+      ]
+      for (const s of emitted) {
+        expect(s).not.toMatch(/by 0\.0\b/)
+        expect(s).not.toMatch(/\b0\.0 (points|short|more|back|clear)/)
+        expect(s).not.toMatch(/\bneeded 0\.0\b/)
+      }
+      // And it still has something to say about the game.
+      expect(emitted.length).toBeGreaterThan(3)
+    }
   })
 })
 
@@ -128,6 +193,8 @@ describe('voice conformance across the whole corpus', () => {
     base,
     blowout,
     close,
+    loserWentOff,
+    { ...base, winnerRecord: '6-2', winnerPts: 128.4 },
     { ...base, winnerStreak: { type: 'W', length: 4 } },
     { ...base, winnerStreak: { type: 'L', length: 3 } },
     { ...base, winnerRecord: '6-2' },
@@ -158,10 +225,29 @@ describe('voice conformance across the whole corpus', () => {
     expect(short / corpus.length).toBeGreaterThan(0.55)
   })
 
-  /* Measured over DISTINCT strings. The same six unconditional headlines
-   * repeated across nine shapes would otherwise carry this on their own. */
   it('varies sentence length rather than settling on one shape', () => {
-    const lengths = new Set([...new Set(corpus)].map(wordCount))
+    const lengths = new Set(corpus.map(wordCount))
     expect(lengths.size).toBeGreaterThan(4)
+  })
+
+  /* The real templated-rhythm risk is not "too few lengths", it is one
+   * length dominating the pool. An earlier draft of this library had four
+   * of six unconditional headlines at exactly 9 words. Measured over
+   * distinct strings, since the emitted corpus repeats variants per shape. */
+  it('does not let one sentence length dominate the pool', () => {
+    const distinct = [...new Set(corpus)]
+    const counts = new Map<number, number>()
+    for (const s of distinct) {
+      const n = wordCount(s)
+      counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+    const commonest = Math.max(...counts.values())
+    expect(commonest / distinct.length).toBeLessThan(0.4)
+  })
+
+  /* EDITORIAL.md allows 5% in the 20-30 band for analytical setup. */
+  it('carries at least one line long enough to do analysis', () => {
+    expect(corpus.some((s) => wordCount(s) >= 20)).toBe(true)
+    expect(corpus.every((s) => wordCount(s) < 30)).toBe(true)
   })
 })
