@@ -26,6 +26,20 @@
       <p class="tlb-footer-meta">
         © {{ year }} The League Beat. The online magazine your league deserves.
       </p>
+
+      <!-- Quiet credit line, not a pitch. The League Beat is free; UFD is
+           the paid strategy tool from the same shop. Deliberately placed
+           in the footer rather than given a section, so the page stays
+           about the magazine. -->
+      <p class="tlb-footer-sister">
+        Built by the team behind
+        <a
+          href="https://ultimatefantasydashboard.com"
+          class="tlb-footer-link tlb-footer-sister-link"
+          target="_blank"
+          rel="noopener"
+        >Ultimate Fantasy Dashboard</a>, the projections and strategy tool for managing your own roster.
+      </p>
     </div>
   </footer>
 </template>
@@ -107,6 +121,25 @@ const year = computed(() => new Date().getFullYear())
   border-top: 1px solid oklch(0.14 0.018 90);
   font-size: 0.82rem;
   color: oklch(0.45 0.010 90);
+}
+
+/* Sister-product credit. Quieter than the copyright line above it —
+   it should read as provenance, not as an advertisement. */
+.tlb-footer-sister {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: oklch(0.38 0.010 90);
+}
+
+.tlb-footer-sister-link {
+  color: oklch(0.52 0.010 90);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tlb-footer-sister-link:hover {
+  color: oklch(0.72 0.010 90);
 }
 
 @media (max-width: 720px) {

@@ -284,9 +284,16 @@ Consequences, stated honestly:
 
 **Cost:** ~1–2¢ TTS plus render compute per league-week; effectively **$0 for
 every subsequent view, download, and re-share** — the file is already rendered.
-At 100 leagues × 20 weeks that is roughly $100–200 for a season against $2,500 of
-revenue. Verify current vendor pricing before launch; the order of magnitude, not
-the exact figure, is what the design rests on.
+At 100 leagues × 20 weeks that is roughly **$100–200 for a season**. Verify current
+vendor pricing before launch; the order of magnitude, not the exact figure, is what
+the design rests on.
+
+*Corrected 2026-08-31.* An earlier version of this paragraph weighed that cost
+against "$2,500 of revenue" from per-league pricing. **The League Beat is free.**
+It carries no pricing, no tiers and no gates; the paid product is the sister tool,
+Ultimate Fantasy Dashboard. So render cost is a straight marketing expense, not a
+margin calculation — which makes the caching architecture more important, not less,
+since nothing on this side ever earns the money back directly.
 
 ## Failure handling
 

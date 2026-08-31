@@ -256,46 +256,39 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         PRICING — $25/season per league, with intro discount.
+         FREE — The League Beat costs nothing. No tiers, no trial, no
+         card. This replaced a per-league pricing section; if you are
+         reinstating any kind of gate, that is a positioning change,
+         not a copy tweak.
     ────────────────────────────────────────────────────────────── -->
     <section class="pricing" aria-labelledby="pricing-heading">
       <header class="section-head section-head-centered">
         <p class="section-eyebrow section-eyebrow-magenta" id="pricing-heading">
-          Pricing
+          Free
         </p>
-        <h2 class="section-headline">Priced like a league fee. Once a season.</h2>
+        <h2 class="section-headline">The whole magazine. No charge.</h2>
         <p class="section-deck">
-          Demo is free, forever. Connect a real league and the first
-          week is on us — then it's a single seasonal fee for the
-          entire issue run.
+          Every issue, every week, for every manager in the league.
+          No trial to start and no card to enter.
         </p>
       </header>
 
       <div class="pricing-card">
-        <p class="pricing-eyebrow">Per league · per season</p>
+        <p class="pricing-eyebrow">Every league · every season</p>
         <div class="pricing-price-row">
-          <span class="pricing-strike">$25</span>
-          <span class="pricing-now">$15</span>
+          <span class="pricing-now">Free</span>
         </div>
-        <p class="pricing-promo">
-          Intro pricing — $10 off through opening week.
-        </p>
         <ul class="pricing-list" role="list">
-          <li>One payment unlocks the whole season</li>
-          <li>Every league member can read the magazine</li>
-          <li>Headlines, recaps, power rankings, draft + history</li>
-          <li>Cancel any time during the trial week</li>
+          <li>Headlines, recaps, power rankings, draft and history</li>
+          <li>Every league member reads it, not just the commissioner</li>
+          <li>Nothing locked, nothing blurred, nothing held back</li>
         </ul>
         <router-link to="/demo-categories/connect" class="hero-cta hero-cta-primary pricing-cta">
-          Start a free trial
+          Connect your league
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
         </router-link>
-        <p class="pricing-fine">
-          Demo stays free forever — connect a real league to start
-          your trial.
-        </p>
       </div>
     </section>
 
@@ -881,14 +874,6 @@ onMounted(async () => {
   align-items: baseline;
   gap: 16px;
 }
-.pricing-strike {
-  font-family: 'Barlow', sans-serif;
-  font-weight: 700;
-  font-size: 2rem;
-  color: var(--ink-3);
-  text-decoration: line-through;
-  text-decoration-thickness: 2px;
-}
 .pricing-now {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
@@ -896,15 +881,6 @@ onMounted(async () => {
   letter-spacing: -0.04em;
   line-height: 1;
   color: var(--accent-gold);
-}
-.pricing-promo {
-  margin: 0;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.86rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent-magenta);
 }
 .pricing-list {
   list-style: none;
@@ -929,12 +905,6 @@ onMounted(async () => {
   border-radius: 2px;
 }
 .pricing-cta { margin-top: 8px; }
-.pricing-fine {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--ink-3);
-  max-width: 40ch;
-}
 
 /* ─── Closer ───────────────────────────────────────────────────── */
 .closer {
