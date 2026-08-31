@@ -60,12 +60,44 @@ they originally connected them via UFD or TLB.
 - `/internal/logo-mockups` — brand exploration (hidden from production via hostname guard)
 
 ## League Types
-H2H category leagues across baseball today. Football / basketball /
-hockey support is structurally in place via the universal
-CategoryLeagueData contract — the editorial libraries just haven't
-been backfilled with sport-specific copy yet. Add new sports by
-populating the right variant libraries; the detect + render pipeline
-stays unchanged.
+Two formats, and the distinction matters more than "which sport":
+
+- **H2H category** (`h2h-category`) — baseball. Fully shipped: ~100
+  detectors, all three tabs.
+- **H2H points** (`h2h-points`) — football. Foundation + detection
+  engine shipped; copy and views are Phases 3-4.
+
+`LeagueData` is the union. `sport?: LeagueSport` is on both, read only
+through `sportOf()` (`src/editorial/leagueCore.ts`) — it is optional
+because `league_issues` snapshots predate the field.
+
+Detectors take the `LeagueData` union and narrow themselves:
+- category-only (`standings`, `matchups`, `divisions`, `players`,
+  `transactions`, `overnight`) guard with
+  `if (data.format !== 'h2h-category') return []`
+- format-agnostic (`streaks`) project through `asLeagueCore()`
+- points-native stories live in `detection/points.ts`
+- `cadence` and `seasonStage` take the union directly — they need only
+  league meta, and routing them through `asLeagueCore()` would invent a
+  standings precondition they never had
+
+Adding a sport is NOT just "populate variant libraries". A new points
+sport reuses the engine; a new category sport needs its own detectors.
+
+### Sleeper football specifics
+- Sleeper's API is public and unauthenticated, so football can render
+  **server-side** — unlike ESPN, whose auth is browser-cookie-bound.
+  This is what makes the cron and the Weekly Reel viable for football.
+- `playoff_week_start: 0` means UNSET, not "no playoffs".
+- `fpts` is split-integer: `{fpts: 1807, fpts_decimal: 6}` = 1807.06.
+- `matchup_id` can be `null` (byes, non-bracket teams) — filter before
+  grouping or you invent phantom matchups.
+- Rosters can be orphaned (`owner_id: null`), so team naming needs a
+  `Team <roster_id>` fallback.
+- Standings derive from **completed regular-season weeks only**;
+  `roster.settings.wins` excludes playoffs and is the correct oracle.
+- Stories come from the most recent **closed** week. Never infer "week
+  closed" from "everyone has scored" — Sleeper points accumulate live.
 
 ## Known Quirks
 - Safari ITP fix handled via Vercel serverless proxy
@@ -74,3 +106,7 @@ stays unchanged.
 - Yahoo `stat_winners` reports mid-week leaders, not end-of-week winners — use `winner_team_key` for final-status detection
 - ESPN `seasonRankHistory` only includes weeks where every matchup was decided; the detect layer falls back to `data.standings` for the current week
 - zsh exclamation mark issues: write scripts to /tmp/fixN.py instead
+- `npm run type-check` was silently passing everything until 2026-08-28 (a
+  malformed snippet file aborted tsc repo-wide). Fixed, but it now reports
+  ~653 pre-existing errors. `npm run build` does NOT type-check at all —
+  vite is esbuild-only. Use `npx vue-tsc --noEmit` scoped to your area.
