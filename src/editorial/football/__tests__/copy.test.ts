@@ -460,3 +460,78 @@ describe('extended corpus conformance', () => {
     expect(Math.max(...counts.values()) / distinct.length).toBeLessThan(0.4)
   })
 })
+
+/* ---------------------------------------------------------------------
+ * Fix round 1: "The Aman-Ra Stars is 9-5" reads wrong — a plural team
+ * name wants "are", and half this league's names are plural ("The
+ * Aman-Ra Stars", "Mighty Mallards", "The Juggernauts", "Scuttlebucs")
+ * while the other half read singular ("Gridiron Man", "OverDrive").
+ * Team names are arbitrary user strings this engine cannot classify as
+ * grammatically singular or plural, so no variant may hinge a
+ * present-tense verb's form on which kind of name it lands next to.
+ *
+ * A fully general check ("no team name is ever followed by 'is'/'has'")
+ * is not expressible as a blunt regex here, because the corpus generator
+ * does not know which substrings of an emitted sentence are team names
+ * versus ordinary words — "That is 5 of 14 weeks" legitimately contains
+ * "is" with no team name anywhere near it, and a naive scan for the word
+ * "is" alone would flag it. Anchoring the check to the ACTUAL team name
+ * strings passed into each function, as done below, is the practical
+ * middle ground: it exercises every present-tense-risk verb this bug
+ * class ever produced (is / has / owns / sits) against both a plural-
+ * reading and a singular-reading name, across every conditional branch
+ * (record, streak, blowout, photo finish, cellar) rather than only the
+ * one line that was reported.
+ */
+describe('grammar never depends on team name plurality', () => {
+  const RISKY_VERBS = ['is', 'has', 'owns', 'sits']
+  const names = ['The Aman-Ra Stars', 'Gridiron Man']
+
+  /** True if `name` is immediately followed by a present-tense verb that
+   *  would need a different form for a plural vs. singular name. */
+  const hasAgreementRisk = (s: string, name: string) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`\\b${escaped} (${RISKY_VERBS.join('|')})\\b`).test(s)
+  }
+
+  it('finals copy never puts a risky verb right after the winner or loser name', () => {
+    for (const winner of names) {
+      for (const loser of names) {
+        if (winner === loser) continue
+        const shapes: FinalArgs[] = [
+          { winner, loser, winnerPts: 128.4, loserPts: 96.2, leagueAvg: 109.4, week: 8 },
+          { winner, loser, winnerPts: 128.4, loserPts: 96.2, leagueAvg: 109.4, week: 8, winnerRecord: '9-5' },
+          { winner, loser, winnerPts: 160.0, loserPts: 96.2, leagueAvg: 109.4, week: 8 },
+          { winner, loser, winnerPts: 110.1, loserPts: 108.9, leagueAvg: 109.4, week: 8 },
+          { winner, loser, winnerPts: 170.0, loserPts: 131.7, leagueAvg: 109.4, week: 8 },
+          { winner, loser, winnerPts: 128.4, loserPts: 96.2, leagueAvg: 109.4, week: 8, winnerStreak: { type: 'W', length: 4 } },
+        ]
+        for (const shape of shapes) {
+          const corpus = [...real(footballFinalHeadlines(shape)), ...real(footballFinalBodies(shape))]
+          for (const s of corpus) {
+            expect(hasAgreementRisk(s, winner)).toBe(false)
+            expect(hasAgreementRisk(s, loser)).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('streak copy never puts a risky verb right after the team name', () => {
+    for (const team of names) {
+      for (const type of ['W', 'L'] as const) {
+        for (const length of [3, 4, 5, 7, 10]) {
+          for (const s of real(footballStreakLines(team, type, length))) {
+            expect(hasAgreementRisk(s, team)).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('cellar copy never puts a risky verb right after the team name', () => {
+    for (const team of names) {
+      expect(hasAgreementRisk(footballCellarLine(team, '2-12'), team)).toBe(false)
+    }
+  })
+})

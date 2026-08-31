@@ -154,16 +154,28 @@ export function footballFinalBodies(a: FinalArgs): Array<string | null> {
     loserWentOff ? `${lp} beat the ${avg} league average. ${l} lost anyway, by ${margin}.` : null,
 
     hot ? `${hot} straight for ${w}. ${wp} in week ${week}.` : null,
-    hot && hot >= 4 ? `${w} has won ${hot} in a row. Latest: ${wp} on ${l}.` : null,
+    // Present-perfect ("has won") needs "have" for a plural team name —
+    // "The Aman-Ra Stars has won" is wrong. Simple past ("in a row for")
+    // sidesteps the auxiliary verb entirely, so no number agreement is
+    // ever at stake. See the same fix applied throughout streaks.ts.
+    hot && hot >= 4 ? `${hot} in a row for ${w} now. Latest: ${wp} on ${l}.` : null,
 
-    record ? `${w} sits at ${record}.` : null,
-    record ? `${w} is ${record} after ${wp} in week ${week}.` : null,
+    // Colon constructions instead of a copula: "${w} is ${record}" breaks
+    // for any plural team name ("The Aman-Ra Stars is 9-5" reads wrong;
+    // it wants "are"). Team names are arbitrary user strings this engine
+    // cannot classify as singular or plural, so no variant here may hinge
+    // on "is"/"has" agreeing with one.
+    record ? `${w}: ${record} on the year.` : null,
+    record ? `${w}: ${record} after ${wp} in week ${week}.` : null,
 
-    // The one long line, and it earns the length: record, score, the
-    // gap to the league average and the gap to the loser, in a single
-    // analytical sentence. EDITORIAL.md allows 5% in the 20-30 band.
+    // The one long line, and it earns the length — but with two numbers,
+    // not four: record and the gap to the league average. EDITORIAL.md
+    // allows 5% in the 20-30 band for analytical context, not for piling
+    // on every figure the function has access to. "moved to"/"turning
+    // in"/"cleared" are all past tense or gerunds, so the sentence never
+    // needs a verb to agree with the team name's grammatical number.
     record && overPerformed && decided
-      ? `${w} is ${record} after ${wp}, ${overAvg} clear of the ${avg} league average, with ${l} finishing ${margin} back at ${lp}.`
+      ? `${w} moved to ${record} on the season, turning in a week that cleared this league's scoring average by ${overAvg} points.`
       : null,
 
     isPhotoFinish ? `${margin} points, and it came down to Monday night.` : null,

@@ -57,16 +57,23 @@ export function footballStreakLines(
 
   const n = length
 
+  // Every variant below is either verb-free or built on simple past tense
+  // ("won", "dropped", "lost", "burned"), never present tense or present
+  // perfect ("is riding", "has won", "has not lost"). Team names are
+  // arbitrary user strings this engine cannot classify as singular or
+  // plural ("The Aman-Ra Stars", "Mighty Mallards" vs. "Gridiron Man",
+  // "OverDrive"), and English present-tense verbs conjugate for number
+  // while simple past does not — "the Stars has won" is wrong, "the
+  // Stars won" is correct regardless of which team's name in the league
+  // reads plural. Canonical #13's construction (below) already sidestepped
+  // this by avoiding a verb entirely; every other variant now does too.
   if (type === 'W') {
     return [
       `${n} in a row for ${team}.`,
-      `${team} has won ${n} straight.`,
-      // Canonical #13's construction. It also sidesteps subject-verb
-      // agreement, which matters when half the league is named in the
-      // plural ("The Aman-Ra Stars", "Mighty Mallards").
+      `${team} won ${n} straight.`,
       `${team}: ${n} straight wins.`,
-      `${team} is riding a ${n}-game win streak.`,
-      `${team} has not lost in ${n} weeks.`,
+      `${n}-game win streak for ${team}.`,
+      `No loss for ${team} in ${n} weeks.`,
 
       // Four is the point where opponents stop being unlucky. The claim
       // is exactly what the argument supports: n teams have tried.
@@ -75,7 +82,7 @@ export function footballStreakLines(
       // At five, the run is a third of the season and the schedule
       // becomes the story.
       n >= 5
-        ? `${team} has taken ${n} in a row. That is ${n} of ${REGULAR_SEASON_WEEKS} weeks without a loss.`
+        ? `${team} won ${n} straight. That is ${n} of ${REGULAR_SEASON_WEEKS} weeks without a loss.`
         : null,
     ]
   }
@@ -83,16 +90,16 @@ export function footballStreakLines(
   return [
     `${n} straight losses for ${team}.`,
     `${team}: ${n}-game losing streak.`,
-    `${team} has dropped ${n} in a row.`,
-    `${team} has not won in ${n} weeks.`,
-    `${team} is ${n} weeks into a skid.`,
+    `${team} dropped ${n} in a row.`,
+    `No win for ${team} in ${n} weeks.`,
+    `${n} weeks into a skid for ${team}.`,
 
     n >= 4
-      ? `${team} has lost ${n} in a row. The season only runs ${REGULAR_SEASON_WEEKS} weeks.`
+      ? `${team} lost ${n} in a row. The season only runs ${REGULAR_SEASON_WEEKS} weeks.`
       : null,
 
     n >= 5
-      ? `${n} straight losses. There are only ${REGULAR_SEASON_WEEKS} weeks, and ${team} has burned ${n}.`
+      ? `${n} straight losses. There are only ${REGULAR_SEASON_WEEKS} weeks, and ${team} burned ${n}.`
       : null,
   ]
 }
@@ -102,9 +109,11 @@ export function footballStreakLines(
  *
  * A name and a record, and nothing else. It cannot say why they are
  * last, how far back they are, or whether anyone has given up, so it
- * says none of that. "Owns" is the register's state verb and the record
- * carries the weight on its own.
+ * says none of that. Verb-free construction — "owns" was a present-tense
+ * verb that needed to agree with the team name's grammatical number,
+ * which this engine cannot determine from an arbitrary user string. The
+ * record carries the weight on its own.
  */
 export function footballCellarLine(team: string, record: string): string {
-  return `${team} owns the cellar at ${record}.`
+  return `Last place: ${team}, at ${record}.`
 }
