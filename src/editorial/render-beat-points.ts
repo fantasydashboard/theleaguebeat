@@ -28,6 +28,8 @@ import type {
 import type { BeatItem, RenderedBeat } from './render-beat'
 import { groupByDay } from './render-beat'
 import { stripEmojiForEditorial } from './detect-lede'
+import { sportOf } from './leagueCore'
+import { footballFinalHeadlines, footballFinalBodies, footballStreakLines, type FinalArgs } from './football'
 
 /* ─────────────────────────────────────────────────────────────────
    SMALL HELPERS — deterministic hashing + synthetic timestamps.
@@ -160,6 +162,7 @@ export function renderBeatPoints(
 function detectFinals(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[] {
   const prev = data.previousWeekMatchups ?? []
   if (prev.length === 0) return []
+  const isFootball = sportOf(data) === 'nfl'
   const base = lastSundayNight(now)
   const out: BeatItem[] = []
   for (const m of prev) {
@@ -177,20 +180,31 @@ function detectFinals(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[
     const importance = margin >= ctx.leagueAvg * 0.35 ? 'high'
       : margin >= ctx.leagueAvg * 0.15 ? 'med' : 'low'
     const key = `FINAL:${m.id}`
-    const headline = pick(key, [
-      margin >= ctx.leagueAvg * 0.35 ? `${winner} ran past ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.` : null,
-      margin <= ctx.leagueAvg * 0.06 ? `${winner} edged ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.` : null,
-      `${winner} beat ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.`,
-      `${winner} took down ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.`,
-      `Final: ${winner} ${wPts.toFixed(1)}, ${loser} ${lPts.toFixed(1)}.`,
-    ])
-    // Body: lean on the winner's streak/record for real context.
     const ws = ctx.standingById.get(winnerId)
+    const finalArgs: FinalArgs = {
+      winner, loser, winnerPts: wPts, loserPts: lPts,
+      leagueAvg: ctx.leagueAvg,
+      winnerStreak: ws?.streak,
+      winnerRecord: recordOf(ws),
+      week: Math.max(1, ctx.currentWeek - 1),
+    }
+    const headline = pick(key, isFootball
+      ? footballFinalHeadlines(finalArgs)
+      : [
+          margin >= ctx.leagueAvg * 0.35 ? `${winner} ran past ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.` : null,
+          margin <= ctx.leagueAvg * 0.06 ? `${winner} edged ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.` : null,
+          `${winner} beat ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.`,
+          `${winner} took down ${loser}, ${wPts.toFixed(1)}-${lPts.toFixed(1)}.`,
+          `Final: ${winner} ${wPts.toFixed(1)}, ${loser} ${lPts.toFixed(1)}.`,
+        ])
+    // Body: lean on the winner's streak/record for real context.
     let body: string | undefined
-    if (ws && ws.streak.type === 'W' && ws.streak.length >= 3) {
+    if (isFootball) {
+      body = pick(`${key}:body`, footballFinalBodies(finalArgs)) || undefined
+    } else if (ws && ws.streak.type === 'W' && ws.streak.length >= 3) {
       body = `${possessive(winner)} ${ordinal(ws.streak.length)} straight.`
     } else if (margin <= ctx.leagueAvg * 0.06) {
-      body = `Decided in the final at-bats.`
+      body = `Decided by the slimmest of margins.`
     } else {
       const rec = recordOf(ws)
       body = rec ? `${winner} now ${rec} on the year.` : undefined
@@ -218,6 +232,7 @@ const WIN_MILESTONES = [10, 7, 5]
 const LOSS_MILESTONES = [8, 5]
 
 function detectStreaks(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[] {
+  const isFootball = sportOf(data) === 'nfl'
   const base = lastMonday(now, 7, 0)
   const out: BeatItem[] = []
   for (const s of data.standings ?? []) {
@@ -229,18 +244,23 @@ function detectStreaks(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem
     const len = s.streak.length
     const importance = milestone >= 8 ? 'high' : milestone >= 5 ? 'med' : 'low'
     const key = `STREAK:${s.teamId}:${s.streak.type}${milestone}`
-    const headline = s.streak.type === 'W'
-      ? pick(key, [
-          len >= 10 ? `Ten in a row for ${team}.` : null,
-          `${team}: ${len} straight wins.`,
-          `${team} keeps rolling. W${len}.`,
-        ])
-      : pick(key, [
-          `${team}: L${len}. ${len} deep.`,
-          `${team} can't stop the bleeding. L${len}.`,
-          `${len} straight losses for ${team}.`,
-        ])
-    const body = s.streak.type === 'W' ? `The ladder reflects the work.` : `The slide isn't slowing.`
+    const neutralBody = s.streak.type === 'W' ? `The ladder reflects the work.` : `The slide isn't slowing.`
+    const headline = isFootball
+      ? pick(key, footballStreakLines(team, s.streak.type, len))
+      : s.streak.type === 'W'
+        ? pick(key, [
+            len >= 10 ? `Ten in a row for ${team}.` : null,
+            `${team}: ${len} straight wins.`,
+            `${team} keeps rolling. W${len}.`,
+          ])
+        : pick(key, [
+            `${team}: L${len}. ${len} deep.`,
+            `${team} can't stop the bleeding. L${len}.`,
+            `${len} straight losses for ${team}.`,
+          ])
+    const body = isFootball
+      ? pick(`${key}:body`, footballStreakLines(team, s.streak.type, len)) || neutralBody
+      : neutralBody
     out.push({
       id: key,
       category: 'STREAK',
@@ -268,6 +288,7 @@ function findRankOne(ranks: Record<string, number>): string | undefined {
 function detectThrone(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[] {
   const hist = data.seasonRankHistory ?? []
   if (hist.length < 2) return []
+  const isFootball = sportOf(data) === 'nfl'
   const top = findRankOne(hist[hist.length - 1].ranks)
   const prevTop = findRankOne(hist[hist.length - 2].ranks)
   if (!top || !prevTop || top === prevTop) return []
@@ -284,6 +305,17 @@ function detectThrone(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[
     `${newName} takes the top from ${oldName}.`,
     `New #1: ${newName}.`,
   ])
+  // Football: if the new #1 is riding a real win streak, that's the more
+  // honest story than the deposed team's reign length (which this engine
+  // cannot attribute to anything the new leader did). Falls through to
+  // the neutral "reign ended" body when there's no qualifying streak —
+  // footballStreakLines returns [] below its own three-game minimum.
+  const newLeaderStreak = ctx.standingById.get(top)?.streak
+  const footballBody = isFootball && newLeaderStreak && newLeaderStreak.type === 'W'
+    ? pick(`${key}:streak`, footballStreakLines(newName, 'W', newLeaderStreak.length))
+    : ''
+  const body = footballBody
+    || (held >= 1 ? `Week ${ctx.currentWeek - 1}. A ${held}-week run at the top, over.` : `The ladder has a new leader.`)
   return [{
     id: key,
     category: 'THRONE',
@@ -291,7 +323,7 @@ function detectThrone(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[
     timestamp: lastMonday(now, 7, 15),
     importance: held >= 4 ? 'high' : 'med',
     headline,
-    body: held >= 1 ? `Week ${ctx.currentWeek - 1}. A ${held}-week run at the top, over.` : `The ladder has a new leader.`,
+    body,
     widget: { kind: 'two-logos', teamIds: [top, prevTop] },
     isFeatured: false,
   }]
