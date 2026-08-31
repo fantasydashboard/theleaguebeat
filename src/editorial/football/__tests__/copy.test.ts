@@ -251,3 +251,212 @@ describe('voice conformance across the whole corpus', () => {
     expect(corpus.every((s) => wordCount(s) < 30)).toBe(true)
   })
 })
+
+/* ---------------------------------------------------------------------
+ * Task 3: streaks and season stage.
+ *
+ * Three of the brief's draft assertions are kept in spirit and rewritten,
+ * because as drafted they pass against a broken implementation:
+ *
+ *   1. `expect(l).toMatch(/4|four/i)` is unanchored, so a hardcoded "14"
+ *      anywhere in the line satisfies it — the same defect that let a
+ *      streak test pass against copy containing "128.4". Here the streak
+ *      length is asserted word-bounded, and proven to be interpolated by
+ *      running two lengths and requiring the other number to be absent.
+ *   2. `footballStageLine('stretch', 11, 14)` matching /3|three/i is
+ *      satisfied by any line printing any 3. Here the same stage is run at
+ *      three (week, endWeek) pairs whose games-remaining differ, which no
+ *      week-number or constant line can satisfy.
+ *   3. `expect(footballStageLine('quarter', 4, 14)).not.toBeUndefined()`
+ *      is a tautology: every value except undefined passes it, so a stage
+ *      returning a sentence, an empty string or null all pass equally. The
+ *      contract being described is "returns null", so that is asserted,
+ *      paired with a test that the other stages are NOT null so a
+ *      null-everything stub cannot satisfy the pair.
+ * ------------------------------------------------------------------- */
+
+import {
+  footballStreakLines, footballCellarLine,
+  footballStageLine, type FootballStage,
+} from '@/editorial/football'
+
+const ALL_STAGES: FootballStage[] = [
+  'opening', 'quarter', 'half', 'stretch', 'final-week', 'playoffs', 'championship',
+]
+
+describe('football streak copy', () => {
+  it('offers variants for a win streak, each carrying the number', () => {
+    const lines = real(footballStreakLines('Gridiron Man', 'W', 4))
+    expect(lines.length).toBeGreaterThanOrEqual(2)
+    for (const l of lines) expect(l).toMatch(/\b(4|four)\b/i)
+  })
+
+  /* The number has to be interpolated, not baked into the sentence. A
+   * library that says "4 straight" for every streak passes the assertion
+   * above; it cannot pass this one. */
+  it('prints the streak it was given, not a constant', () => {
+    for (const type of ['W', 'L'] as const) {
+      const four = real(footballStreakLines('Gridiron Man', type, 4))
+      const six = real(footballStreakLines('Gridiron Man', type, 6))
+      for (const l of four) {
+        expect(l).toMatch(/\b(4|four)\b/i)
+        expect(l).not.toMatch(/\b(6|six)\b/i)
+      }
+      for (const l of six) {
+        expect(l).toMatch(/\b(6|six)\b/i)
+        expect(l).not.toMatch(/\b(4|four)\b/i)
+      }
+    }
+  })
+
+  it('names the team in every line', () => {
+    for (const type of ['W', 'L'] as const) {
+      for (const l of real(footballStreakLines('Mighty Mallards', type, 5))) {
+        expect(l).toContain('Mighty Mallards')
+      }
+    }
+  })
+
+  /* The draft compared two joined strings for inequality, which one
+   * swapped adjective satisfies. Disjointness is the actual requirement. */
+  it('frames a losing streak without reusing the winning copy', () => {
+    const w = real(footballStreakLines('The Juggernauts', 'W', 3))
+    const l = real(footballStreakLines('The Juggernauts', 'L', 3))
+    expect(w.length).toBeGreaterThanOrEqual(2)
+    expect(l.length).toBeGreaterThanOrEqual(2)
+    // Not one shared sentence between the two sides.
+    expect(new Set([...w, ...l]).size).toBe(w.length + l.length)
+    // And they reach for opposite vocabulary, not one template.
+    expect(w.join(' ')).not.toMatch(/\b(losses|skid|dropped)\b/i)
+    expect(l.join(' ')).toMatch(/\b(losses|skid|dropped)\b/i)
+    expect(w.join(' ')).toMatch(/\b(won|taken|riding)\b/i)
+  })
+
+  /* points.ts already ruled that two of anything is a coincidence, and
+   * stays silent below three. The two libraries render into the same
+   * issue, so they agree on where a streak becomes a story. */
+  it('stays quiet about a one-game or two-game streak', () => {
+    for (const type of ['W', 'L'] as const) {
+      expect(real(footballStreakLines('OverDrive', type, 1))).toHaveLength(0)
+      expect(real(footballStreakLines('OverDrive', type, 2))).toHaveLength(0)
+      expect(real(footballStreakLines('OverDrive', type, 3)).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('cellar copy names the team and its record', () => {
+    const s = footballCellarLine('Team 3', '2-12')
+    expect(s).toContain('Team 3')
+    expect(s).toContain('2-12')
+    // Both fields interpolated, not one hardcoded around the other.
+    const other = footballCellarLine('Pigskin Prophtz', '1-6')
+    expect(other).toContain('Pigskin Prophtz')
+    expect(other).toContain('1-6')
+    expect(other).not.toContain('Team 3')
+  })
+
+  /* footballCellarLine is handed a name and a record. It cannot know WHY
+   * they are last, so it must not say. */
+  it('does not assert a cause its arguments cannot support', () => {
+    const s = footballCellarLine('Team 10', '2-12').toLowerCase()
+    for (const claim of ['injur', 'draft', 'bench', 'trade', 'gave up', 'quit', 'abandon']) {
+      expect(s).not.toContain(claim)
+    }
+  })
+})
+
+describe('football season-stage copy', () => {
+  /* 14 games, not 22. "Three left" is a number a football manager feels. */
+  it('counts games remaining rather than weeks elapsed', () => {
+    // Same stage, three schedules. Only endWeek - week explains all three.
+    const cases: Array<[number, number, RegExp, RegExp]> = [
+      [11, 14, /\b(3|three)\b/i, /\b(11|eleven)\b/i],
+      [11, 15, /\b(4|four)\b/i, /\b(11|eleven)\b/i],
+      [12, 18, /\b(6|six)\b/i, /\b(12|twelve)\b/i],
+    ]
+    for (const [week, endWeek, remaining, elapsed] of cases) {
+      const s = footballStageLine('stretch', week, endWeek)
+      expect(s).not.toBeNull()
+      expect(s!).toMatch(remaining)
+      expect(s!).not.toMatch(elapsed)
+    }
+  })
+
+  it('gives championship week its own line', () => {
+    const s = footballStageLine('championship', 17, 14)
+    expect(s).not.toBeNull()
+    expect(s!.toLowerCase()).toMatch(/title|championship|ring|trophy/)
+  })
+
+  /* Weeks 15-17 are past the end of a 14-week regular season, so every
+   * remaining-count is negative there. "-3 games left" must never render. */
+  it('never prints a negative or zero games-remaining count', () => {
+    for (const stage of ALL_STAGES) {
+      for (const [week, endWeek] of [[14, 14], [15, 14], [17, 14], [20, 14]]) {
+        const s = footballStageLine(stage, week, endWeek)
+        if (s === null) continue
+        expect(s).not.toMatch(/-\d/)
+        expect(s).not.toMatch(/\b0 (games|weeks)\b/)
+      }
+    }
+  })
+
+  /* Falling through to the neutral copy is correct, not a gap. */
+  it('returns null for a stage with no football-specific framing', () => {
+    expect(footballStageLine('quarter', 4, 14)).toBeNull()
+  })
+
+  it('still writes a line for most stages, so null is a choice not a stub', () => {
+    const written = ALL_STAGES
+      .map((st) => footballStageLine(st, 11, 14))
+      .filter((s): s is string => !!s)
+    expect(written.length).toBeGreaterThanOrEqual(5)
+    // Every stage that speaks says something different.
+    expect(new Set(written).size).toBe(written.length)
+  })
+
+  it('returns null rather than undefined or an empty string', () => {
+    for (const stage of ALL_STAGES) {
+      const s = footballStageLine(stage, 11, 14)
+      expect(s === null || (typeof s === 'string' && s.length > 0)).toBe(true)
+    }
+  })
+})
+
+describe('extended corpus conformance', () => {
+  const extended = [
+    ...real(footballStreakLines('Gridiron Man', 'W', 4)),
+    ...real(footballStreakLines('Scuttlebucs', 'L', 5)),
+    ...real(footballStreakLines('The Aman-Ra Stars', 'W', 7)),
+    ...real(footballStreakLines('Team 10', 'L', 3)),
+    footballCellarLine('Team 3', '2-12'),
+    footballCellarLine('Game of Throws', '4-10'),
+    ...ALL_STAGES
+      .map((st) => footballStageLine(st, 11, 14))
+      .filter((s): s is string => !!s),
+    ...ALL_STAGES
+      .map((st) => footballStageLine(st, 3, 14))
+      .filter((s): s is string => !!s),
+  ]
+
+  it('has a corpus worth checking', () => {
+    expect(extended.length).toBeGreaterThan(15)
+  })
+
+  it('breaks no mechanical rule', () => {
+    expect(() => assertVoiceClean(extended)).not.toThrow()
+  })
+
+  it('skews short', () => {
+    const short = extended.filter((s) => wordCount(s) < 10).length
+    expect(short / extended.length).toBeGreaterThan(0.5)
+  })
+
+  /* The failure mode EDITORIAL.md names first is "reads fine but feels
+   * templated", and it shows up as one sentence length owning the pool. */
+  it('does not let one sentence length dominate', () => {
+    const distinct = [...new Set(extended)]
+    const counts = new Map<number, number>()
+    for (const s of distinct) counts.set(wordCount(s), (counts.get(wordCount(s)) ?? 0) + 1)
+    expect(Math.max(...counts.values()) / distinct.length).toBeLessThan(0.4)
+  })
+})
