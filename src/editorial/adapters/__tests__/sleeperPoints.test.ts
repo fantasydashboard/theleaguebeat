@@ -389,6 +389,50 @@ describe('buildSleeperPointsData — NaN season guard (Fix 6)', () => {
   })
 })
 
+describe('buildSleeperPointsData — detectPointsStories sources the most recent closed week (Fix round 1)', () => {
+  it('sources the completed fixture (status: complete, week 17) from week 17, not week 16', () => {
+    // Regression pin: the shipped fixture is a COMPLETED league
+    // (league.status: 'complete', leg: 17). Its current week (17) IS
+    // final — that's the freshest close available, and the
+    // championship week the reader actually wants recapped. A
+    // previous-week-preferred implementation would silently source
+    // every story from week 16 instead, forever, for every completed
+    // league — the cover would contradict the scoreboard.
+    const data = buildSleeperPointsData(raw)
+    expect(data.currentWeek).toBe(17)
+    const currentFinals = (data.currentWeekMatchups ?? []).filter((m) => m.status === 'final')
+    expect(currentFinals.length).toBeGreaterThan(0)
+
+    // Pin against the actual DATA, not just the week label the story
+    // carries — a mislabeling bug (Finding 2) could otherwise cancel
+    // out against a mis-sourcing bug (Finding 1) and pass vacuously.
+    // Week 17's highest team total (148.92) is real fixture data that
+    // differs from week 16's (165.7), so which one the high-score
+    // story reports is an unambiguous tell for which week it actually
+    // read.
+    const week17Max = Math.max(
+      ...(data.currentWeekMatchups ?? []).flatMap((m) => [m.homePoints, m.awayPoints]),
+    )
+    const week16Max = Math.max(
+      ...(data.previousWeekMatchups ?? []).flatMap((m) => [m.homePoints, m.awayPoints]),
+    )
+    expect(week17Max).not.toBe(week16Max)
+
+    const context: IssueContext = {
+      currentWeek: data.currentWeek,
+      seasonStage: 'playoffs',
+      issueDate: new Date('2026-01-05T12:00:00Z'),
+    }
+    const stories = detectPointsStories(data, context)
+    const highScore = stories.find((s) => s.type === 'points-high-score')
+    expect(highScore).toBeDefined()
+    expect((highScore?.context as any).points).toBe(week17Max)
+    for (const s of stories) {
+      expect((s.context as any).week).toBe(17)
+    }
+  })
+})
+
 describe('buildSleeperPointsData — playoff_week_start: 0 edge case', () => {
   it('leaves regularSeasonEndWeek undefined rather than -1', () => {
     const rawUnset = {

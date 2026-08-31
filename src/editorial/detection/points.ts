@@ -97,6 +97,7 @@ function resolveBaseline(
 function detectBlowout(
   data: LeagueDataH2HPoints,
   context: IssueContext,
+  sourceWeek: number,
   finalGames: LeagueDataPointsMatchup[],
   baseline: number | undefined,
 ): StoryCandidate[] {
@@ -116,7 +117,7 @@ function detectBlowout(
       type: 'points-blowout',
       category: 'matchup',
       weight: W.blowout,
-      freshness: freshnessForWeekAge(0),
+      freshness: freshnessForWeekAge(context.currentWeek - sourceWeek),
       scope: 'matchup',
       teamIds: [winnerId, loserId],
       seasonStages: IN_SEASON_STAGES,
@@ -128,12 +129,12 @@ function detectBlowout(
         loserPoints,
         margin,
         baseline,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-blowout',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         ...[winnerId, loserId].sort(),
       ]),
     })
@@ -151,6 +152,7 @@ function detectBlowout(
 function detectPhotoFinish(
   data: LeagueDataH2HPoints,
   context: IssueContext,
+  sourceWeek: number,
   finalGames: LeagueDataPointsMatchup[],
   baseline: number | undefined,
 ): StoryCandidate[] {
@@ -166,7 +168,7 @@ function detectPhotoFinish(
       type: 'points-photo-finish',
       category: 'matchup',
       weight: W.photoFinish,
-      freshness: freshnessForWeekAge(0),
+      freshness: freshnessForWeekAge(context.currentWeek - sourceWeek),
       scope: 'matchup',
       teamIds: pair,
       seasonStages: IN_SEASON_STAGES,
@@ -178,12 +180,12 @@ function detectPhotoFinish(
         awayPoints: m.awayPoints,
         margin,
         baseline,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-photo-finish',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         ...[...pair].sort(),
       ]),
     })
@@ -200,6 +202,7 @@ function detectPhotoFinish(
 function detectShootout(
   data: LeagueDataH2HPoints,
   context: IssueContext,
+  sourceWeek: number,
   finalGames: LeagueDataPointsMatchup[],
   baseline: number | undefined,
 ): StoryCandidate[] {
@@ -215,7 +218,7 @@ function detectShootout(
       type: 'points-shootout',
       category: 'matchup',
       weight: W.shootout,
-      freshness: freshnessForWeekAge(0),
+      freshness: freshnessForWeekAge(context.currentWeek - sourceWeek),
       scope: 'matchup',
       teamIds: pair,
       seasonStages: IN_SEASON_STAGES,
@@ -226,12 +229,12 @@ function detectShootout(
         homePoints: m.homePoints,
         awayPoints: m.awayPoints,
         baseline,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-shootout',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         ...[...pair].sort(),
       ]),
     })
@@ -252,6 +255,7 @@ function detectShootout(
 function detectRockFight(
   data: LeagueDataH2HPoints,
   context: IssueContext,
+  sourceWeek: number,
   finalGames: LeagueDataPointsMatchup[],
   baseline: number | undefined,
 ): StoryCandidate[] {
@@ -267,7 +271,7 @@ function detectRockFight(
       type: 'points-rock-fight',
       category: 'matchup',
       weight: W.rockFight,
-      freshness: freshnessForWeekAge(0),
+      freshness: freshnessForWeekAge(context.currentWeek - sourceWeek),
       scope: 'matchup',
       teamIds: pair,
       seasonStages: IN_SEASON_STAGES,
@@ -278,12 +282,12 @@ function detectRockFight(
         homePoints: m.homePoints,
         awayPoints: m.awayPoints,
         baseline,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-rock-fight',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         ...[...pair].sort(),
       ]),
     })
@@ -316,6 +320,7 @@ function teamTotals(finalGames: LeagueDataPointsMatchup[]): TeamTotal[] {
 function detectHighLowScore(
   data: LeagueDataH2HPoints,
   context: IssueContext,
+  sourceWeek: number,
   finalGames: LeagueDataPointsMatchup[],
 ): StoryCandidate[] {
   const totals = teamTotals(finalGames)
@@ -330,12 +335,14 @@ function detectHighLowScore(
     if (t.points < low.points) low = t
   }
 
+  const freshness = freshnessForWeekAge(context.currentWeek - sourceWeek)
+
   return [
     {
       type: 'points-high-score',
       category: 'matchup',
       weight: W.highScore,
-      freshness: freshnessForWeekAge(0),
+      freshness,
       scope: 'league',
       teamIds: [high.teamId],
       seasonStages: IN_SEASON_STAGES,
@@ -343,12 +350,12 @@ function detectHighLowScore(
         matchupId: high.matchupId,
         teamId: high.teamId,
         points: high.points,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-high-score',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         high.teamId,
       ]),
     },
@@ -356,7 +363,7 @@ function detectHighLowScore(
       type: 'points-low-score',
       category: 'matchup',
       weight: W.lowScore,
-      freshness: freshnessForWeekAge(0),
+      freshness,
       scope: 'league',
       teamIds: [low.teamId],
       seasonStages: IN_SEASON_STAGES,
@@ -364,12 +371,12 @@ function detectHighLowScore(
         matchupId: low.matchupId,
         teamId: low.teamId,
         points: low.points,
-        week: context.currentWeek,
+        week: sourceWeek,
       },
       signature: signature([
         'points-low-score',
         data.currentSeason,
-        context.currentWeek,
+        sourceWeek,
         low.teamId,
       ]),
     },
@@ -389,27 +396,37 @@ export function detectPointsStories(
   // blowout, etc. in matchups.ts.
   if (data.format !== 'h2h-points') return []
 
-  // Source from the last CLOSED week, not the one in progress — a
-  // Monday recap is about the week that FINISHED, not the live one.
-  // `previousWeekMatchups` (populated by the Yahoo / ESPN / Sleeper
-  // adapters as a completed, unconditionally-final prior week) is
-  // preferred; fall back to any 'final' entries already sitting in
-  // `currentWeekMatchups`, which covers a completed season where the
-  // "current" week really is final and there is no later week to defer
-  // to.
-  const previousFinalGames = (data.previousWeekMatchups ?? []).filter(isFinal)
-  const finalGames = previousFinalGames.length > 0
-    ? previousFinalGames
-    : (data.currentWeekMatchups ?? []).filter(isFinal)
+  // Source from the MOST RECENT week that actually has finals, not
+  // unconditionally the previous one. `currentWeekMatchups` wins when
+  // it has any 'final' entries — that's the freshest close available,
+  // and it's exactly what ESPN / Yahoo populate with real platform
+  // data every Monday-night-to-Tuesday window, and what a completed
+  // season's own current week legitimately is. Only when the current
+  // week has NO finals (Sleeper, mid-season, in_season — its current
+  // week is 'live' or 'upcoming' by construction) do we fall back to
+  // `previousWeekMatchups`, the last CLOSED week, so a Monday recap is
+  // still about the week that finished rather than nothing at all.
+  const currentFinalGames = (data.currentWeekMatchups ?? []).filter(isFinal)
+  const usingCurrentWeek = currentFinalGames.length > 0
+  const finalGames = usingCurrentWeek
+    ? currentFinalGames
+    : (data.previousWeekMatchups ?? []).filter(isFinal)
   if (finalGames.length === 0) return []
+
+  // The actual week these games belong to — used for `week`, the
+  // signature, and freshness below, NEVER `context.currentWeek`
+  // directly (that would mislabel a previous-week story as this
+  // week's, and its signature would then collide with a genuine
+  // same-numbered story next week).
+  const sourceWeek = usingCurrentWeek ? context.currentWeek : context.currentWeek - 1
 
   const baseline = resolveBaseline(data, finalGames)
 
   return [
-    ...detectBlowout(data, context, finalGames, baseline),
-    ...detectPhotoFinish(data, context, finalGames, baseline),
-    ...detectShootout(data, context, finalGames, baseline),
-    ...detectRockFight(data, context, finalGames, baseline),
-    ...detectHighLowScore(data, context, finalGames),
+    ...detectBlowout(data, context, sourceWeek, finalGames, baseline),
+    ...detectPhotoFinish(data, context, sourceWeek, finalGames, baseline),
+    ...detectShootout(data, context, sourceWeek, finalGames, baseline),
+    ...detectRockFight(data, context, sourceWeek, finalGames, baseline),
+    ...detectHighLowScore(data, context, sourceWeek, finalGames),
   ]
 }

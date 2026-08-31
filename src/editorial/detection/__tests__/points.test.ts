@@ -128,10 +128,11 @@ describe('detectPointsStories', () => {
     expect(out).toContain('points-photo-finish')
   })
 
-  it('prefers previousWeekMatchups over a live currentWeekMatchups', () => {
+  it('falls back to previousWeekMatchups when the current week has no finals at all', () => {
     // The current week is live (no final games there at all); the
     // detectors must fall back to the closed previous week rather than
-    // finding nothing.
+    // finding nothing. This is the Sleeper in_season case: its current
+    // week is 'live'/'upcoming' by construction, never 'final', mid-season.
     const data = {
       ...league([game('m1', 'a', 'b', 100, 100, 'live')]),
       previousWeekMatchups: [game('p1', 'a', 'b', 145, 100, 'final')],
@@ -139,12 +140,53 @@ describe('detectPointsStories', () => {
     expect(types(data)).toContain('points-blowout')
   })
 
-  it('falls back to final entries in currentWeekMatchups when previousWeekMatchups is absent', () => {
+  it('sources directly from currentWeekMatchups finals when present (the primary path)', () => {
     // Covers a completed season: there is no "next" week to have
     // closed the current one out, so the current week's own final
     // games are the only source available.
     const data = league([game('m1', 'a', 'b', 145, 100, 'final')])
     expect(types(data)).toContain('points-blowout')
+  })
+
+  it('prefers a final CURRENT week over previousWeekMatchups when both have finals', () => {
+    // Regression pin for the precedence bug: the fix must prefer the
+    // MOST RECENT week that has finals, not previousWeekMatchups
+    // unconditionally. This is exactly the ESPN/Yahoo Monday-night-to-
+    // Tuesday window (both mark the current week final from real
+    // platform data while still mid-transition) and the completed-
+    // season case (current week IS the final week, previous is stale).
+    // A previous-week-preferred implementation would source from the
+    // tiny 1-point previous-week margin (a photo finish, not a
+    // blowout) and miss the current week's unmistakable 290-point
+    // blowout entirely.
+    const data = {
+      ...league([game('m1', 'a', 'b', 300, 10, 'final')]),
+      previousWeekMatchups: [game('p1', 'a', 'b', 101, 100, 'final')],
+    } as LeagueDataH2HPoints
+    const out = detectPointsStories(data, context)
+    const blowout = out.find((s) => s.type === 'points-blowout')
+    expect(blowout).toBeDefined()
+    expect((blowout?.context as any).week).toBe(context.currentWeek)
+  })
+
+  it('labels a previous-week-sourced story with the week it actually happened, not context.currentWeek', () => {
+    // Off-by-one pin: when the source is `previousWeekMatchups`
+    // (currentWeek - 1), the story's `week`, its signature, and its
+    // freshness must reflect that actual week — not context.currentWeek,
+    // which would mislabel the story and collide its signature with a
+    // genuine same-numbered story published a week later.
+    const data = {
+      ...league([game('m1', 'a', 'b', 100, 100, 'live')]),
+      previousWeekMatchups: [game('p1', 'a', 'b', 145, 100, 'final')],
+    } as LeagueDataH2HPoints
+    const out = detectPointsStories(data, context)
+    const blowout = out.find((s) => s.type === 'points-blowout')
+    expect(blowout).toBeDefined()
+    expect((blowout?.context as any).week).toBe(context.currentWeek - 1)
+    expect(blowout?.signature.split('|')).toContain(String(context.currentWeek - 1))
+    expect(blowout?.signature.split('|')).not.toContain(String(context.currentWeek))
+    // One week stale, not fresh — freshnessForWeekAge(1) === 0.7.
+    expect(blowout?.freshness).toBeCloseTo(0.7)
   })
 
   it('gives every story a stable signature', () => {

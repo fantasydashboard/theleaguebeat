@@ -2017,9 +2017,12 @@ function weekMatchupStatus(
   return seasonComplete ? 'final' : 'live'
 }
 
-/** Current week's matchups for the Matchups page. Status is derived
- *  per-week from the scoring itself (see `weekMatchupStatus`), not
- *  from the league-level `seasonComplete` flag alone. */
+/** Current week's matchups for the Matchups page. Status comes from
+ *  `weekMatchupStatus`: 'upcoming' when nobody has scored yet,
+ *  otherwise 'final' exactly when the league-level `seasonComplete`
+ *  flag says so and 'live' the rest of the time — the current week
+ *  can never be honestly called closed from per-roster point totals
+ *  alone (see `weekMatchupStatus`'s doc comment). */
 function buildSleeperCurrentWeekMatchups(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   currentWeek: number,
