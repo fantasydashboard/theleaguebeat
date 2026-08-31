@@ -20,7 +20,7 @@ describe('voiceViolations', () => {
   })
 
   it('catches question-mark headlines', () => {
-    expect(voiceViolations('Is Bullpen Theology unstoppable?')).toContain('question-mark')
+    expect(voiceViolations('Is OverDrive unstoppable?')).toContain('question-mark')
   })
 
   it('catches second-person address', () => {
@@ -66,9 +66,57 @@ describe('voiceViolations', () => {
     expect(voiceViolations('Bullpen collapsed after the ninth.')).toContain('wrong-sport:bullpen')
   })
 
+  it('catches sports-broadcast clichés', () => {
+    expect(voiceViolations('They left it all on the field.')).toContain('cliche:left-it-all-on-the-field')
+    expect(voiceViolations('The offense did the little things right.')).toContain('cliche:did-the-little-things')
+    expect(voiceViolations('Everyone could tell they wanted it more.')).toContain('cliche:wanted-it-more')
+    expect(voiceViolations('They showed up when it mattered most.')).toContain('cliche:showed-up-when-it-mattered')
+  })
+
+  it('catches corporate hedge phrases', () => {
+    expect(voiceViolations('The offense appears to have stalled.')).toContain('hedge:appears-to-have')
+    expect(voiceViolations('It looks like a blowout.')).toContain('hedge:looks-like')
+    expect(voiceViolations('The trade seems lopsided.')).toContain('hedge:seems')
+    expect(voiceViolations('This potentially changes the standings.')).toContain('hedge:potentially')
+  })
+
+  it('catches generic descriptors', () => {
+    expect(voiceViolations('It was a great game.')).toContain('generic:great-game')
+    expect(voiceViolations('A strong performance from the backfield.')).toContain('generic:strong-performance')
+    expect(voiceViolations('Just a solid week overall.')).toContain('generic:solid-week')
+    expect(voiceViolations('A tough loss to close the year.')).toContain('generic:tough-loss')
+  })
+
+  /* "Looks" alone is a normal verb; only "looks like" is the banned
+   * hedge. A phrase list that over-matches on a component word would
+   * wrongly flag ordinary prose like this. */
+  it('does not flag a legitimate near-miss of a hedge phrase', () => {
+    expect(voiceViolations('The offense looks sharp this week.')).toEqual([])
+  })
+
   it('catches sentences over 30 words', () => {
     const long = 'The team ' + 'scored points and '.repeat(10) + 'won the game.'
     expect(voiceViolations(long)).toContain('too-long')
+  })
+
+  /* EDITORIAL.md: "Anything 30+ words gets cut" — 30 itself is cut. */
+  it('flags a sentence at exactly 30 words', () => {
+    const thirty = Array(30).fill('Word').join(' ') + '.'
+    expect(voiceViolations(thirty)).toContain('too-long')
+  })
+
+  it('does not flag a sentence at 29 words', () => {
+    const twentyNine = Array(29).fill('Word').join(' ') + '.'
+    expect(voiceViolations(twentyNine)).toEqual([])
+  })
+
+  /* The cap is per SENTENCE, not per string. Canonical multi-sentence
+   * variants (EDITORIAL.md #3, #4, #7, #11, #14, #15) routinely clear
+   * 30 words combined without either sentence being too long. */
+  it('does not flag a multi-sentence variant whose combined length exceeds the cap', () => {
+    const twoShortSentences =
+      Array(16).fill('Word').join(' ') + '. ' + Array(16).fill('Word').join(' ') + '.'
+    expect(voiceViolations(twoShortSentences)).toEqual([])
   })
 
   it('reports every violation, not just the first', () => {
