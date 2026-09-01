@@ -83,7 +83,10 @@
 
           <p class="hero-note">
             <span class="hero-note-badge">Free</span>
-            Every issue, for every manager in the league. No card, no trial.
+            <span>
+              <span class="hero-note-strong">Every issue, for every manager.</span>
+              No card, no trial.
+            </span>
           </p>
         </div>
 
@@ -382,6 +385,12 @@
             Connect your league
           </router-link>
         </div>
+        <!-- Third and last "free" beat: hero badge, mid-page band, then
+             here at the point of decision. -->
+        <p class="closer-free">
+          <span class="closer-free-mark">Free</span>
+          for the whole league. No card, no trial.
+        </p>
       </div>
     </section>
 
@@ -665,27 +674,36 @@ onMounted(async () => {
   outline-offset: 3px;
 }
 
-/* "Free" as a badge on the hero, not as its own screen further down. */
+/* "Free" as a badge on the hero, not as its own screen further down.
+   Solid rather than outlined: this is the first of the page's three
+   "free" beats and the only one above the fold, so it has to land in a
+   glance. The full-screen pricing section it replaced read as bait —
+   the fix for wanting more emphasis is a louder badge, not that. */
 .hero-note {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  margin: 22px 0 0;
-  font-size: 0.95rem;
-  color: var(--ink-3);
+  gap: 12px;
+  margin: 24px 0 0;
+  font-size: 1rem;
+  color: var(--ink-2);
 }
 .hero-note-badge {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.76rem;
+  font-size: 0.88rem;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--accent-gold);
-  border: 1px solid oklch(0.78 0.18 92 / 0.45);
+  color: oklch(0.14 0.012 90);
+  background: var(--accent-gold);
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 5px 14px;
+  box-shadow: 0 0 0 4px oklch(0.78 0.18 92 / 0.14);
+}
+.hero-note-strong {
+  color: var(--ink-1);
+  font-weight: 700;
 }
 
 .hero-shot {
@@ -948,24 +966,40 @@ onMounted(async () => {
   margin: 0 auto;
 }
 .freeband-inner {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 36px;
-  max-width: 900px;
+  gap: 40px;
+  max-width: 940px;
   margin: 0 auto;
-  padding: 32px 40px;
+  padding: 40px 44px;
   border-radius: 18px;
   background:
-    radial-gradient(ellipse at left, oklch(0.78 0.18 92 / 0.10), transparent 65%),
-    oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.78 0.18 92 / 0.35);
+    radial-gradient(ellipse at left, oklch(0.78 0.18 92 / 0.18), transparent 68%),
+    oklch(0.11 0.018 92);
+  border: 1px solid oklch(0.78 0.18 92 / 0.55);
+  box-shadow:
+    0 0 0 1px oklch(0.78 0.18 92 / 0.10),
+    0 18px 60px oklch(0.78 0.18 92 / 0.10);
+}
+/* Gold spine down the left edge — the band reads as a callout at a
+   glance without needing the screen-sized treatment back. */
+.freeband-inner::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent-gold);
 }
 .freeband-mark {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 3.4rem;
-  letter-spacing: -0.04em;
-  line-height: 1;
+  font-size: clamp(3.6rem, 6vw, 4.8rem);
+  letter-spacing: -0.045em;
+  line-height: 0.9;
   color: var(--accent-gold);
   margin: 0;
   flex-shrink: 0;
@@ -1026,6 +1060,19 @@ onMounted(async () => {
   margin: 0 0 8px;
 }
 .closer-cta-row { margin-top: 16px; }
+.closer-free {
+  margin: 6px 0 0;
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+.closer-free-mark {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  color: var(--accent-gold);
+  margin-right: 4px;
+}
 
 /* ─── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 1024px) {
