@@ -340,7 +340,12 @@ function detectHighLowScore(
   return [
     {
       type: 'points-high-score',
-      category: 'matchup',
+      // Not 'matchup': these are league-wide scoring superlatives, not
+      // recaps of one game. Filed under 'matchup' they competed with
+      // points-blowout for the same two-per-category slots, and blowout
+      // outweighs them — so the high and low scores of the week never
+      // reached an issue. `scope: 'league'` already says what they are.
+      category: 'standings',
       weight: W.highScore,
       freshness,
       scope: 'league',
@@ -361,7 +366,8 @@ function detectHighLowScore(
     },
     {
       type: 'points-low-score',
-      category: 'matchup',
+      // See points-high-score above — same reasoning.
+      category: 'standings',
       weight: W.lowScore,
       freshness,
       scope: 'league',

@@ -55,3 +55,20 @@ describe('the football pipeline', () => {
       .toEqual(['dynasty-falling', 'matchup-of-week', 'trade-deadline-week'])
   })
 })
+
+/* Scoring superlatives used to be filed under `category: 'matchup'`,
+ * where points-blowout outweighed them and took both per-category
+ * slots — so across an entire season the high and low scores of the
+ * week never once reached an issue. This asserts they can. */
+describe('points story variety', () => {
+  it('lets a scoring superlative reach an issue at some point in the season', () => {
+    const weeks = [1, 3, 5, 8, 11, 14, 15, 17]
+    const surfaced = weeks.flatMap((week) => {
+      const stage = deriveSeasonStage(week, football.regularSeasonEndWeek, sportOf(football))
+      const ctx: IssueContext = { currentWeek: week, seasonStage: stage, issueDate: new Date('2026-10-07T12:00:00Z') }
+      const data = { ...football, currentWeek: week }
+      return selectStoriesForIssue(detectAll(data, ctx), ctx).map((s) => s.type as string)
+    })
+    expect(surfaced.some((t) => t === 'points-high-score' || t === 'points-low-score')).toBe(true)
+  })
+})
