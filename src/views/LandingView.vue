@@ -325,17 +325,17 @@
 
       <ul class="platforms-grid" role="list">
         <li class="platforms-item">
-          <img src="/sleeper.svg" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
+          <img src="/platform/sleeper.svg" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">Sleeper</span>
           <span class="platforms-status">Available</span>
         </li>
         <li class="platforms-item">
-          <img src="/landing/yahoo.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
+          <img src="/platform/yahoo.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">Yahoo</span>
           <span class="platforms-status">Available</span>
         </li>
         <li class="platforms-item">
-          <img src="/landing/espn.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
+          <img src="/platform/espn.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">ESPN</span>
           <span class="platforms-status">Available</span>
         </li>

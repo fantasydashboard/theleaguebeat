@@ -19,20 +19,65 @@
       </header>
       <ul class="saved-leagues-list" role="list">
         <li
-          v-for="league in leaguesStore.leagues"
-          :key="league.id"
+          v-for="group in savedLeagueGroups"
+          :key="group.key"
           class="saved-leagues-row"
         >
-          <router-link :to="`/leagues/${league.id}/the-beat`" class="saved-leagues-link">
-            <span class="saved-leagues-name">{{ league.league_name }}</span>
+          <!-- The card links to the most recent season. Past seasons are
+               siblings below, not nested — an anchor inside an anchor is
+               invalid and breaks keyboard navigation. -->
+          <router-link
+            :to="`/leagues/${group.current.id}/the-beat`"
+            class="saved-leagues-link"
+          >
+            <!-- Real alt, not decorative: the mark replaced the word
+                 "Yahoo"/"ESPN"/"Sleeper" in the meta line, so without it
+                 a screen reader loses the platform entirely. -->
+            <img
+              :src="platformLogo(group.current.platform)"
+              :alt="platformLabel(group.current.platform)"
+              class="saved-leagues-logo"
+              width="34"
+              height="34"
+            />
+            <span class="saved-leagues-name">{{ group.current.league_name }}</span>
             <span class="saved-leagues-meta">
-              {{ platformLabel(league.platform) }} · {{ league.sport }}
-              <span v-if="league.season"> · {{ league.season }}</span>
+              <span :class="['saved-leagues-sport', `sport-${group.current.sport}`]">
+                {{ group.current.sport }}
+              </span>
+              <!-- Scoring format and league size only render when the
+                   platform actually gave them to us. Yahoo always does;
+                   Sleeper never does and ESPN is inconsistent. Blank beats
+                   invented. -->
+              <span v-if="scoringLabel(group.current.scoring_type)" class="saved-leagues-dot">·</span>
+              <span v-if="scoringLabel(group.current.scoring_type)">
+                {{ scoringLabel(group.current.scoring_type) }}
+              </span>
+              <span v-if="group.current.league_size" class="saved-leagues-dot">·</span>
+              <span v-if="group.current.league_size">
+                {{ group.current.league_size }} teams
+              </span>
+              <span class="saved-leagues-dot">·</span>
+              <span>{{ group.current.season }}</span>
             </span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="saved-leagues-arrow" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
           </router-link>
+
+          <!-- Prior seasons of the same league, collapsed onto one line
+               instead of repeating the whole card per year. -->
+          <div v-if="group.past.length > 0" class="saved-leagues-seasons">
+            <span class="saved-leagues-seasons-label">Past seasons</span>
+            <router-link
+              v-for="past in group.past"
+              :key="past.id"
+              :to="`/leagues/${past.id}/the-beat`"
+              class="saved-leagues-season-chip"
+            >
+              {{ past.season }}
+            </router-link>
+          </div>
         </li>
       </ul>
       <div class="saved-leagues-sep" aria-hidden="true">
@@ -528,6 +573,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
+import type { League } from '@/types/supabase'
 import { yahooService } from '@/services/yahoo'
 import { espnService } from '@/services/espn'
 import { classifyLeagueSupport, type UnsupportedKind } from '@/utils/leagueSupport'
@@ -564,6 +610,101 @@ function platformLabel(p: string): string {
   if (p === 'fantrax') return 'Fantrax'
   return p
 }
+
+// The platform's own mark, which does more scanning work in a long list
+// than the word ever did. Falls back to the TLB monogram so an unknown
+// platform renders a box rather than a broken image.
+function platformLogo(p: string): string {
+  if (p === 'espn') return '/platform/espn.png'
+  if (p === 'yahoo') return '/platform/yahoo.png'
+  if (p === 'sleeper') return '/platform/sleeper.svg'
+  return '/tlb-favicon.png'
+}
+
+/**
+ * Human label for a league's scoring format.
+ *
+ * Values differ per platform: Yahoo sends lowercase (`head`, `headpoint`,
+ * `point`, `roto`), ESPN sends screaming snake (`H2H_CATEGORY`,
+ * `H2H_POINTS`, `TOTAL_POINTS`, `ROTO`). Sleeper sends nothing at all.
+ *
+ * Returns null for anything unrecognised — the row then omits the field
+ * entirely rather than displaying a raw enum or guessing a format. A
+ * wrong "H2H points" badge on a category league would undermine every
+ * number on the page it links to.
+ */
+function scoringLabel(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  switch (String(raw).toLowerCase()) {
+    case 'head':
+    case 'h2h_category':
+      return 'H2H categories'
+    case 'headpoint':
+    case 'h2h_points':
+      return 'H2H points'
+    case 'point':
+    case 'total_points':
+      return 'Total points'
+    case 'roto':
+      return 'Roto'
+    default:
+      return null
+  }
+}
+
+/**
+ * Collapse the flat league rows into one entry per league, with its
+ * prior seasons attached.
+ *
+ * A league is one row per SEASON in Supabase (the upsert key is
+ * user_id + platform + platform_league_id + season), and platforms mint
+ * a fresh id every year — Yahoo's `league_key` changes each season — so
+ * `platform_league_id` cannot join them. Name + platform + sport is the
+ * practical identity, which means a league renamed between seasons
+ * splits into two entries. That is the honest failure: two real rows,
+ * not one wrong merge.
+ *
+ * (Yahoo does expose a `renew` field pointing at the prior season's key,
+ * which would make this exact. We fetch it in `getLeagueMetadata` but do
+ * not persist it — wiring it into `settings` is the upgrade path.)
+ */
+type SavedLeagueGroup = {
+  key: string
+  current: League
+  past: League[]
+}
+
+const savedLeagueGroups = computed<SavedLeagueGroup[]>(() => {
+  const buckets = new Map<string, League[]>()
+
+  for (const league of leaguesStore.leagues) {
+    const identity = [
+      league.platform,
+      league.sport,
+      (league.league_name ?? '').trim().toLowerCase(),
+    ].join('|')
+    const bucket = buckets.get(identity)
+    if (bucket) bucket.push(league)
+    else buckets.set(identity, [league])
+  }
+
+  const seasonOf = (l: League) => Number(l.season) || 0
+
+  const groups: SavedLeagueGroup[] = []
+  for (const [key, rows] of buckets) {
+    const sorted = [...rows].sort((a, b) => seasonOf(b) - seasonOf(a))
+    groups.push({ key, current: sorted[0], past: sorted.slice(1) })
+  }
+
+  // Most recent season first so the live league is at the top, then
+  // alphabetical. The old list was name-ordered only, which scattered
+  // 2024 archives among this year's leagues.
+  return groups.sort((a, b) => {
+    const bySeason = seasonOf(b.current) - seasonOf(a.current)
+    if (bySeason !== 0) return bySeason
+    return (a.current.league_name ?? '').localeCompare(b.current.league_name ?? '')
+  })
+})
 
 // Bubbles to App.vue, which owns the AuthModal. The demo layout
 // already forwards `open-signup` from its child router-view.
@@ -1001,40 +1142,45 @@ async function onEspnSubmit(): Promise<void> {
   flex-direction: column;
   gap: 8px;
 }
+/* The card frame lives on the row, not the link, so the past-seasons
+   strip sits INSIDE the same box as the league it belongs to. With the
+   frame on the link, that strip floated between cards and read as
+   belonging to neither. */
 .saved-leagues-row {
-  /* No box on the row itself — visual weight lives on the link card. */
-}
-.saved-leagues-link {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "name arrow"
-    "meta arrow";
-  align-items: center;
-  gap: 4px 16px;
-  padding: 16px 20px;
   border-radius: 10px;
   background: oklch(0.07 0.014 90 / 0.55);
   border: 1px solid oklch(0.18 0.015 90);
-  text-decoration: none;
-  color: var(--ink-1);
+  overflow: hidden;
   transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-              border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-              transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+              border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (hover: hover) and (pointer: fine) {
-  .saved-leagues-link:hover {
+  .saved-leagues-row:hover {
     background: oklch(0.10 0.014 90);
     border-color: oklch(0.78 0.18 92 / 0.40);
   }
-  .saved-leagues-link:hover .saved-leagues-arrow {
+}
+.saved-leagues-link {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "logo name arrow"
+    "logo meta arrow";
+  align-items: center;
+  gap: 2px 14px;
+  padding: 14px 20px;
+  text-decoration: none;
+  color: var(--ink-1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .saved-leagues-row:hover .saved-leagues-arrow {
     transform: translateX(2px);
   }
 }
-.saved-leagues-link:active { transform: scale(0.995); }
 .saved-leagues-link:focus-visible {
   outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+  outline-offset: -2px;
+  border-radius: 10px;
 }
 .saved-leagues-name {
   grid-area: name;
@@ -1045,12 +1191,81 @@ async function onEspnSubmit(): Promise<void> {
 }
 .saved-leagues-meta {
   grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
+}
+.saved-leagues-dot { opacity: 0.5; }
+
+.saved-leagues-logo {
+  grid-area: logo;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* Sport carries a colour so a mixed baseball/football list is scannable
+   without reading a word of it. */
+.saved-leagues-sport { color: var(--ink-2); }
+.saved-leagues-sport.sport-baseball   { color: oklch(0.74 0.18 145); }
+.saved-leagues-sport.sport-football   { color: oklch(0.78 0.18 92); }
+.saved-leagues-sport.sport-basketball { color: oklch(0.72 0.19 55); }
+.saved-leagues-sport.sport-hockey     { color: oklch(0.72 0.18 195); }
+
+/* Past seasons of the same league. Deliberately quiet — this is an
+   archive, not the thing most people came for. */
+.saved-leagues-seasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 0 68px;
+  padding: 10px 0 12px;
+  border-top: 1px solid oklch(0.16 0.015 90);
+}
+.saved-leagues-seasons-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.45 0.010 90);
+}
+.saved-leagues-season-chip {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  text-decoration: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid oklch(0.22 0.015 90);
+  transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .saved-leagues-season-chip:hover {
+    color: var(--ink-1);
+    border-color: oklch(0.78 0.18 92 / 0.50);
+  }
+}
+.saved-leagues-season-chip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .saved-leagues-seasons { margin-left: 20px; }
 }
 .saved-leagues-arrow {
   grid-area: arrow;
