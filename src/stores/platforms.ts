@@ -498,12 +498,43 @@ export const usePlatformsStore = defineStore('platforms', () => {
   }
 
   /**
+   * Derive a Sleeper league's scoring format from the league payload.
+   *
+   * Sleeper has no category mode — `scoring_settings` is literally a map
+   * of stat to points, and matchups are head-to-head — so a league that
+   * reports scoring settings is H2H points. Best-ball leagues are the
+   * one structural exception and flag themselves.
+   *
+   * Returns null when `scoring_settings` is absent rather than assuming
+   * a format: an unlabelled row beats a wrong one.
+   */
+  function sleeperScoringType(league: {
+    scoring_settings?: Record<string, number> | null
+    settings?: Record<string, any> | null
+  }): string | null {
+    if (!league.scoring_settings) return null
+    if (league.settings?.best_ball === 1) return 'BEST_BALL'
+    return 'H2H_POINTS'
+  }
+
+  /**
    * Sync a Sleeper league to the database. Mirrors the Yahoo/ESPN pattern.
-   * team_name/team_id/scoring_type left null — would need a Sleeper API call
-   * to populate (the user's roster within the league).
+   *
+   * `team_name`/`team_id` stay null: the connect flow takes a pasted
+   * league ID, not a Sleeper username, so we have no way to know which
+   * of the rosters belongs to this user. Populating them needs the
+   * username step, not another field here.
    */
   async function syncSleeperLeague(
-    league: { league_id: string; name: string; season: string; total_rosters?: number },
+    league: {
+      league_id: string
+      name: string
+      season: string
+      total_rosters?: number
+      previous_league_id?: string | null
+      scoring_settings?: Record<string, number> | null
+      settings?: Record<string, any> | null
+    },
     sport: Sport
   ): Promise<{ success: boolean; leagueRowId?: string; error?: string }> {
     const authStore = useAuthStore()
@@ -522,10 +553,16 @@ export const usePlatformsStore = defineStore('platforms', () => {
       season: seasonNum,
       team_name: null,
       team_id: null,
-      scoring_type: null,
+      scoring_type: sleeperScoringType(league),
       league_size: league.total_rosters ?? null,
       is_active: true,
       last_synced_at: new Date().toISOString(),
+      // Sleeper hands us exact season lineage for free — the prior
+      // season's league_id. Stored so the league list can join seasons
+      // by identity rather than by matching names.
+      settings: {
+        previous_league_id: league.previous_league_id ?? null,
+      },
     }
 
     const { data, error: upsertError } = await supabase

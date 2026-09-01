@@ -240,6 +240,7 @@
             <path d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
         </button>
+        <p v-if="sleeperError" class="form-error">{{ sleeperError }}</p>
       </form>
     </section>
 
@@ -647,6 +648,8 @@ function scoringLabel(raw: string | null | undefined): string | null {
       return 'Total points'
     case 'roto':
       return 'Roto'
+    case 'best_ball':
+      return 'Best ball'
     default:
       return null
   }
@@ -659,14 +662,16 @@ function scoringLabel(raw: string | null | undefined): string | null {
  * A league is one row per SEASON in Supabase (the upsert key is
  * user_id + platform + platform_league_id + season), and platforms mint
  * a fresh id every year — Yahoo's `league_key` changes each season — so
- * `platform_league_id` cannot join them. Name + platform + sport is the
- * practical identity, which means a league renamed between seasons
- * splits into two entries. That is the honest failure: two real rows,
- * not one wrong merge.
+ * `platform_league_id` alone cannot join them.
  *
- * (Yahoo does expose a `renew` field pointing at the prior season's key,
- * which would make this exact. We fetch it in `getLeagueMetadata` but do
- * not persist it — wiring it into `settings` is the upgrade path.)
+ * Two signals do the joining, unioned together:
+ *   1. Exact lineage, where the platform reports it. Sleeper's league
+ *      payload carries `previous_league_id`, which we persist.
+ *   2. Name + platform + sport, for everything else.
+ *
+ * Signal 2 alone splits a league that was renamed between seasons —
+ * the honest failure, two real rows rather than one wrong merge — and
+ * signal 1 removes that failure wherever a platform supports it.
  */
 type SavedLeagueGroup = {
   key: string
@@ -675,24 +680,78 @@ type SavedLeagueGroup = {
 }
 
 const savedLeagueGroups = computed<SavedLeagueGroup[]>(() => {
-  const buckets = new Map<string, League[]>()
+  const rows = leaguesStore.leagues
 
-  for (const league of leaguesStore.leagues) {
-    const identity = [
-      league.platform,
-      league.sport,
-      (league.league_name ?? '').trim().toLowerCase(),
-    ].join('|')
-    const bucket = buckets.get(identity)
-    if (bucket) bucket.push(league)
-    else buckets.set(identity, [league])
+  // Union-find over two independent signals. Exact lineage merges what
+  // it can; the name heuristic catches the rest. Running both means a
+  // platform that reports lineage never depends on names matching, and
+  // one that doesn't still groups.
+  const parent = new Map<string, string>()
+  const find = (x: string): string => {
+    // Self-seed unknown ids. Without this, `parent.get(x)` is undefined,
+    // never equals `x`, and the walk below spins forever — an infinite
+    // loop in a computed, which would lock the tab rather than fail
+    // loudly. Every caller currently passes a seeded row id, so this is
+    // a guard against a future one that does not.
+    if (!parent.has(x)) parent.set(x, x)
+    let root = x
+    while (parent.get(root) !== root) root = parent.get(root)!
+    // Path compression, so deep season chains stay cheap.
+    let cur = x
+    while (cur !== root) {
+      const next = parent.get(cur)!
+      parent.set(cur, root)
+      cur = next
+    }
+    return root
+  }
+  const union = (a: string, b: string) => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+
+  for (const l of rows) parent.set(l.id, l.id)
+
+  // Signal 1 — name identity, within one platform and sport.
+  const byName = new Map<string, string>()
+  for (const l of rows) {
+    const key = [l.platform, l.sport, (l.league_name ?? '').trim().toLowerCase()].join('|')
+    const seen = byName.get(key)
+    if (seen) union(l.id, seen)
+    else byName.set(key, l.id)
+  }
+
+  // Signal 2 — exact season lineage. Sleeper hands us `previous_league_id`
+  // on the league payload and we persist it; a row whose pointer names
+  // another row's platform_league_id is the same league, one year on.
+  // (Yahoo has the equivalent in its `renew` field, but it is absent
+  // from the leagues-list response — reading it would cost one extra API
+  // call per league on every sync, so Yahoo stays on the name signal.)
+  const byPlatformId = new Map<string, string>()
+  for (const l of rows) {
+    byPlatformId.set(`${l.platform}|${l.platform_league_id}`, l.id)
+  }
+  for (const l of rows) {
+    const prev = (l.settings as Record<string, unknown> | null)?.previous_league_id
+    if (!prev) continue
+    const prevRowId = byPlatformId.get(`${l.platform}|${String(prev)}`)
+    if (prevRowId) union(l.id, prevRowId)
+  }
+
+  const buckets = new Map<string, League[]>()
+  for (const l of rows) {
+    const root = find(l.id)
+    const bucket = buckets.get(root)
+    if (bucket) bucket.push(l)
+    else buckets.set(root, [l])
   }
 
   const seasonOf = (l: League) => Number(l.season) || 0
 
   const groups: SavedLeagueGroup[] = []
-  for (const [key, rows] of buckets) {
-    const sorted = [...rows].sort((a, b) => seasonOf(b) - seasonOf(a))
+  for (const [key, bucket] of buckets) {
+    const sorted = [...bucket].sort((a, b) => seasonOf(b) - seasonOf(a))
     groups.push({ key, current: sorted[0], past: sorted.slice(1) })
   }
 
@@ -720,6 +779,23 @@ type Platform = 'sleeper' | 'yahoo' | 'espn'
 const selectedSport = ref<Sport | null>(null)
 const selectedPlatform = ref<Platform | null>(null)
 const leagueIdInput = ref('')
+const sleeperError = ref('')
+
+/**
+ * Map Sleeper's sport code onto our `Sport` vocabulary. Returns null for
+ * anything unrecognised so the caller can proceed rather than block on a
+ * sport we simply do not know about.
+ */
+function sleeperSport(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  switch (String(raw).toLowerCase()) {
+    case 'nfl': return 'football'
+    case 'mlb': return 'baseball'
+    case 'nba': return 'basketball'
+    case 'nhl': return 'hockey'
+    default: return null
+  }
+}
 
 // ─── Yahoo state ────────────────────────────────────────────────
 interface YahooLeagueOption {
@@ -877,6 +953,7 @@ onMounted(() => {
 async function onSubmit(): Promise<void> {
   const id = leagueIdInput.value.trim()
   if (!id || selectedPlatform.value !== 'sleeper') return
+  sleeperError.value = ''
   // Persist the connection so it appears in the switcher across
   // sessions, then route to the live-league URL by Supabase UUID.
   // The fetch is just to grab the league's display name + size from
@@ -887,12 +964,27 @@ async function onSubmit(): Promise<void> {
       const meta = await fetch(`https://api.sleeper.app/v1/league/${id}`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null)
+
+      // Sleeper league IDs carry no sport in them, so nothing stops a
+      // football league ID being pasted into the baseball form. The
+      // payload knows the truth; refuse rather than file an NFL league
+      // under `sport: 'baseball'` and poison every story built on it.
+      const metaSport = sleeperSport(meta?.sport)
+      if (metaSport && metaSport !== 'baseball') {
+        sleeperError.value =
+          `That league ID is a Sleeper ${metaSport} league. This form connects baseball leagues.`
+        return
+      }
+
       const result = await platformsStore.syncSleeperLeague(
         {
           league_id: id,
           name: meta?.name ?? `Sleeper League ${id}`,
           season: String(meta?.season ?? new Date().getFullYear()),
           total_rosters: meta?.total_rosters,
+          previous_league_id: meta?.previous_league_id ?? null,
+          scoring_settings: meta?.scoring_settings ?? null,
+          settings: meta?.settings ?? null,
         },
         'baseball',
       )
@@ -1050,7 +1142,7 @@ async function onEspnSubmit(): Promise<void> {
     // renames. Non-fatal — if the fetch fails (creds not yet warm,
     // league not accessible), the placeholder ships and the
     // backfill in loadBeat/loadIssue self-heals on first page load.
-    let leagueInfo: { name: string; size: number } | undefined
+    let leagueInfo: { name: string; size: number; scoringType?: string } | undefined
     try {
       const espnLeague = await espnService.getLeague(
         'baseball',
@@ -1061,6 +1153,11 @@ async function onEspnSubmit(): Promise<void> {
         leagueInfo = {
           name: espnLeague.name,
           size: espnLeague.size || 0,
+          // ESPN reports the format on the league itself
+          // (H2H_CATEGORY / H2H_POINTS / ROTO / TOTAL_POINTS).
+          // syncEspnLeague has always accepted it; it was simply never
+          // passed, which is why ESPN rows showed no scoring format.
+          scoringType: espnLeague.scoringType,
         }
       }
     } catch (err) {
