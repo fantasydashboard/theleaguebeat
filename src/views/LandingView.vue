@@ -31,7 +31,7 @@
             to="/demo-categories/connect"
             class="landing-nav-cta"
           >
-            Get started
+            Connect your league
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
@@ -41,48 +41,92 @@
     </header>
 
     <!-- ─────────────────────────────────────────────────────────────
-         HERO — magazine cover. Masthead bar, huge editorial headline,
-         supporting deck, dual CTAs. The voice IS the marketing.
+         HERO — promise first, then proof.
+
+         The previous hero opened with a sample headline ("The dynasty
+         falls. Bullpen Theology just took the throne.") and nothing
+         else. A cold visitor has no idea what Bullpen Theology is, so
+         the best part of the product read as gibberish. The sample
+         still leads — but inside the framed issue below, where it is
+         legible AS a sample. The plain sentence comes first.
     ────────────────────────────────────────────────────────────── -->
     <section class="hero" aria-labelledby="hero-headline">
       <div class="hero-inner">
-        <div class="hero-masthead" aria-hidden="true">
-          <span class="hero-masthead-bar"></span>
-          <span class="hero-masthead-meta">VOL. 1 · ISSUE 1 · WEEK 8 · 2026</span>
+        <div class="hero-head">
+          <div class="hero-masthead" aria-hidden="true">
+            <span class="hero-masthead-bar"></span>
+            <span class="hero-masthead-meta">Sleeper · Yahoo · ESPN</span>
+            <span class="hero-masthead-bar"></span>
+          </div>
+
+          <h1 class="hero-headline" id="hero-headline">
+            Your league gets its own
+            <span class="hero-headline-accent">magazine.</span>
+          </h1>
+          <p class="hero-deck">
+            Connect your fantasy league and The League Beat writes the
+            week — a lead story, power rankings, matchup recaps, and the
+            arcs that run all season.
+          </p>
+
+          <div class="hero-cta-row">
+            <router-link to="/demo-categories/home" class="hero-cta hero-cta-primary">
+              Read this week's issue
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </router-link>
+            <router-link to="/demo-categories/connect" class="hero-cta hero-cta-secondary">
+              Connect your league
+            </router-link>
+          </div>
+
+          <p class="hero-note">
+            <span class="hero-note-badge">Free</span>
+            Every issue, for every manager in the league. No card, no trial.
+          </p>
         </div>
 
-        <h1 class="hero-headline" id="hero-headline">
-          The dynasty
-          <span class="hero-headline-accent">falls.</span>
-        </h1>
-        <p class="hero-deck">
-          Bullpen Theology just took the throne.
-          <span class="hero-deck-dim">Closer's Therapy is bleeding saves.</span>
-        </p>
-
-        <p class="hero-tagline">Your league has a story. We write it.</p>
-
-        <div class="hero-cta-row">
-          <router-link to="/demo-categories/connect" class="hero-cta hero-cta-primary">
-            Read the demo
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-          </router-link>
-          <button type="button" class="hero-cta hero-cta-secondary" @click="emit('open-signup')">
-            Connect your league
-          </button>
-        </div>
+        <!-- The artifact. A real page from the running demo, framed so
+             it reads as a specimen rather than as page furniture. -->
+        <figure class="hero-shot">
+          <div class="shot">
+            <!-- Two captures, not one scaled one: the desktop shot is
+                 1440px of layout and shrinks to illegible mush on a
+                 phone, which is exactly where a link shared into a
+                 league group chat gets opened. -->
+            <picture>
+              <source
+                media="(max-width: 680px)"
+                srcset="/landing/beat-m.webp"
+                width="804"
+                height="1582"
+              />
+              <img
+                src="/landing/beat.webp"
+                width="2200"
+                height="1163"
+                alt="The Beat — a League Beat issue page. The lead column reads: The bubble decides itself this week. Closer's Therapy and Mound Visitors draw each other with the cut at stake."
+                fetchpriority="high"
+              />
+            </picture>
+          </div>
+          <figcaption class="shot-caption">
+            An actual issue, straight from the demo league. Yours reads
+            the same way, with your teams and your week.
+          </figcaption>
+        </figure>
       </div>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         WHAT YOU GET — three captioned sections, magazine spread.
-         Each block is an editorial promise + visual proof.
+         WHAT YOU'LL READ — three promises, each proved by a real
+         screenshot of the shipped product rather than a hand-built
+         mock. Mocks drift from the app; captures cannot.
     ────────────────────────────────────────────────────────────── -->
-    <section class="spread" aria-labelledby="spread-heading">
+    <section class="proof" aria-labelledby="proof-heading">
       <header class="section-head">
-        <p class="section-eyebrow section-eyebrow-magenta" id="spread-heading">
+        <p class="section-eyebrow section-eyebrow-magenta" id="proof-heading">
           What you'll read
         </p>
         <h2 class="section-headline">A magazine that covers your league.</h2>
@@ -92,66 +136,93 @@
         </p>
       </header>
 
-      <div class="spread-grid">
-        <article class="spread-card">
-          <div class="spread-visual spread-visual-hero">
-            <div class="spread-visual-eyebrow">TOP SPOT SLIPPING</div>
-            <p class="spread-visual-headline">
-              Port Angeles is leaking RBI, SB, and OPS.
-            </p>
-            <p class="spread-visual-deck">
-              Not a collapse yet. But the gap between them and the new
-              #1 is real.
+      <div class="proof-rows">
+        <article class="proof-row">
+          <div class="proof-copy">
+            <h3 class="proof-title">Every week has a lead story.</h3>
+            <p class="proof-body">
+              The engine reads the week and writes the story that
+              actually matters — who slipped, who is climbing, what is
+              at stake on Sunday. Not a stat dump. A column.
             </p>
           </div>
-          <h3 class="spread-card-title">Every week, a headline.</h3>
-          <p class="spread-card-body">
-            Auto-generated hero stories that read like ESPN's Sunday
-            morning recap, scoped to your league.
-          </p>
+          <div class="shot proof-shot">
+            <picture>
+              <source
+                media="(max-width: 680px)"
+                srcset="/landing/lead-m.webp"
+                width="804"
+                height="1294"
+              />
+              <!-- Alt deliberately does not quote the headline: the
+                   engine rotates variants, so the two captures carry
+                   different wording for the same story. -->
+              <img
+                src="/landing/lead.webp"
+                width="1600"
+                height="468"
+                alt="A League Beat lead story on Closer's Therapy, with the team down five spots on an L3 streak at 44-42-2 this season."
+                loading="lazy"
+              />
+            </picture>
+          </div>
         </article>
 
-        <article class="spread-card">
-          <div class="spread-visual spread-visual-ranks">
-            <div class="spread-visual-eyebrow spread-visual-eyebrow-teal">POWER RANKINGS</div>
-            <p class="spread-visual-headline">
-              Eight weeks of receipts.
+        <article class="proof-row proof-row-flip">
+          <div class="proof-copy">
+            <h3 class="proof-title">Rankings that argue, not just rank.</h3>
+            <p class="proof-body">
+              Power score blends category record, dominance, balance and
+              forward outlook — then explains itself in prose. Movement,
+              streaks, and exactly which categories each team owns and
+              bleeds.
             </p>
-            <ul class="spread-visual-list">
-              <li><strong>1.</strong> Real Men of Genius II <em class="rank-up">W4</em></li>
-              <li><strong>2.</strong> Dem Bums <em class="rank-down">L3</em></li>
-              <li><strong>3.</strong> Swamp Pirates <em class="rank-mute">L1</em></li>
-            </ul>
           </div>
-          <h3 class="spread-card-title">Rankings as a column.</h3>
-          <p class="spread-card-body">
-            Not a table — a written argument. Power scores explained
-            in prose, not just digits.
-          </p>
+          <div class="shot proof-shot proof-shot-fade">
+            <picture>
+              <source
+                media="(max-width: 680px)"
+                srcset="/landing/board-m.webp"
+                width="804"
+                height="1470"
+              />
+              <img
+                src="/landing/board.webp"
+                width="1600"
+                height="912"
+                alt="The Board — a ten-team power ranking ladder showing rank, team, movement, power score, category record, owns and bleeds, last six, and streak."
+                loading="lazy"
+              />
+            </picture>
+          </div>
         </article>
 
-        <article class="spread-card">
-          <div class="spread-visual spread-visual-matchups">
-            <div class="spread-visual-eyebrow spread-visual-eyebrow-up">WEEK 8 · LIVE TODAY</div>
-            <p class="spread-visual-headline">What's happening now.</p>
-            <ul class="spread-visual-matchup-list">
-              <li>
-                <span>Bryan's Buckeyes</span>
-                <strong>5 — 14</strong>
-                <span>Shohei me the money</span>
-              </li>
-              <li>
-                <span>Jamestown</span>
-                <strong>4 — 16</strong>
-                <span>NC PALE HOSE</span>
-              </li>
-            </ul>
+        <article class="proof-row">
+          <div class="proof-copy">
+            <h3 class="proof-title">Every matchup, called live.</h3>
+            <p class="proof-body">
+              Category-by-category scoring, a live win probability, and
+              a beat reporter watching the math change from Monday
+              through the weekend.
+            </p>
           </div>
-          <h3 class="spread-card-title">Every matchup, covered.</h3>
-          <p class="spread-card-body">
-            Live category scoring, win-probability chips, and a beat
-            reporter watching the math change in real time.
-          </p>
+          <div class="shot proof-shot proof-shot-fade-m">
+            <picture>
+              <source
+                media="(max-width: 680px)"
+                srcset="/landing/matchup-m.webp"
+                width="804"
+                height="1676"
+              />
+              <img
+                src="/landing/matchup.webp"
+                width="1600"
+                height="699"
+                alt="A live matchup: Bullpen Theology leads Doubles Down nine categories to zero with two still contested, at 94 percent win probability, over a grid of category tiles."
+                loading="lazy"
+              />
+            </picture>
+          </div>
         </article>
       </div>
     </section>
@@ -180,16 +251,16 @@
           <p class="steps-num">02</p>
           <h3 class="steps-title">Connect your league.</h3>
           <p class="steps-body">
-            Sleeper, Yahoo, or ESPN. Paste a league ID or pick from
-            your connected accounts. Takes under a minute.
+            Sleeper, Yahoo, or ESPN. Paste a league ID or pick from your
+            connected accounts. Takes under a minute.
           </p>
         </li>
         <li class="steps-item">
           <p class="steps-num">03</p>
           <h3 class="steps-title">Read this week's issue.</h3>
           <p class="steps-body">
-            Headlines, power rankings, matchup recaps, draft stories
-            and dynasty arcs. Updated every day the season is live.
+            Headlines, power rankings, matchup recaps, draft stories and
+            dynasty arcs. Updated every day the season is live.
           </p>
         </li>
       </ol>
@@ -197,7 +268,10 @@
 
     <!-- ─────────────────────────────────────────────────────────────
          VOICE AS PROOF — a marquee of real editorial headlines from
-         the library. Lets the voice speak for itself.
+         the library. Lets the voice speak for itself. These are
+         deliberately DIFFERENT lines from the ones in the screenshots
+         above; if you edit either, keep them from overlapping or the
+         page starts repeating itself.
     ────────────────────────────────────────────────────────────── -->
     <section class="voice" aria-labelledby="voice-heading">
       <header class="section-head section-head-centered">
@@ -221,11 +295,18 @@
           Eight spots since week one. Doubles Down is the climber of
           the year.
         </li>
+        <!-- Ninth tile is load-bearing: the grid is three columns and
+             the wide tiles span two, so eight items leave a hole in the
+             last row. Keep the count at nine (or any multiple of three
+             once spans are counted) if you edit this list. -->
+        <li class="voice-headline">The leader is set. The drama is not.</li>
       </ul>
     </section>
 
     <!-- ─────────────────────────────────────────────────────────────
-         PLATFORM PROOF — which leagues this works for.
+         PLATFORM PROOF — which leagues this works for. Real marks, not
+         wordmarks in boxes: this is the highest-trust block on the page
+         and typography alone read as unfinished.
     ────────────────────────────────────────────────────────────── -->
     <section class="platforms" aria-labelledby="platforms-heading">
       <header class="section-head section-head-centered">
@@ -241,14 +322,17 @@
 
       <ul class="platforms-grid" role="list">
         <li class="platforms-item">
+          <img src="/sleeper.svg" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">Sleeper</span>
           <span class="platforms-status">Available</span>
         </li>
         <li class="platforms-item">
+          <img src="/landing/yahoo.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">Yahoo</span>
           <span class="platforms-status">Available</span>
         </li>
         <li class="platforms-item">
+          <img src="/landing/espn.png" alt="" class="platforms-logo" width="56" height="56" loading="lazy" />
           <span class="platforms-name">ESPN</span>
           <span class="platforms-status">Available</span>
         </li>
@@ -257,38 +341,24 @@
 
     <!-- ─────────────────────────────────────────────────────────────
          FREE — The League Beat costs nothing. No tiers, no trial, no
-         card. This replaced a per-league pricing section; if you are
-         reinstating any kind of gate, that is a positioning change,
-         not a copy tweak.
+         card. This is deliberately a slim band rather than a section:
+         "free" is a four-word fact, and giving it a full screen made
+         it read as bait. If you are reinstating any kind of gate, that
+         is a positioning change, not a copy tweak.
     ────────────────────────────────────────────────────────────── -->
-    <section class="pricing" aria-labelledby="pricing-heading">
-      <header class="section-head section-head-centered">
-        <p class="section-eyebrow section-eyebrow-magenta" id="pricing-heading">
-          Free
-        </p>
-        <h2 class="section-headline">The whole magazine. No charge.</h2>
-        <p class="section-deck">
-          Every issue, every week, for every manager in the league.
-          No trial to start and no card to enter.
-        </p>
-      </header>
-
-      <div class="pricing-card">
-        <p class="pricing-eyebrow">Every league · every season</p>
-        <div class="pricing-price-row">
-          <span class="pricing-now">Free</span>
+    <section class="freeband" aria-labelledby="free-heading">
+      <div class="freeband-inner">
+        <p class="freeband-mark" aria-hidden="true">Free</p>
+        <div class="freeband-copy">
+          <h2 class="freeband-headline" id="free-heading">
+            The whole magazine. No charge.
+          </h2>
+          <p class="freeband-body">
+            Every issue, every week, for every manager in the league —
+            not just the commissioner. Nothing locked, nothing blurred,
+            no card to enter.
+          </p>
         </div>
-        <ul class="pricing-list" role="list">
-          <li>Headlines, recaps, power rankings, draft and history</li>
-          <li>Every league member reads it, not just the commissioner</li>
-          <li>Nothing locked, nothing blurred, nothing held back</li>
-        </ul>
-        <router-link to="/demo-categories/connect" class="hero-cta hero-cta-primary pricing-cta">
-          Connect your league
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
-          </svg>
-        </router-link>
       </div>
     </section>
 
@@ -302,15 +372,15 @@
         </h2>
         <p class="closer-deck">Your league story, chronicled.</p>
         <div class="hero-cta-row closer-cta-row">
-          <router-link to="/demo-categories/connect" class="hero-cta hero-cta-primary">
-            Read the demo
+          <router-link to="/demo-categories/home" class="hero-cta hero-cta-primary">
+            Read this week's issue
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
           </router-link>
-          <button type="button" class="hero-cta hero-cta-secondary" @click="emit('open-signup')">
-            Sign in to connect
-          </button>
+          <router-link to="/demo-categories/connect" class="hero-cta hero-cta-secondary">
+            Connect your league
+          </router-link>
         </div>
       </div>
     </section>
@@ -451,6 +521,7 @@ onMounted(async () => {
   letter-spacing: 0.04em;
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -458,9 +529,37 @@ onMounted(async () => {
 }
 .landing-nav-cta:active { transform: scale(0.97); transition-duration: 100ms; }
 
+/* ─── Framed screenshot ─────────────────────────────────────────
+   Shared frame for every product capture on the page. The border and
+   lift are what make a capture read as a specimen instead of as page
+   background — without them the shots dissolve into the black.
+──────────────────────────────────────────────────────────────── */
+.shot {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid oklch(0.26 0.015 90);
+  background: oklch(0.06 0.014 90);
+  box-shadow:
+    0 2px 8px oklch(0 0 0 / 0.5),
+    0 24px 60px oklch(0 0 0 / 0.55);
+}
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.shot-caption {
+  margin: 18px auto 0;
+  max-width: 52ch;
+  text-align: center;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
 /* ─── Hero ──────────────────────────────────────────────────────── */
 .hero {
-  padding: 96px 24px 80px;
+  padding: 72px 24px 88px;
   background:
     radial-gradient(ellipse at top left, oklch(0.70 0.27 350 / 0.10), transparent 50%),
     radial-gradient(ellipse at bottom right, oklch(0.72 0.18 195 / 0.08), transparent 55%),
@@ -471,11 +570,21 @@ onMounted(async () => {
   max-width: 1180px;
   margin: 0 auto;
 }
+.hero-head {
+  max-width: 900px;
+  margin: 0 auto 56px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 .hero-masthead {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 32px;
+  width: 100%;
+  max-width: 460px;
+  margin-bottom: 28px;
 }
 .hero-masthead-bar {
   flex: 1;
@@ -490,46 +599,33 @@ onMounted(async () => {
   letter-spacing: 0.20em;
   text-transform: uppercase;
   color: var(--ink-3);
+  white-space: nowrap;
 }
 .hero-headline {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: clamp(3.5rem, 10vw, 9rem);
+  font-size: clamp(2.9rem, 7.2vw, 6rem);
   letter-spacing: -0.035em;
-  line-height: 0.86;
-  margin: 0 0 28px;
+  line-height: 0.92;
+  margin: 0 0 24px;
   color: var(--ink-1);
+  text-wrap: balance;
 }
 .hero-headline-accent {
   color: var(--accent-magenta);
 }
 .hero-deck {
-  margin: 0 0 36px;
-  font-family: 'Barlow', sans-serif;
-  font-weight: 700;
-  font-size: clamp(1.4rem, 2.6vw, 2.1rem);
-  letter-spacing: -0.01em;
-  line-height: 1.18;
-  color: var(--ink-1);
-  max-width: 28ch;
-}
-.hero-deck-dim {
-  color: var(--ink-3);
-  display: block;
-  margin-top: 6px;
-}
-.hero-tagline {
-  margin: 0 0 36px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.20em;
-  text-transform: uppercase;
-  color: var(--accent-gold);
+  margin: 0 0 34px;
+  font-size: clamp(1.05rem, 1.7vw, 1.3rem);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 62ch;
+  text-wrap: pretty;
 }
 .hero-cta-row {
   display: inline-flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
 }
 .hero-cta {
@@ -567,6 +663,33 @@ onMounted(async () => {
 .hero-cta:focus-visible {
   outline: 2px solid var(--accent-gold);
   outline-offset: 3px;
+}
+
+/* "Free" as a badge on the hero, not as its own screen further down. */
+.hero-note {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 22px 0 0;
+  font-size: 0.95rem;
+  color: var(--ink-3);
+}
+.hero-note-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  border: 1px solid oklch(0.78 0.18 92 / 0.45);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.hero-shot {
+  margin: 0;
 }
 
 /* ─── Section scaffolding ──────────────────────────────────────── */
@@ -622,99 +745,73 @@ onMounted(async () => {
 }
 .section-head-centered .section-deck { margin-left: auto; margin-right: auto; }
 
-/* ─── Spread (what you'll read) ────────────────────────────────── */
-.spread {
-  padding: 96px 24px;
+/* ─── Proof rows (what you'll read) ────────────────────────────── */
+.proof {
+  padding: 88px 24px;
   max-width: 1280px;
   margin: 0 auto;
 }
-.spread-grid {
+.proof-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+}
+.proof-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 44px;
+  align-items: center;
 }
-.spread-card {
+/* Alternate which side the capture sits on so the eye zig-zags down
+   the page instead of running down one gutter. The column widths flip
+   with the order — otherwise the capture lands in the narrow column
+   and the copy gets the wide one, which is backwards. */
+.proof-row-flip {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+}
+.proof-row-flip .proof-copy { order: 2; }
+.proof-row-flip .proof-shot { order: 1; }
+
+.proof-copy {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
-.spread-visual {
-  padding: 28px;
-  border-radius: 14px;
-  background: oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.18 0.015 90);
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.spread-visual-eyebrow {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--accent-magenta);
-}
-.spread-visual-eyebrow-teal { color: var(--accent-teal); }
-.spread-visual-eyebrow-up   { color: var(--accent-up); }
-.spread-visual-headline {
+.proof-title {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 1.6rem;
+  font-size: clamp(1.6rem, 2.6vw, 2.2rem);
   letter-spacing: -0.02em;
   line-height: 1.05;
+  margin: 0;
   color: var(--ink-1);
-  margin: 0;
+  text-wrap: balance;
 }
-.spread-visual-deck {
+.proof-body {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 1.05rem;
+  line-height: 1.6;
   color: var(--ink-2);
+  max-width: 46ch;
 }
-.spread-visual-list,
-.spread-visual-matchup-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 0.94rem;
+/* The ladder capture ends mid-row on purpose — there are ten teams and
+   the frame holds seven. Fading the cut edge reads as "there is more"
+   rather than as a botched crop. */
+.proof-shot-fade img {
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
 }
-.spread-visual-list li,
-.spread-visual-matchup-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink-1);
-}
-.spread-visual-list strong { color: var(--ink-3); margin-right: 4px; }
-.spread-visual-list em { font-style: normal; font-family: 'Barlow Condensed', sans-serif; font-size: 0.78rem; letter-spacing: 0.10em; padding: 2px 8px; border-radius: 6px; }
-.rank-up   { color: var(--accent-up);      background: oklch(0.74 0.18 145 / 0.10); }
-.rank-down { color: oklch(0.75 0.18 25);   background: oklch(0.75 0.18 25 / 0.10); }
-.rank-mute { color: var(--ink-3);          background: oklch(0.20 0.015 90 / 0.5); }
-.spread-visual-matchup-list strong { color: var(--ink-1); font-weight: 800; }
-.spread-card-title {
-  font-family: 'Barlow', sans-serif;
-  font-weight: 800;
-  font-size: 1.35rem;
-  letter-spacing: -0.015em;
-  margin: 0;
-  color: var(--ink-1);
-}
-.spread-card-body {
-  margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.55;
-  color: var(--ink-2);
+/* Mobile-only variant: the desktop matchup capture is a complete crop
+   and fading it would eat its closing line, but the phone capture is
+   cut short to keep the tile from running a full screen tall. */
+@media (max-width: 680px) {
+  .proof-shot-fade-m img {
+    mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
+  }
 }
 
 /* ─── Steps ────────────────────────────────────────────────────── */
 .steps {
-  padding: 96px 24px;
+  padding: 88px 24px;
   max-width: 1280px;
   margin: 0 auto;
 }
@@ -761,7 +858,7 @@ onMounted(async () => {
 
 /* ─── Voice grid ───────────────────────────────────────────────── */
 .voice {
-  padding: 96px 24px;
+  padding: 88px 24px;
   max-width: 1280px;
   margin: 0 auto;
 }
@@ -774,23 +871,23 @@ onMounted(async () => {
   margin: 0;
 }
 .voice-headline {
-  padding: 36px 28px;
+  padding: 32px 26px;
   border-radius: 14px;
   background: oklch(0.10 0.015 90);
   border: 1px solid oklch(0.18 0.015 90);
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 1.55rem;
+  font-size: 1.5rem;
   letter-spacing: -0.02em;
   line-height: 1.08;
   color: var(--ink-1);
   display: flex;
   align-items: center;
-  min-height: 140px;
+  min-height: 118px;
 }
 .voice-headline-lg {
   grid-column: span 2;
-  font-size: 2rem;
+  font-size: 1.95rem;
   background:
     linear-gradient(135deg, oklch(0.70 0.27 350 / 0.12) 0%, oklch(0.10 0.015 90) 70%);
   border-color: oklch(0.70 0.27 350 / 0.30);
@@ -798,7 +895,7 @@ onMounted(async () => {
 
 /* ─── Platforms ────────────────────────────────────────────────── */
 .platforms {
-  padding: 96px 24px;
+  padding: 88px 24px;
   max-width: 1280px;
   margin: 0 auto;
 }
@@ -808,20 +905,25 @@ onMounted(async () => {
   gap: 18px;
   list-style: none;
   padding: 0;
-  margin: 0;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0 auto;
+  max-width: 760px;
 }
 .platforms-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 28px;
   border-radius: 14px;
   background: oklch(0.10 0.015 90 / 0.6);
   border: 1px solid oklch(0.18 0.015 90);
+}
+.platforms-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+  margin-bottom: 2px;
 }
 .platforms-name {
   font-family: 'Barlow', sans-serif;
@@ -839,76 +941,59 @@ onMounted(async () => {
   color: var(--accent-up);
 }
 
-/* ─── Pricing ──────────────────────────────────────────────────── */
-.pricing {
-  padding: 96px 24px;
+/* ─── Free band ────────────────────────────────────────────────── */
+.freeband {
+  padding: 24px 24px 40px;
   max-width: 1280px;
   margin: 0 auto;
 }
-.pricing-card {
-  max-width: 540px;
+.freeband-inner {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 48px 40px;
+  padding: 32px 40px;
   border-radius: 18px;
   background:
-    radial-gradient(ellipse at top, oklch(0.78 0.18 92 / 0.10), transparent 60%),
+    radial-gradient(ellipse at left, oklch(0.78 0.18 92 / 0.10), transparent 65%),
     oklch(0.10 0.015 90);
-  border: 1px solid oklch(0.78 0.18 92 / 0.40);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  text-align: center;
+  border: 1px solid oklch(0.78 0.18 92 / 0.35);
 }
-.pricing-eyebrow {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.20em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin: 0;
-}
-.pricing-price-row {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 16px;
-}
-.pricing-now {
+.freeband-mark {
   font-family: 'Barlow', sans-serif;
   font-weight: 900;
-  font-size: 5rem;
+  font-size: 3.4rem;
   letter-spacing: -0.04em;
   line-height: 1;
   color: var(--accent-gold);
+  margin: 0;
+  flex-shrink: 0;
 }
-.pricing-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
+.freeband-copy {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+.freeband-headline {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 900;
+  font-size: 1.65rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink-1);
+}
+.freeband-body {
+  margin: 0;
   font-size: 1rem;
+  line-height: 1.55;
   color: var(--ink-2);
 }
-.pricing-list li {
-  position: relative;
-  padding-left: 22px;
-}
-.pricing-list li::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0.5em;
-  width: 12px; height: 2px;
-  background: var(--accent-gold);
-  border-radius: 2px;
-}
-.pricing-cta { margin-top: 8px; }
 
 /* ─── Closer ───────────────────────────────────────────────────── */
 .closer {
-  padding: 96px 24px 120px;
+  padding: 88px 24px 110px;
   background:
     radial-gradient(ellipse at center, oklch(0.70 0.27 350 / 0.12), transparent 60%),
     var(--ink-8);
@@ -944,30 +1029,46 @@ onMounted(async () => {
 
 /* ─── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .spread-grid,
   .steps-list,
   .voice-grid,
   .platforms-grid {
     grid-template-columns: repeat(2, 1fr);
   }
   .voice-headline-lg { grid-column: span 2; }
+  .proof-row {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  /* Stacked, the copy always leads — the flip only makes sense in two
+     columns, and leaving it on would bury one heading below its shot. */
+  .proof-row-flip .proof-copy { order: 0; }
+  .proof-row-flip .proof-shot { order: 0; }
+  .proof-body { max-width: none; }
 }
 
 @media (max-width: 680px) {
   .landing-nav-inner { padding: 12px 16px; }
   .landing-nav-brand-word { display: none; }
-  .hero { padding: 64px 20px 56px; }
-  .hero-deck { font-size: 1.2rem; }
-  .spread, .steps, .voice, .platforms, .pricing { padding: 64px 20px; }
-  .spread-grid,
+  .landing-nav-cta { font-size: 0.78rem; padding: 8px 13px; }
+  .hero { padding: 52px 20px 64px; }
+  .hero-head { margin-bottom: 40px; }
+  .hero-cta-row { display: flex; width: 100%; }
+  .hero-cta { flex: 1 1 auto; justify-content: center; }
+  .proof, .steps, .voice, .platforms { padding: 64px 20px; }
+  .proof-rows { gap: 56px; }
   .steps-list,
   .voice-grid,
   .platforms-grid {
     grid-template-columns: 1fr;
   }
-  .voice-headline-lg { grid-column: 1; }
-  .pricing-card { padding: 32px 24px; }
-  .pricing-now { font-size: 4rem; }
+  .voice-headline-lg { grid-column: 1; font-size: 1.6rem; }
+  .freeband { padding: 16px 20px 32px; }
+  .freeband-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 28px 24px;
+  }
   .closer { padding: 64px 20px 80px; }
 }
 </style>
