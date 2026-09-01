@@ -4,7 +4,15 @@
  *
  * Sleeper's API is public and unauthenticated — no tokens, no cookies.
  *
- *   npx vite-node scripts/capture-sleeper-league.ts <leagueId> [weeks]
+ *   npx vite-node scripts/capture-sleeper-league.ts <leagueId> [weeks] [historyDepth]
+ *
+ * Captures, in one pass:
+ *   - the league, its rosters, users and per-week matchups
+ *   - the draft and every pick (picks carry full player metadata, so
+ *     draft stories need no separate player lookup — the /players/nfl
+ *     blob is ~5MB and deliberately never captured)
+ *   - prior seasons, walked back through `previous_league_id`
+ *   - a second league pinned purely as a playoff-edge-case fixture
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -13,17 +21,39 @@ import { fileURLToPath } from 'node:url'
 
 const BASE = 'https://api.sleeper.app/v1'
 
+/**
+ * A second, unrelated league kept in the fixture because it has
+ * `playoff_week_start: 0` alongside `playoff_teams: 6` — the real-world
+ * case proving 0 means UNSET rather than "no playoffs". Pinned here so a
+ * plain regeneration cannot silently drop it and take
+ * `sleeperPoints.test.ts` down with it.
+ */
+const PLAYOFF_EDGE_CASE_LEAGUE_ID = '1268981869060296704'
+
 const leagueId = process.argv[2]
 if (!leagueId) {
-  console.error('usage: npx vite-node scripts/capture-sleeper-league.ts <leagueId> [weeks]')
+  console.error('usage: npx vite-node scripts/capture-sleeper-league.ts <leagueId> [weeks] [historyDepth]')
   process.exit(1)
 }
 const weeks = Number(process.argv[3] ?? 4)
+// Prior seasons to walk back. Each season adds its league, rosters and
+// users to the fixture, so this is the main lever on fixture size.
+const historyDepth = Number(process.argv[4] ?? 4)
 
 async function get(path: string): Promise<unknown> {
   const res = await fetch(`${BASE}${path}`)
   if (!res.ok) throw new Error(`${path} → HTTP ${res.status}`)
   return res.json()
+}
+
+/** Fetches, but returns null instead of throwing — for optional pieces
+ *  whose absence is a fact about the league, not a failure. */
+async function tryGet(path: string): Promise<unknown | null> {
+  try {
+    return await get(path)
+  } catch {
+    return null
+  }
 }
 
 const league = await get(`/league/${leagueId}`) as Record<string, unknown> | null
@@ -46,7 +76,69 @@ for (let w = 1; w <= weeks; w++) {
   }
 }
 
-const fixture = { league, rosters, users, matchupsByWeek }
+/* ── Draft ─────────────────────────────────────────────────────────
+   `league.draft_id` points at the league's draft. Picks carry a
+   `metadata` block with first_name/last_name/position/team, which is
+   why draft copy can name players without the players blob. */
+const draftId = (league as any).draft_id as string | undefined
+const draft = draftId
+  ? {
+      info: await tryGet(`/draft/${draftId}`),
+      picks: (await tryGet(`/draft/${draftId}/picks`)) ?? [],
+    }
+  : null
+
+/* ── History ───────────────────────────────────────────────────────
+   Sleeper links seasons with `previous_league_id`. Walk it back for the
+   prior seasons' final state. Matchups are deliberately NOT captured
+   per historical season: `roster.settings` already carries the final
+   wins/losses/points, which is what season-level history needs, and
+   per-week matchups for six seasons would multiply the fixture size for
+   data nothing reads. */
+type HistorySeason = { league: unknown; rosters: unknown; users: unknown }
+const history: HistorySeason[] = []
+const seenLeagueIds = new Set<string>([leagueId])
+let cursor = (league as any).previous_league_id as string | null | undefined
+
+for (let i = 0; i < historyDepth && cursor; i++) {
+  // Guard against a cyclic or self-referential chain rather than
+  // trusting the upstream data to be acyclic.
+  if (seenLeagueIds.has(cursor)) break
+  seenLeagueIds.add(cursor)
+
+  const prior = await tryGet(`/league/${cursor}`) as Record<string, unknown> | null
+  if (!prior) break
+
+  history.push({
+    league: prior,
+    rosters: (await tryGet(`/league/${cursor}/rosters`)) ?? [],
+    users: (await tryGet(`/league/${cursor}/users`)) ?? [],
+  })
+  cursor = (prior as any).previous_league_id as string | null | undefined
+}
+
+/* ── Playoff edge case ─────────────────────────────────────────────
+   Re-fetched every run so it stays a real capture rather than a stale
+   copy carried forward by hand. */
+const unsetPlayoffWeekLeague = await tryGet(`/league/${PLAYOFF_EDGE_CASE_LEAGUE_ID}`)
+if (!unsetPlayoffWeekLeague) {
+  console.error(
+    `\nWARNING: could not fetch the playoff-edge-case league ` +
+    `(${PLAYOFF_EDGE_CASE_LEAGUE_ID}). sleeperPoints.test.ts depends on it. ` +
+    `Aborting rather than writing a fixture without it.`,
+  )
+  process.exit(1)
+}
+
+const fixture = {
+  league,
+  rosters,
+  users,
+  matchupsByWeek,
+  draft,
+  history,
+  unsetPlayoffWeekLeague,
+}
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const out = resolve(scriptDir, '..', 'src/fixtures/sleeperFootball.ts')
@@ -54,7 +146,12 @@ mkdirSync(dirname(out), { recursive: true })
 writeFileSync(
   out,
   `/* Captured from Sleeper's public API. Regenerate with:\n` +
-  ` *   npx vite-node scripts/capture-sleeper-league.ts ${leagueId} ${weeks}\n` +
+  ` *   npx vite-node scripts/capture-sleeper-league.ts ${leagueId} ${weeks} ${historyDepth}\n` +
+  ` *\n` +
+  ` * \`unsetPlayoffWeekLeague\` is a second, unrelated league's raw\n` +
+  ` * /league/{id} response, kept because it has playoff_week_start: 0\n` +
+  ` * with playoff_teams: 6 — proof that 0 means UNSET, not "no\n` +
+  ` * playoffs". sleeperPoints.test.ts reads it.\n` +
   ` */\n\n` +
   `export const sleeperFootballFixture = ${JSON.stringify(fixture, null, 2)} as const\n`,
 )
@@ -64,4 +161,9 @@ console.log(`rosters: ${(rosters as unknown[]).length}`)
 console.log(`weeks:   ${Object.keys(matchupsByWeek).join(', ') || 'none'}`)
 console.log(`scoring: ${Object.keys((league as any).scoring_settings ?? {}).length} settings`)
 console.log(`playoff_week_start: ${(league as any).settings?.playoff_week_start}`)
+console.log(`draft:   ${draft ? `${(draft.picks as unknown[]).length} picks` : 'none'}`)
+console.log(
+  `history: ${history.length} prior season(s)` +
+  (history.length ? ` — ${history.map((h) => (h.league as any).season).join(', ')}` : ''),
+)
 console.log(`\nWrote ${out}`)
