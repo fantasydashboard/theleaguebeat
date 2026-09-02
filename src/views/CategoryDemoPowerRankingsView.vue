@@ -381,7 +381,17 @@
             Bottom 3
           </span>
         </div>
-        <table class="board-table">
+        <!-- Before kickoff there is no ranking to show. Saying so beats
+             printing ten 0-0 rows in an order the data does not justify. -->
+        <div v-if="seasonNotStarted && isPointsMode" class="board-empty">
+          <p class="board-empty-headline">No games played yet.</p>
+          <p class="board-empty-body">
+            The ladder fills in once week one is in the books. Until then every
+            team is 0-0, and any order would be invented.
+          </p>
+        </div>
+
+        <table v-else class="board-table">
           <thead>
             <tr>
               <th scope="col" class="col-rank">Rk</th>
@@ -713,7 +723,7 @@ import type {
   LeagueDataH2HPoints,
 } from '@/editorial/types'
 import { computePointsPowerScores } from '@/editorial/points/powerScore'
-import { sportOf } from '@/editorial/leagueCore'
+import { sportOf, hasPlayedGames } from '@/editorial/leagueCore'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
@@ -1146,6 +1156,10 @@ const boardRows = computed<BoardRow[]>(() => {
   // league with nothing played yet.
   const points = livePointsData.value
   if (points) {
+    // No games played means no ranking exists. computePointsPowerScores
+    // already returns [] with no weekly scores, so the board is empty
+    // rather than a ten-row ladder built from sort order.
+    if (!hasPlayedGames(points)) return []
     const standingByTeam = new Map(
       (points.standings ?? []).map((s) => [s.teamId, s]),
     )
@@ -1251,6 +1265,17 @@ function rankChipClass(rank: number) {
   if (rank === 3) return 'rank-chip-bronze'
   return ''
 }
+
+/** Nothing has been played, so nothing can be ranked. Drives the
+ *  board's own empty state and suppresses the cellar callout, which
+ *  otherwise names a real person as "bottom" on the basis of an
+ *  arbitrary sort of ten identical 0-0 rows. */
+const seasonNotStarted = computed(() => {
+  const p = livePointsData.value
+  if (p) return !hasPlayedGames(p)
+  const l = liveData.value
+  return l ? !hasPlayedGames(l) : false
+})
 
 /** The cellar callout — the lowest-power team gets one editorial line
  *  when their season has gone clearly cold. Returns null unless the
@@ -1909,6 +1934,21 @@ function formatPillLabel(label: string): string {
 </script>
 
 <style scoped>
+.board-empty {
+  padding: 32px;
+  border-radius: 14px;
+  border: 1px solid oklch(0.20 0.015 90);
+  background: oklch(0.08 0.014 90 / 0.6);
+}
+.board-empty-headline {
+  margin: 0 0 8px;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  color: var(--ink-1);
+}
+.board-empty-body { margin: 0; color: var(--ink-3); line-height: 1.55; max-width: 52ch; }
 /* Tokens (--ink-N, --accent-*) inherited from .demo-shell in CategoryDemoLayout. */
 .cat-rankings {
   display: flex;

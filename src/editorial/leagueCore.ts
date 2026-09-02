@@ -77,3 +77,23 @@ export function asLeagueCore(data: LeagueData): LeagueCore | null {
     divisions: data.divisions,
   }
 }
+
+/**
+ * Has this league actually played anything yet?
+ *
+ * Between a draft and kickoff every team is 0-0, and a standings table
+ * of ten identical rows is an ARBITRARY ORDER, not a ladder. Reading it
+ * as one produces confident nonsense: a "cellar" team singled out by
+ * name, a "tightest race" between two of ten identically-placed teams,
+ * somebody "level on the ladder" with everyone. Every league in the
+ * sport sits in this state for the week between drafting and week one,
+ * which is exactly when most people first look.
+ *
+ * So: no completed games means no standings-derived story is allowed to
+ * fire. Absence has to read as absence.
+ */
+export function hasPlayedGames(data: LeagueData): boolean {
+  const standings = (data as { standings?: { catWins: number; catLosses: number; catTies: number }[] }).standings
+  if (!standings || standings.length === 0) return false
+  return standings.some((s) => (s.catWins + s.catLosses + s.catTies) > 0)
+}

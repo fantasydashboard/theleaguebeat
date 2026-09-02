@@ -28,7 +28,7 @@ import type {
 import type { BeatItem, RenderedBeat } from './render-beat'
 import { groupByDay } from './render-beat'
 import { stripEmojiForEditorial } from './detect-lede'
-import { sportOf } from './leagueCore'
+import { sportOf , hasPlayedGames } from './leagueCore'
 import { footballFinalHeadlines, footballFinalBodies, footballStreakLines, type FinalArgs } from './football'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -371,6 +371,10 @@ function detectCellar(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[
 function detectRace(data: LeagueDataH2HPoints, ctx: Ctx, now: Date): BeatItem[] {
   const standings = data.standings ?? []
   if (standings.length < 2) return []
+  // Before kickoff every team is 0-0, so "adjacent in the standings" and
+  // "a seat from the cutoff" describe an arbitrary sort order rather
+  // than anything that happened. Say nothing instead.
+  if (!hasPlayedGames(data)) return []
   const cutoff = data.playoffCutoff || Math.max(1, Math.floor(data.teams.length / 2))
   const byRank = [...standings].sort((a, b) => a.rank - b.rank)
   let best: { a: CategoryLeagueDataStanding; b: CategoryLeagueDataStanding; gap: number; dist: number } | null = null
