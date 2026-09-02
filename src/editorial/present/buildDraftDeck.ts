@@ -24,6 +24,11 @@ import {
   numberWord,
   positionWord,
 } from '../points/draftStory'
+import {
+  findDraftDivergences,
+  describeDivergence,
+  type ValuedPick,
+} from '../points/draftValue'
 import type { PresentDeck, PresentSlide } from './types'
 
 /** What the deck needs to draw a team. Resolved by the caller, which
@@ -43,6 +48,10 @@ export interface DraftDeckInput {
   teamName: (teamId: string) => string
   /** Optional richer lookup, for logos. Falls back to `teamName`. */
   team?: (teamId: string) => DeckTeam | undefined
+  /** Consensus rank for a player, lower being better. Optional: with
+   *  no source of consensus the deck simply omits the steal and reach
+   *  slides rather than guessing at them. */
+  consensusRank?: (playerId: string) => number | undefined
 }
 
 /** Slide-row visual fields for a team, or nothing when the caller gave
@@ -176,17 +185,60 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     })
   }
 
-  if (facts.positionCounts.length > 0) {
-    slides.push({
-      kind: 'list',
-      eyebrow: 'The shape of it',
-      headline: 'What the league drafted.',
-      rows: facts.positionCounts.map((p) => ({
-        lead: p.position,
-        label: positionWord(p.position, p.count),
-        value: String(p.count),
-      })),
-    })
+  // Steals and reaches. Measured WITHIN each position, so positional
+  // scarcity cancels out — see draftValue.ts for why comparing across
+  // positions produces four quarterbacks and no credibility.
+  if (input.consensusRank) {
+    const valued: ValuedPick[] = input.picks.map((p) => ({
+      pickOverall: p.pickOverall,
+      round: p.round,
+      playerId: p.playerId,
+      playerName: p.playerName,
+      position: p.position,
+      teamId: p.draftedByTeamId,
+    }))
+    const div = findDraftDivergences(valued, input.consensusRank)
+
+    if (div.fell.length > 0) {
+      const top = div.fell[0]
+      slides.push({
+        kind: 'statement',
+        eyebrow: 'The steal',
+        headline: `${input.teamName(top.pick.teamId)} got ${top.pick.playerName} at ${top.pick.pickOverall}.`,
+        support: describeDivergence(top, positionWord(top.pick.position, 1)),
+      })
+      if (div.fell.length > 1) {
+        slides.push({
+          kind: 'list',
+          eyebrow: 'Fell furthest',
+          headline: 'Who lasted longer than they should have.',
+          revealOneByOne: true,
+          rows: div.fell.slice(0, 5).map((d) => ({
+            lead: `#${d.pick.pickOverall}`,
+            label: d.pick.playerName,
+            sub: input.teamName(d.pick.teamId),
+            value: `${d.delta} late`,
+            ...teamVisual(input, d.pick.teamId),
+          })),
+        })
+      }
+    }
+
+    if (div.reached.length > 0) {
+      slides.push({
+        kind: 'list',
+        eyebrow: 'Went early',
+        headline: 'Picks the room did not see coming.',
+        revealOneByOne: true,
+        rows: div.reached.slice(0, 5).map((d) => ({
+          lead: `#${d.pick.pickOverall}`,
+          label: d.pick.playerName,
+          sub: input.teamName(d.pick.teamId),
+          value: `${Math.abs(d.delta)} early`,
+          ...teamVisual(input, d.pick.teamId),
+        })),
+      })
+    }
   }
 
   // Round one, pick by pick — the slide a room actually wants walked

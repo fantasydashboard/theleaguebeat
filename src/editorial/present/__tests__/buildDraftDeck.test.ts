@@ -121,3 +121,41 @@ describe('logos and position-relative order', () => {
     expect(seen.size).toBeGreaterThan(0)
   })
 })
+
+describe('steals and reaches', () => {
+  const picks = [...(data.draft?.picks ?? [])]
+  const base = {
+    leagueName: data.leagueName,
+    season: data.currentSeason,
+    picks,
+    teamName: nameOf,
+  }
+
+  it('omits the value slides entirely with no consensus source', () => {
+    // No source of consensus means no opinion, not a guessed one.
+    const deck = buildDraftDeck(base)!
+    const eyebrows = deck.slides.map((s) => ('eyebrow' in s ? s.eyebrow : ''))
+    expect(eyebrows).not.toContain('The steal')
+    expect(eyebrows).not.toContain('Went early')
+  })
+
+  it('adds them when consensus is available', () => {
+    // Synthetic consensus: reverse of draft order, so the last pick at
+    // each position is the one that "fell" furthest.
+    const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
+    const deck = buildDraftDeck({ ...base, consensusRank: (id) => order.get(id) })!
+    const eyebrows = deck.slides.map((s) => ('eyebrow' in s ? s.eyebrow : ''))
+    expect(eyebrows).toContain('The steal')
+  })
+
+  it('never claims a pick was good, only where it went', () => {
+    const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
+    const deck = buildDraftDeck({ ...base, consensusRank: (id) => order.get(id) })!
+    const text = JSON.stringify(deck).toLowerCase()
+    // Divergence from consensus is a fact. "Best pick", a letter grade
+    // or a bust call would be a verdict this has no basis for.
+    for (const banned of ['best pick', 'worst pick', 'bust', 'grade a', 'a+ draft']) {
+      expect(text, `deck claimed: ${banned}`).not.toContain(banned)
+    }
+  })
+})

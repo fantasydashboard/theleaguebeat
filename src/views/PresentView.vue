@@ -221,13 +221,40 @@ async function load(): Promise<void> {
     const teamName = (teamId: string) =>
       data.teams.find((t) => t.id === teamId)?.name ?? `Team ${teamId}`
 
+    // Consensus ranks for the steal/reach read. Sleeper only publishes
+    // these inside its full player blob (~15MB), which is far past the
+    // localStorage quota the service cache uses — so fetch it directly,
+    // keep the handful of ranks this draft needs, and let the rest be
+    // garbage collected. A failure here costs the two value slides and
+    // nothing else.
+    let consensusRank: ((playerId: string) => number | undefined) | undefined
+    const picks = [...(data.draft?.picks ?? [])]
+    if (picks.length > 0 && record.platform === 'sleeper') {
+      try {
+        const res = await fetch('https://api.sleeper.app/v1/players/nfl')
+        if (res.ok) {
+          const blob = (await res.json()) as Record<string, { search_rank?: unknown }>
+          const ranks = new Map<string, number>()
+          for (const p of picks) {
+            const r = blob[p.playerId]?.search_rank
+            if (typeof r === 'number') ranks.set(p.playerId, r)
+          }
+          if (ranks.size > 0) consensusRank = (id) => ranks.get(id)
+        }
+      } catch {
+        // Offline or rate-limited — the deck degrades to its factual
+        // slides rather than failing to build.
+      }
+    }
+
     // Only the draft deck exists so far. The others land as their data
     // does — the wire needs transactions, the board needs played weeks.
     deck.value = buildDraftDeck({
       leagueName: record.league_name || data.leagueName,
       season: data.currentSeason,
-      picks: [...(data.draft?.picks ?? [])],
+      picks,
       teamName,
+      consensusRank,
       team: (teamId: string) => {
         const t = data.teams.find((x) => x.id === teamId)
         if (!t) return undefined
