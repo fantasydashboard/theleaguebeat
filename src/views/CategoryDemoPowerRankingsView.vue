@@ -45,9 +45,13 @@
           Week {{ displayCurrentWeek }}
         </p>
         <h1 class="page-headline">Power Rankings</h1>
-        <p class="page-sub">{{ livePR.subHeadline }}</p>
+        <!-- livePR is fixture-derived until a category league loads,
+             so in points mode it would print the demo league's copy on
+             a real page. State what we actually know instead. -->
+        <p v-if="isPointsMode" class="page-sub">{{ pointsBoardSub }}</p>
+        <p v-else class="page-sub">{{ livePR.subHeadline }}</p>
       </div>
-      <ul class="page-context" role="list" aria-label="This week's movers">
+      <ul v-if="!isPointsMode" class="page-context" role="list" aria-label="This week's movers">
         <li class="page-context-stat page-context-stat-up">
           <span class="page-context-num page-context-num-up">+{{ biggestJump.spots }}</span>
           <span class="page-context-meta">
@@ -70,7 +74,7 @@
          2. HERO — Biggest Mover of the Week (bt: #4 → #1 in 8 weeks)
          Mascot huge on left, declarative sentence + stats + share on right.
     ────────────────────────────────────────────────────────────── -->
-    <section class="hero" :aria-labelledby="`hero-headline-${heroMoverTeam.id}`">
+    <section v-if="!isPointsMode" class="hero" :aria-labelledby="`hero-headline-${heroMoverTeam.id}`">
       <div class="hero-portrait">
         <span class="hero-portrait-glow" aria-hidden="true"></span>
         <div
@@ -136,7 +140,7 @@
          4b. PULSE CHECK — heater + long fall + steadiest hand
          Sits between the Board and the existing Three Signals beats.
     ────────────────────────────────────────────────────────────── -->
-    <section v-if="showMovementSection" class="movement" aria-labelledby="movement-heading">
+    <section v-if="!isPointsMode && showMovementSection" class="movement" aria-labelledby="movement-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="movement-heading">Movement</p>
         <h2 class="movement-headline">Pulse check.</h2>
@@ -238,7 +242,7 @@
     <!-- ─────────────────────────────────────────────────────────────
          4c. EDITORIAL BEATS — three distinct shapes (Three Signals)
     ────────────────────────────────────────────────────────────── -->
-    <section class="beats" aria-labelledby="beats-heading">
+    <section v-if="!isPointsMode" class="beats" aria-labelledby="beats-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="beats-heading">This week's beats</p>
         <h2 class="beats-headline">{{ signalsHeadline }}</h2>
@@ -384,8 +388,10 @@
               <th scope="col" class="col-team">Team</th>
               <th scope="col" class="col-move">Move</th>
               <th scope="col" class="col-power">Power</th>
-              <th scope="col" class="col-record">Cat W-L</th>
-              <th scope="col" class="col-finger">Owns / Bleeds</th>
+              <th scope="col" class="col-record">{{ isPointsMode ? 'Record' : 'Cat W-L' }}</th>
+              <th scope="col" class="col-finger">
+                {{ isPointsMode ? 'All-play · Pts/wk' : 'Owns / Bleeds' }}
+              </th>
               <th scope="col" class="col-last6">Last 6</th>
               <th scope="col" class="col-streak">Streak</th>
             </tr>
@@ -464,7 +470,21 @@
                 </div>
               </td>
               <td class="col-record">{{ formatRecord(row.standing) }}</td>
-              <td class="col-finger">
+              <!-- Points leagues have no category fingerprint. The
+                   column carries all-play (the record if you'd played
+                   everyone every week) and scoring rate instead — the
+                   two numbers the power score leans on hardest. -->
+              <td v-if="isPointsMode" class="col-finger">
+                <div v-if="row.allPlay" class="allplay-cell">
+                  <span class="allplay-record">
+                    {{ row.allPlay.wins }}&ndash;{{ row.allPlay.losses }}<template
+                      v-if="row.allPlay.ties > 0"
+                    >&ndash;{{ row.allPlay.ties }}</template>
+                  </span>
+                  <span class="allplay-ppw">{{ row.pointsPerWeek?.toFixed(1) }} pts/wk</span>
+                </div>
+              </td>
+              <td v-else class="col-finger">
                 <ul class="finger-strip" role="list" :aria-label="`${lookupTeam(row.teamId).name} category fingerprint`">
                   <li
                     v-for="cat in displayCategories"
@@ -532,7 +552,7 @@
     <!-- ─────────────────────────────────────────────────────────────
          2. SEASON TRAJECTORY — bump chart with featured arcs
     ────────────────────────────────────────────────────────────── -->
-    <section class="trajectory" aria-labelledby="trajectory-heading">
+    <section v-if="!isPointsMode" class="trajectory" aria-labelledby="trajectory-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="trajectory-heading">Standings over time</p>
         <h2 class="trajectory-headline">Through week {{ trajectoryLastWeek }}.</h2>
@@ -583,7 +603,7 @@
          The old bt-vs-ct face-off survives as a compact two-row strip
          under the bump chart. Earns its place, doesn't dominate.
     ────────────────────────────────────────────────────────────── -->
-    <section class="throne" aria-labelledby="throne-heading">
+    <section v-if="!isPointsMode" class="throne" aria-labelledby="throne-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="throne-heading">Head to head</p>
         <p class="throne-caption">{{ throneCaption }}</p>
@@ -630,7 +650,7 @@
     <!-- ─────────────────────────────────────────────────────────────
          5. QUICK READS — footer pills (live editorial)
     ────────────────────────────────────────────────────────────── -->
-    <section v-if="livePR.quickReads.length" class="quick" aria-labelledby="quick-heading">
+    <section v-if="!isPointsMode && livePR.quickReads.length" class="quick" aria-labelledby="quick-heading">
       <h2 class="section-eyebrow section-eyebrow-mute" id="quick-heading">Quick reads</h2>
       <div class="quick-grid" role="list">
         <article
@@ -687,7 +707,13 @@ import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
-import type { CategoryLeagueData, CategoryLeagueDataStanding } from '@/editorial/types'
+import type {
+  CategoryLeagueData,
+  CategoryLeagueDataStanding,
+  LeagueDataH2HPoints,
+} from '@/editorial/types'
+import { computePointsPowerScores } from '@/editorial/points/powerScore'
+import { sportOf } from '@/editorial/leagueCore'
 import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
@@ -739,8 +765,13 @@ const livePR = shallowRef<RenderedPRCopy>(
 )
 const liveLoading = ref(false)
 const liveError = ref<string | null>(null)
-// Set when the adapter resolves to a non-category format (Phase 0:
-// h2h-points). Drives the UnsupportedFormatPanel.
+// H2H points data — populated when the adapter resolves to
+// `h2h-points`. The board is format-agnostic above the columns (rank,
+// team, move, power all mean the same thing); only the two
+// category-specific columns swap out. See `isPointsMode`.
+const livePointsData = shallowRef<LeagueDataH2HPoints | null>(null)
+// Set when the adapter resolves to a format we still cannot render.
+// Points leagues are handled above and no longer reach this.
 const unsupportedFormat = ref<string | null>(null)
 const unsupportedLeagueName = ref<string | null>(null)
 // Strict route (/leagues/:leagueId/power-rankings) resolves the league
@@ -874,7 +905,30 @@ async function loadRankings() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
-    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    // Points leagues render a real board: all-play power replaces the
+    // category blend, and the two category columns swap for all-play
+    // and points per week. Handled before the gate below.
+    if (data.format === 'h2h-points') {
+      livePointsData.value = data
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      issueStore.setIssue({
+        currentWeek: data.currentWeek,
+        currentSeason: data.currentSeason,
+        regularSeasonEndWeek: data.regularSeasonEndWeek,
+        seasonStage: deriveSeasonStage(
+          data.currentWeek,
+          data.regularSeasonEndWeek,
+          sportOf(data),
+        ),
+        leagueFoundedSeason: data.currentSeason,
+        lastUpdated: new Date(),
+      })
+      return
+    }
+    // Format gate — any remaining non-category format still routes to
+    // the UnsupportedFormatPanel.
     if (data.format !== 'h2h-category') {
       unsupportedFormat.value = data.format
       unsupportedLeagueName.value = data.leagueName
@@ -955,7 +1009,16 @@ function collectUserIdentity() {
 function lookupTeam(teamId: string) {
   const t = liveData.value?.teams.find((x) => x.id === teamId)
   if (t) return t
+  // Points leagues carry their teams on `livePointsData`, not
+  // `liveData`. Without this the lookup falls through to the FIXTURE
+  // team table below — and Sleeper roster ids are plain "1".."12", so a
+  // real football league would print demo team names on its own board.
+  const p = livePointsData.value?.teams.find((x) => x.id === teamId)
+  if (p) return p
   try {
+    // Never reach the fixture table while bound to a live league; a
+    // missing team should read as missing, not as somebody else's.
+    if (isPointsMode.value) throw new Error('live points league')
     return getTeam(teamId)
   } catch {
     return {
@@ -1016,7 +1079,32 @@ interface BoardRow {
   weekMove: number // week-over-week rank delta from seasonRankHistory (positive = climbed)
   powerScore: number
   standing: CategoryStanding
+  /** Points mode only — the all-play record and scoring rate that
+   *  replace the category fingerprint columns. Absent in category mode,
+   *  where those columns render owns/bleeds instead. */
+  allPlay?: { wins: number; losses: number; ties: number }
+  pointsPerWeek?: number
 }
+
+/** True when the page is bound to a live h2h-points league. Drives the
+ *  two column swaps — everything else on the board means the same thing
+ *  in both formats. */
+const isPointsMode = computed(() => livePointsData.value !== null)
+
+/** Sub-headline for the points board. Describes the formula in the
+ *  page's own voice rather than borrowing the category page's copy,
+ *  which is fixture-derived and belongs to a different league. */
+const pointsBoardSub = computed(() => {
+  const rows = boardRows.value
+  if (rows.length === 0) {
+    return 'The board fills in once the first week is in the books.'
+  }
+  return (
+    'Ranked by all-play — the record each team would hold having played ' +
+    'the whole league every week — blended with scoring rate, actual ' +
+    'record and recent form.'
+  )
+})
 // Week-over-week rank delta. Positive number = climbed (lower rank number this week).
 const lastWeekRanks = computed<Record<string, number>>(() => {
   const hist = liveSeasonRankHistory.value
@@ -1051,6 +1139,56 @@ function livePowerScore(s: CategoryLeagueDataStanding, catCount: number): number
 const boardRows = computed<BoardRow[]>(() => {
   const lwRanks = lastWeekRanks.value
   const twRanks = thisWeekRanks.value
+
+  // Points path — ranked by the all-play power score rather than the
+  // category blend. `computePointsPowerScores` returns [] before any
+  // week has completed, and an empty board is the honest render for a
+  // league with nothing played yet.
+  const points = livePointsData.value
+  if (points) {
+    const standingByTeam = new Map(
+      (points.standings ?? []).map((s) => [s.teamId, s]),
+    )
+    return computePointsPowerScores(points).map((row, idx) => {
+      const lw = lwRanks[row.teamId]
+      const tw = twRanks[row.teamId]
+      const weekMove =
+        typeof lw === 'number' && typeof tw === 'number' ? lw - tw : 0
+      const standing = standingByTeam.get(row.teamId)
+      const rank = idx + 1
+      return {
+        teamId: row.teamId,
+        rank,
+        prevRank: typeof lw === 'number' ? lw : rank,
+        change: typeof lw === 'number' ? lw - rank : 0,
+        weekMove,
+        powerScore: row.score,
+        // Points standings reuse the category standing shape, with
+        // catWins/catLosses carrying matchup wins. A team with no
+        // standing row (Guillotine leagues report none) still gets a
+        // board row — its record column simply reads as empty rather
+        // than inventing a 0-0.
+        standing: standing ?? {
+          rank,
+          teamId: row.teamId,
+          catWins: 0,
+          catLosses: 0,
+          catTies: 0,
+          winPct: 0,
+          streak: { type: 'T' as const, length: 0 },
+          lastSix: [],
+          ownsCount: 0,
+          bleedingCount: 0,
+        },
+        allPlay: {
+          wins: row.allPlayWins,
+          losses: row.allPlayLosses,
+          ties: row.allPlayTies,
+        },
+        pointsPerWeek: row.pointsPerWeek,
+      }
+    })
+  }
 
   // Live path — the Customize composable is fixture-hardcoded
   // (`useDemoCategoryPowerRankings` imports the fixture `teams` +
@@ -3280,6 +3418,29 @@ function formatPillLabel(label: string): string {
 }
 
 .col-power { width: 140px; }
+
+/* Points mode — replaces the category fingerprint strip. */
+.allplay-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.allplay-record {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-1);
+}
+.allplay-ppw {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 .power-block {
   display: inline-flex;
   align-items: center;

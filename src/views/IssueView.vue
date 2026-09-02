@@ -1632,7 +1632,15 @@ const displayedDepartmentCards = computed<DepartmentCard[]>(() => {
 function lookupTeam(teamId: string) {
   const t = liveData.value?.teams.find((x) => x.id === teamId)
   if (t) return t
+  // Points leagues carry their teams on `livePointsData`. Without this
+  // the lookup falls through to the FIXTURE team table, and Sleeper
+  // roster ids are plain "1".."12" — so a real football league would
+  // print demo team names on its own issue. (BeatFeedView already does
+  // this; this view was missed.)
+  const p = livePointsData.value?.teams.find((x) => x.id === teamId)
+  if (p) return p
   try {
+    if (livePointsData.value) throw new Error('live points league')
     return getTeam(teamId)
   } catch {
     return {
