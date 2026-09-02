@@ -678,6 +678,12 @@ import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
+import {
+  buildDraftStoryFacts,
+  draftLede,
+  numberWord,
+  positionWord,
+} from '@/editorial/points/draftStory'
 import { getTeam } from '@/fixtures/categoriesLeague'
 import { readIssueSnapshot, writeIssueSnapshot } from '@/services/issueArchive'
 import { synthesizeIssue, canSynthesizeIssue } from '@/editorial/synthesizeIssue'
@@ -1226,7 +1232,20 @@ const showDraftSection = computed(() => {
 const draftSectionNumber = computed(() => '03')
 const departmentsSectionNumber = computed(() => showDraftSection.value ? '04' : '03')
 
+/** Real facts about the draft that happened, from the pick list. */
+const draftFacts = computed(() => {
+  const d = liveData.value?.draft ?? livePointsData.value?.draft
+  return buildDraftStoryFacts([...(d?.picks ?? [])])
+})
+
 const draftHeadline = computed(() => {
+  // Points leagues get the story the picks actually support. The
+  // category headline below promises a value read ("how the picks are
+  // aging") that needs a projection model football does not have here.
+  if (livePointsData.value) {
+    const lede = draftLede(draftFacts.value, (id) => lookupTeam(id).name)
+    if (lede) return lede
+  }
   const wk = issueWeek.value
   if (wk <= 1) return `The draft, in the rearview.`
   if (wk <= 3) return `Three weeks in. How the picks are aging.`
@@ -1234,6 +1253,28 @@ const draftHeadline = computed(() => {
 })
 
 const draftBody = computed(() => {
+  // Points body states what is in the data: size of the draft, where
+  // each position first went. No steal/bust language — that is a value
+  // judgement this path cannot support, and promising it and not
+  // delivering is worse than not promising it.
+  const facts = draftFacts.value
+  if (livePointsData.value && facts) {
+    const qb = facts.firstAtPosition.find((f) => f.position === 'QB')
+    const parts = [
+      `${facts.totalPicks} picks over ${facts.rounds} rounds.`,
+    ]
+    if (qb) {
+      parts.push(`The first quarterback went at ${qb.pickOverall}, to ${lookupTeam(qb.teamId).name}.`)
+    }
+    const top = facts.concentrations[0]
+    if (top) {
+      parts.push(
+        `${lookupTeam(top.teamId).name} finished with ` +
+        `${numberWord(top.count)} ${positionWord(top.position, top.count)}.`,
+      )
+    }
+    return parts.join(' ')
+  }
   const wk = issueWeek.value
   if (wk <= 1) return `The week-one picture is starting to take shape. Best picks, the steal of the night, the early bust.`
   if (wk <= 3) return `Three weeks of evidence. Some picks are paying off; others aren't.`
