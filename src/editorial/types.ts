@@ -303,6 +303,13 @@ export interface CategoryLeagueDataDraftPick {
   playerId: string
   playerName: string
   position: string
+  /** The player's PRO team abbreviation — "PHI", "KC", "LAD".
+   *
+   *  Named for baseball because that is where the Draft page started,
+   *  but it is sport-agnostic and carries the NFL club for football
+   *  leagues. Renaming it to `proTeam` would touch 67 call sites across
+   *  ten files of live baseball code, which is not a trade worth making
+   *  for a field name. Read it as "pro team". */
   mlbTeam: string
   draftedByTeamId: string
   valueScore?: number      // optional — only if we can compute it
@@ -612,6 +619,11 @@ export interface LeagueDataH2HPoints {
    *  way to strip schedule luck out of a points league. Optional:
    *  adapters that cannot build it degrade to record-only power. */
   weeklyScores?: PointsWeeklyScore[]
+
+  /** Draft data — undefined for leagues with no draft exposed. Same
+   *  shape the category Draft page consumes, so the page renders one
+   *  contract rather than branching on format. */
+  draft?: CategoryLeagueDataDraft
 
   /** Per-opponent all-time head-to-head, built by the shared buildH2H.
    *  Optional: adapters that can't compute it degrade (rival falls back

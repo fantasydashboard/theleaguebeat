@@ -41,6 +41,8 @@ import type {
   CategoryLeagueDataTeam,
   CategoryLeagueDataTeamCareerStats,
   CategoryLeagueDataWeeklyRanks,
+  CategoryLeagueDataDraft,
+  CategoryLeagueDataDraftPick,
   LeagueDataH2HPoints,
   LeagueDataPointsMatchup,
   PointsWeeklyScore,
@@ -1774,6 +1776,66 @@ export interface SleeperPointsRaw {
   rosters: SleeperRoster[]
   users: SleeperUser[]
   matchupsByWeek: Record<string, SleeperMatchup[]>
+  /** Draft and its picks. Optional: a league can exist without a draft
+   *  (imported rosters, orphaned leagues), and that is a fact about the
+   *  league rather than a capture failure. */
+  draft?: { info?: unknown; picks?: SleeperDraftPick[] } | null
+}
+
+/** A Sleeper draft pick. `metadata` carries the player's name,
+ *  position and pro team, which is why draft copy needs no separate
+ *  player lookup — the /players/nfl blob is ~5MB and never fetched. */
+export interface SleeperDraftPick {
+  round?: number
+  pick_no?: number
+  roster_id?: number | null
+  player_id?: string
+  is_keeper?: boolean | null
+  metadata?: {
+    first_name?: string
+    last_name?: string
+    position?: string
+    team?: string
+  } | null
+}
+
+/**
+ * Maps Sleeper draft picks onto the Draft page's contract.
+ *
+ * Picks with no resolvable roster are dropped: a pick belongs to a team
+ * by definition, and one attributed to nobody would render as an
+ * orphaned row on the board. Picks whose metadata is missing keep their
+ * slot — losing a round-3 pick would silently renumber the draft — and
+ * fall back to the player id, which is true, rather than a placeholder
+ * name, which would not be.
+ */
+function buildSleeperDraft(
+  raw: SleeperPointsRaw,
+  season: number,
+): CategoryLeagueDataDraft | undefined {
+  const picks = raw.draft?.picks
+  if (!Array.isArray(picks) || picks.length === 0) return undefined
+
+  const mapped: CategoryLeagueDataDraftPick[] = []
+  for (const p of picks) {
+    if (p.roster_id == null) continue
+    const first = p.metadata?.first_name?.trim() ?? ''
+    const last = p.metadata?.last_name?.trim() ?? ''
+    const name = `${first} ${last}`.trim()
+    mapped.push({
+      pickOverall: typeof p.pick_no === 'number' ? p.pick_no : mapped.length + 1,
+      round: typeof p.round === 'number' ? p.round : 0,
+      playerId: p.player_id ?? '',
+      playerName: name || (p.player_id ? `Player ${p.player_id}` : 'Unknown player'),
+      position: p.metadata?.position ?? '',
+      mlbTeam: p.metadata?.team ?? '',
+      draftedByTeamId: String(p.roster_id),
+    })
+  }
+  if (mapped.length === 0) return undefined
+
+  mapped.sort((a, b) => a.pickOverall - b.pickOverall)
+  return { year: season, totalPicks: mapped.length, picks: mapped }
 }
 
 /**
@@ -2207,6 +2269,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek)
+  const draft = buildSleeperDraft(raw, currentSeason)
 
   return {
     format: 'h2h-points',
@@ -2224,6 +2287,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     standings,
     seasonRankHistory,
     weeklyScores,
+    draft,
   }
 }
 
