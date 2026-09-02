@@ -34,7 +34,6 @@ import type {
   CategoryLeagueDataCategoryRank,
   CategoryLeagueDataDraft,
   CategoryLeagueDataDraftPick,
-  CategoryLeagueDataSeasonHistory,
   CategoryLeagueDataH2HEntry,
   CategoryLeagueDataMatchup,
   CategoryLeagueDataSeasonHistory,
@@ -42,8 +41,7 @@ import type {
   CategoryLeagueDataTeam,
   CategoryLeagueDataTeamCareerStats,
   CategoryLeagueDataWeeklyRanks,
-  CategoryLeagueDataDraft,
-  CategoryLeagueDataDraftPick,
+  LeagueData,
   LeagueDataH2HPoints,
   LeagueDataPointsMatchup,
   PointsWeeklyScore,
@@ -1825,7 +1823,6 @@ export interface SleeperPointsRaw {
  */
 function buildSleeperPointsSeasonHistory(
   raw: SleeperPointsRaw,
-  currentSeason: number,
 ): CategoryLeagueDataSeasonHistory[] | undefined {
   const seasons: SleeperSeasonInput[] = []
 
@@ -2361,7 +2358,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek)
   const draft = buildSleeperDraft(raw, currentSeason)
-  const seasonHistory = buildSleeperPointsSeasonHistory(raw, currentSeason)
+  const seasonHistory = buildSleeperPointsSeasonHistory(raw)
 
   return {
     format: 'h2h-points',

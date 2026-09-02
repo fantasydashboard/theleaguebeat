@@ -713,6 +713,7 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
+import { hasPlayedGames } from '@/editorial/leagueCore'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
@@ -843,10 +844,28 @@ const pointsStandingsSorted = computed(() => {
   return [...s].sort((a, b) => a.rank - b.rank)
 })
 
+/**
+ * Has this league played anything yet?
+ *
+ * Between a draft and kickoff every team is 0-0, so the standings are
+ * an ARBITRARY ORDER rather than a ladder. The guards below all hang
+ * off this: a 1-10 board, a named "cellar" team and a "tightest race"
+ * are each a claim about results, and there are none.
+ *
+ * The standalone Power Rankings page already guards this, but the
+ * Issue's points branch renders its OWN ladder, cellar and quick reads
+ * — so it needs its own guard, not the other page's.
+ */
+const pointsSeasonStarted = computed(
+  () => !!livePointsData.value && hasPlayedGames(livePointsData.value),
+)
+
 /** Whether the points Issue has a ladder to show. Gates the Power
  *  Rankings + Departments sections, the table of contents, and the
- *  matchups section numbering. */
-const hasPointsPR = computed(() => pointsStandingsSorted.value.length > 0)
+ *  matchups section numbering. No games played means no ladder. */
+const hasPointsPR = computed(
+  () => pointsSeasonStarted.value && pointsStandingsSorted.value.length > 0,
+)
 
 /** One-paragraph lede over the points ladder: leader separation and
  *  the cellar gap, in wins. Null for tiny or tied tables. */
@@ -871,6 +890,9 @@ const pointsPrLede = computed<string | null>(() => {
 })
 
 const pointsCellarStanding = computed(() => {
+  // Naming a bottom team before a game is played singles somebody out
+  // for losing a sort, not a season.
+  if (!pointsSeasonStarted.value) return null
   const sorted = pointsStandingsSorted.value
   return sorted.length >= 4 ? sorted[sorted.length - 1] : null
 })
@@ -884,6 +906,10 @@ interface PointsDeptCard { key: string; label: string; value: string }
 /** Four quick reads for the points Departments grid, derived from
  *  standings + rank history. Each only fires when it has real data. */
 const pointsQuickReads = computed<PointsDeptCard[]>(() => {
+  // Every quick read here is standings-derived: tightest race, biggest
+  // climb, longest streak. With nothing played they would all describe
+  // an ordering rather than a result.
+  if (!pointsSeasonStarted.value) return []
   const standings = pointsStandingsSorted.value
   const hist = livePointsData.value?.seasonRankHistory ?? []
   const teams = livePointsData.value?.teams ?? []

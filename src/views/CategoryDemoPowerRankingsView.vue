@@ -937,10 +937,14 @@ async function loadRankings() {
       })
       return
     }
-    // Format gate — any remaining non-category format still routes to
-    // the UnsupportedFormatPanel.
-    if (data.format !== 'h2h-category') {
-      unsupportedFormat.value = data.format
+    // Format gate. Written as a positive check on the format we CAN
+    // render rather than "not category": with points handled above,
+    // `data.format !== 'h2h-category'` narrows to never today, and
+    // would silently fall through to the category path if a third
+    // format were ever added to the union.
+    const format = (data as { format: string }).format
+    if (format !== 'h2h-category') {
+      unsupportedFormat.value = format
       unsupportedLeagueName.value = data.leagueName
       if (leagueRowId && data.leagueName) {
         void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
@@ -1182,7 +1186,7 @@ const boardRows = computed<BoardRow[]>(() => {
         // standing row (Guillotine leagues report none) still gets a
         // board row — its record column simply reads as empty rather
         // than inventing a 0-0.
-        standing: standing ?? {
+        standing: (standing ?? {
           rank,
           teamId: row.teamId,
           catWins: 0,
@@ -1193,7 +1197,7 @@ const boardRows = computed<BoardRow[]>(() => {
           lastSix: [],
           ownsCount: 0,
           bleedingCount: 0,
-        },
+        }) as unknown as CategoryStanding,
         allPlay: {
           wins: row.allPlayWins,
           losses: row.allPlayLosses,

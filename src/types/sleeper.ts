@@ -4,6 +4,9 @@ export interface SleeperUser {
   username: string
   display_name: string
   avatar: string
+  /** Sleeper sends a per-league metadata blob here; `team_name` is the
+   *  user's custom team name and is the first naming tier. */
+  metadata?: { team_name?: string | null; [k: string]: unknown } | null
 }
 
 export interface SleeperLeague {
@@ -15,6 +18,11 @@ export interface SleeperLeague {
   /** 'nfl' | 'mlb' | 'nba' | 'nhl'. Optional because older captured
    *  shapes predate it; treat an absent value as unknown, not as MLB. */
   sport?: string
+  /** Roster count. Sleeper sends it on the league payload; optional
+   *  because older captured shapes predate the field. */
+  total_rosters?: number
+  /** Previous season's league id — Sleeper's own season lineage. */
+  previous_league_id?: string | null
   settings: {
     playoff_week_start: number
     playoff_teams: number

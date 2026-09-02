@@ -698,7 +698,7 @@ const sleeperError = ref('')
 const sleeperUserLeagues = ref<{ id: string; name: string; size: number }[]>([])
 
 /** Sleeper's own sport vocabulary for our `Sport` values. */
-function sleeperSportCode(sport: string): string {
+function sleeperSportCode(sport: string | null): string {
   switch (sport) {
     case 'football': return 'nfl'
     case 'baseball': return 'mlb'

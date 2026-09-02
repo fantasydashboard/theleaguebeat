@@ -248,11 +248,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import {
-  groupLeaguesBySeason,
-  platformLogo,
-  scoringLabel,
-} from '@/utils/leagueGrouping'
+import { groupLeaguesBySeason, platformLogo } from '@/utils/leagueGrouping'
 import { useRoute, useRouter } from 'vue-router'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
