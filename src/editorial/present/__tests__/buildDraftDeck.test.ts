@@ -73,3 +73,51 @@ describe('the draft deck', () => {
     }
   })
 })
+
+describe('logos and position-relative order', () => {
+  const deck = buildDraftDeck({
+    leagueName: data.leagueName,
+    season: data.currentSeason,
+    picks: [...(data.draft?.picks ?? [])],
+    teamName: nameOf,
+    team: (id) => {
+      const t = data.teams.find((x) => x.id === id)
+      return t && { name: t.name, avatarUrl: t.avatarUrl, avatarColor: t.avatarColor, ownerInitials: t.ownerInitials }
+    },
+  })!
+
+  it('carries a drawable team on rows that name one', () => {
+    const rows = deck.slides.flatMap((s) => (s.kind === 'list' ? s.rows : []))
+    const withTeam = rows.filter((r) => r.teamId)
+    expect(withTeam.length).toBeGreaterThan(0)
+    for (const r of withTeam) {
+      // Either a real logo, or the colour+initials fallback. Never a
+      // row that claims a team and gives the renderer nothing to draw.
+      expect(Boolean(r.logoUrl || (r.logoColor && r.logoInitials))).toBe(true)
+    }
+  })
+
+  it('labels round-one picks by position order, not by a value grade', () => {
+    const round1 = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === 'Round one')
+    expect(round1).toBeDefined()
+    const values = (round1 as { rows: { value?: string }[] }).rows.map((r) => r.value ?? '')
+    // "RB1", "WR2" — position plus its order. Never "steal"/"reach"/a
+    // grade, which would need a projection model we do not have.
+    for (const v of values) expect(v).toMatch(/^[A-Z]{1,3}\d+$/)
+    expect(values.join(' ')).not.toMatch(/steal|reach|bust|grade|[A-F][+-]?$/i)
+  })
+
+  it('numbers each position from one, in draft order', () => {
+    const round1 = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === 'Round one')!
+    const rows = (round1 as { rows: { value?: string }[] }).rows
+    const seen = new Map<string, number>()
+    for (const r of rows) {
+      const m = /^([A-Z]{1,3})(\d+)$/.exec(r.value ?? '')
+      if (!m) continue
+      const expected = (seen.get(m[1]) ?? 0) + 1
+      expect(Number(m[2]), `${m[1]} out of order`).toBe(expected)
+      seen.set(m[1], expected)
+    }
+    expect(seen.size).toBeGreaterThan(0)
+  })
+})

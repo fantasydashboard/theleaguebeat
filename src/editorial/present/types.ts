@@ -53,6 +53,13 @@ export interface ListSlide {
     sub?: string
     /** Team id, so the renderer can draw a logo when it has one. */
     teamId?: string
+    /** Resolved at build time so the renderer stays dumb: it draws what
+     *  it is handed rather than reaching back into league data. */
+    logoUrl?: string
+    /** OKLCH gradient stops for the fallback tile when there is no
+     *  uploaded logo. Never fabricated — absent means draw initials. */
+    logoColor?: string
+    logoInitials?: string
   }[]
   revealOneByOne?: boolean
 }

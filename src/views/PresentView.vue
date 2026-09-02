@@ -68,6 +68,15 @@
               :class="{ 'is-hidden': i > revealIndex }"
             >
               <span v-if="row.lead" class="list-lead">{{ row.lead }}</span>
+              <span
+                v-if="row.logoUrl || row.logoColor"
+                class="list-logo"
+                :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
+                aria-hidden="true"
+              >
+                <img v-if="row.logoUrl" :src="row.logoUrl" class="list-logo-img" alt="" />
+                <span v-else class="list-logo-initials">{{ row.logoInitials }}</span>
+              </span>
               <span class="list-copy">
                 <span class="list-label">{{ row.label }}</span>
                 <span v-if="row.sub" class="list-sub">{{ row.sub }}</span>
@@ -219,6 +228,16 @@ async function load(): Promise<void> {
       season: data.currentSeason,
       picks: [...(data.draft?.picks ?? [])],
       teamName,
+      team: (teamId: string) => {
+        const t = data.teams.find((x) => x.id === teamId)
+        if (!t) return undefined
+        return {
+          name: t.name,
+          avatarUrl: t.avatarUrl,
+          avatarColor: t.avatarColor,
+          ownerInitials: t.ownerInitials,
+        }
+      },
     })
   } catch (err) {
     error.value = (err as Error).message || 'Something went wrong.'
@@ -429,6 +448,20 @@ watch(() => route.params.leagueId, () => void load())
   letter-spacing: 0.10em;
   text-transform: uppercase;
   color: oklch(0.78 0.18 92);
+}
+.list-logo {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  display: grid; place-items: center;
+  overflow: hidden;
+  background: oklch(0.18 0.015 90);
+}
+.list-logo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.list-logo-initials {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem; font-weight: 800; letter-spacing: 0.06em;
+  color: oklch(0.97 0.005 90);
 }
 .list-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .list-label { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }

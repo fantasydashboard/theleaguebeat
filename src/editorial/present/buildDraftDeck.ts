@@ -11,8 +11,11 @@
  * and the presenter finds out which they have BEFORE they start
  * talking.
  *
- * Deliberately no pick grades. Judging a pick needs a projection model,
- * and that model is UFD's — see draftStory.ts for the same reasoning.
+ * Deliberately no pick GRADES. Judging a pick needs a projection model,
+ * and that model is UFD's. What the deck does say is position-relative
+ * order ("the fifth running back off the board"), which is true whatever
+ * the league's settings are — see `positionOrder` for why the obvious
+ * shortcut fails.
  */
 import type { CategoryLeagueDataDraftPick } from '../types'
 import {
@@ -23,12 +26,68 @@ import {
 } from '../points/draftStory'
 import type { PresentDeck, PresentSlide } from './types'
 
+/** What the deck needs to draw a team. Resolved by the caller, which
+ *  owns league data; the deck just carries it through to the slide. */
+export interface DeckTeam {
+  name: string
+  avatarUrl?: string
+  avatarColor?: string
+  ownerInitials?: string
+}
+
 export interface DraftDeckInput {
   leagueName: string
   season: number
   picks: CategoryLeagueDataDraftPick[]
   /** Resolves a team id to its display name. */
   teamName: (teamId: string) => string
+  /** Optional richer lookup, for logos. Falls back to `teamName`. */
+  team?: (teamId: string) => DeckTeam | undefined
+}
+
+/** Slide-row visual fields for a team, or nothing when the caller gave
+ *  us no way to resolve one. */
+function teamVisual(input: DraftDeckInput, teamId: string) {
+  const t = input.team?.(teamId)
+  if (!t) return {}
+  return {
+    teamId,
+    logoUrl: t.avatarUrl,
+    logoColor: t.avatarColor,
+    logoInitials: t.ownerInitials,
+  }
+}
+
+/**
+ * Where a pick sat WITHIN ITS OWN POSITION — "the fifth running back
+ * off the board".
+ *
+ * This is deliberately the only draft-order judgement the deck makes.
+ * The obvious alternative is to grade picks against Sleeper's
+ * `search_rank`, and it does not survive contact with real data: it
+ * correlates with draft order at only 0.79, carries 45 duplicate values
+ * across 140 picks, and is blind to positional scarcity — so in a
+ * one-quarterback league it flags Mahomes, Purdy, Nix and Dart as the
+ * four biggest "steals" purely because quarterbacks always fall. A
+ * league would spot that as nonsense immediately.
+ *
+ * Position-relative order avoids cross-position comparison entirely, so
+ * it is true whatever the league's settings are. Real value grades need
+ * real projections, which is UFD's model, not a number scraped from a
+ * search index.
+ */
+function positionOrder(
+  picks: CategoryLeagueDataDraftPick[],
+): Map<number, { position: string; nth: number }> {
+  const seen = new Map<string, number>()
+  const out = new Map<number, { position: string; nth: number }>()
+  for (const p of [...picks].sort((a, b) => a.pickOverall - b.pickOverall)) {
+    if (!p.position) continue
+    const nth = (seen.get(p.position) ?? 0) + 1
+    seen.set(p.position, nth)
+    out.set(p.pickOverall, { position: p.position, nth })
+  }
+  return out
 }
 
 /** Returns null when the league has no draft — the caller then omits
@@ -37,6 +96,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
   const facts = buildDraftStoryFacts(input.picks)
   if (!facts) return null
 
+  const posOrder = positionOrder(input.picks)
   const slides: PresentSlide[] = []
 
   slides.push({
@@ -86,7 +146,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         label: f.playerName,
         sub: input.teamName(f.teamId),
         value: `#${f.pickOverall}`,
-        teamId: f.teamId,
+        ...teamVisual(input, f.teamId),
       })),
     })
   }
@@ -126,6 +186,31 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         label: positionWord(p.position, p.count),
         value: String(p.count),
       })),
+    })
+  }
+
+  // Round one, pick by pick — the slide a room actually wants walked
+  // through. Each row carries where the player sat within his own
+  // position, which is the only order judgement this deck makes.
+  const roundOne = [...input.picks]
+    .filter((p) => p.round === 1)
+    .sort((a, b) => a.pickOverall - b.pickOverall)
+  if (roundOne.length >= 4) {
+    slides.push({
+      kind: 'list',
+      eyebrow: 'Round one',
+      headline: 'How the first round went.',
+      revealOneByOne: true,
+      rows: roundOne.map((p) => {
+        const po = posOrder.get(p.pickOverall)
+        return {
+          lead: `${p.pickOverall}`,
+          label: p.playerName,
+          sub: input.teamName(p.draftedByTeamId),
+          value: po ? `${po.position}${po.nth}` : p.position,
+          ...teamVisual(input, p.draftedByTeamId),
+        }
+      }),
     })
   }
 
