@@ -95,7 +95,18 @@ const draft = draftId
    wins/losses/points, which is what season-level history needs, and
    per-week matchups for six seasons would multiply the fixture size for
    data nothing reads. */
-type HistorySeason = { league: unknown; rosters: unknown; users: unknown }
+type HistorySeason = {
+  league: unknown
+  rosters: unknown
+  users: unknown
+  /** Playoff bracket. The ONLY authoritative source for a season's
+   *  champion and runner-up: the final match carries `w` and `l`.
+   *  `metadata.latest_league_winner_roster_id` agrees where it exists
+   *  but is absent on older seasons, and regular-season record is not a
+   *  substitute — in this league the champion had the best record in
+   *  none of the three seasons where both are known. */
+  winnersBracket: unknown
+}
 const history: HistorySeason[] = []
 const seenLeagueIds = new Set<string>([leagueId])
 let cursor = (league as any).previous_league_id as string | null | undefined
@@ -113,6 +124,7 @@ for (let i = 0; i < historyDepth && cursor; i++) {
     league: prior,
     rosters: (await tryGet(`/league/${cursor}/rosters`)) ?? [],
     users: (await tryGet(`/league/${cursor}/users`)) ?? [],
+    winnersBracket: (await tryGet(`/league/${cursor}/winners_bracket`)) ?? [],
   })
   cursor = (prior as any).previous_league_id as string | null | undefined
 }
@@ -130,6 +142,8 @@ if (!unsetPlayoffWeekLeague) {
   process.exit(1)
 }
 
+const winnersBracket = (await tryGet(`/league/${leagueId}/winners_bracket`)) ?? []
+
 const fixture = {
   league,
   rosters,
@@ -137,6 +151,7 @@ const fixture = {
   matchupsByWeek,
   draft,
   history,
+  winnersBracket,
   unsetPlayoffWeekLeague,
 }
 
@@ -162,6 +177,7 @@ console.log(`weeks:   ${Object.keys(matchupsByWeek).join(', ') || 'none'}`)
 console.log(`scoring: ${Object.keys((league as any).scoring_settings ?? {}).length} settings`)
 console.log(`playoff_week_start: ${(league as any).settings?.playoff_week_start}`)
 console.log(`draft:   ${draft ? `${(draft.picks as unknown[]).length} picks` : 'none'}`)
+console.log(`bracket: ${(winnersBracket as unknown[]).length} playoff matches`)
 console.log(
   `history: ${history.length} prior season(s)` +
   (history.length ? ` — ${history.map((h) => (h.league as any).season).join(', ')}` : ''),

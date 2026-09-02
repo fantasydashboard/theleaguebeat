@@ -34,6 +34,7 @@ import type {
   CategoryLeagueDataCategoryRank,
   CategoryLeagueDataDraft,
   CategoryLeagueDataDraftPick,
+  CategoryLeagueDataSeasonHistory,
   CategoryLeagueDataH2HEntry,
   CategoryLeagueDataMatchup,
   CategoryLeagueDataSeasonHistory,
@@ -60,6 +61,11 @@ import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
 import { teamColorHash } from './colorHash'
 import { DEFAULT_END_WEEK_BY_SPORT } from '../detection/helpers'
+import {
+  buildPointsSeasonHistory,
+  type SleeperBracketMatch,
+  type SleeperSeasonInput,
+} from '../points/seasonHistory'
 
 /* ─────────────────────────────────────────────────────────────────
    CATEGORY MAPPING
@@ -1780,6 +1786,77 @@ export interface SleeperPointsRaw {
    *  (imported rosters, orphaned leagues), and that is a fact about the
    *  league rather than a capture failure. */
   draft?: { info?: unknown; picks?: SleeperDraftPick[] } | null
+  /** The current season's playoff bracket. */
+  winnersBracket?: SleeperBracketMatch[] | null
+  /** Prior seasons, walked back through `previous_league_id`. Each
+   *  carries its OWN rosters and users: managers join and leave, and
+   *  roster counts change between seasons (the captured league ran 12
+   *  teams in 2021 and 10 since), so nothing may be inherited from the
+   *  current season. */
+  history?: {
+    league: SleeperLeague
+    rosters: SleeperRoster[]
+    users: SleeperUser[]
+    winnersBracket?: SleeperBracketMatch[] | null
+  }[] | null
+}
+
+/**
+ * Season history from playoff brackets.
+ *
+ * Names are resolved per season from that season's own users list —
+ * never from the current one. A manager who left the league after 2022
+ * still won 2022, and inheriting current names would either blank them
+ * or, worse, attribute their title to whoever now holds that roster id.
+ */
+function buildSleeperPointsSeasonHistory(
+  raw: SleeperPointsRaw,
+  currentSeason: number,
+): CategoryLeagueDataSeasonHistory[] | undefined {
+  const seasons: SleeperSeasonInput[] = []
+
+  const collect = (
+    league: SleeperLeague,
+    rosters: SleeperRoster[],
+    users: SleeperUser[],
+    bracket: SleeperBracketMatch[] | null | undefined,
+  ) => {
+    const season = Number(league.season)
+    if (!Number.isFinite(season)) return
+    // Only completed seasons have a champion. An in-progress season
+    // would read its half-built bracket as a finished title.
+    if (league.status !== 'complete') return
+    const userById = new Map(users.map((u) => [u.user_id, u]))
+    seasons.push({
+      season,
+      metadataWinnerRosterId:
+        (league.metadata as Record<string, string> | undefined)
+          ?.latest_league_winner_roster_id ?? null,
+      bracket: bracket ?? [],
+      rosters: rosters.map((r) => {
+        const u = r.owner_id ? userById.get(r.owner_id) : undefined
+        return {
+          rosterId: String(r.roster_id),
+          wins: r.settings?.wins ?? 0,
+          losses: r.settings?.losses ?? 0,
+          ties: r.settings?.ties ?? 0,
+          name:
+            u?.metadata?.team_name ||
+            u?.display_name ||
+            u?.username ||
+            `Team ${r.roster_id}`,
+        }
+      }),
+    })
+  }
+
+  collect(raw.league, raw.rosters, raw.users, raw.winnersBracket)
+  for (const h of raw.history ?? []) {
+    collect(h.league, h.rosters, h.users, h.winnersBracket)
+  }
+
+  const history = buildPointsSeasonHistory(seasons)
+  return history.length > 0 ? history : undefined
 }
 
 /** A Sleeper draft pick. `metadata` carries the player's name,
@@ -2270,6 +2347,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek)
   const draft = buildSleeperDraft(raw, currentSeason)
+  const seasonHistory = buildSleeperPointsSeasonHistory(raw, currentSeason)
 
   return {
     format: 'h2h-points',
@@ -2288,6 +2366,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     seasonRankHistory,
     weeklyScores,
     draft,
+    seasonHistory,
   }
 }
 

@@ -405,6 +405,22 @@ const liveSeasonCount = computed<number>(() => {
   return seasons.size
 })
 
+/**
+ * Fixture fallbacks are for the DEMO only.
+ *
+ * Every `liveData.value?.x ?? fixtureX` on this page silently prints
+ * the demo league when a real league has no value for `x` — and a real
+ * league legitimately has none: a first-season league has no prior
+ * champions, and a points league had no seasonHistory at all until the
+ * adapter learned to build one. Bound to a live league, absent must
+ * render as absent, never as somebody else's history.
+ */
+const isLiveBound = computed(() => liveData.value !== null)
+function liveOr<T>(live: T | undefined | null, fixture: T): T {
+  if (isLiveBound.value) return (live ?? (Array.isArray(fixture) ? ([] as unknown as T) : live)) as T
+  return (live ?? fixture) as T
+}
+
 /** Season count for display. Reads from data.seasonHistory.length —
  *  the canonical count across the page. Previously the strict-live
  *  branch used liveSeasonCount (counts only leagues connected to TLB),
@@ -413,7 +429,7 @@ const liveSeasonCount = computed<number>(() => {
  *  landing page reads the seasonHistory count too; aligning both
  *  surfaces removes the "5 seasons" vs "3 seasons" inconsistency. */
 const displaySeasonCount = computed<number>(() => {
-  return liveData.value?.seasonHistory?.length ?? seasonHistory.length
+  return liveOr(liveData.value?.seasonHistory, seasonHistory)?.length ?? 0
 })
 
 /* Champion / runner-up / basement display — prefer the denormalized
@@ -604,9 +620,9 @@ function numberToWord(n: number): string {
   return words[n] ?? `${n}`
 }
 const pageContext = computed(() => {
-  const seasonsArr = liveData.value?.seasonHistory ?? seasonHistory
+  const seasonsArr = liveOr(liveData.value?.seasonHistory, seasonHistory) ?? []
   const championsCount = new Set(seasonsArr.map((s) => s.championTeamId)).size
-  const teamsCount = (liveData.value?.teams ?? teams).length
+  const teamsCount = (liveOr(liveData.value?.teams, teams) ?? []).length
   return { seasons: displaySeasonCount.value, champions: championsCount, teamsCount }
 })
 
@@ -736,7 +752,7 @@ function onWatchClick(w: WatchItem): void {
 
 /* ─── Seasons / champions ──────────────────────────────────── */
 const seasonsNewestFirst = computed(() => {
-  const src = liveData.value?.seasonHistory ?? seasonHistory
+  const src = liveOr(liveData.value?.seasonHistory, seasonHistory) ?? []
   return [...src].sort((a, b) => b.year - a.year)
 })
 
@@ -1466,8 +1482,8 @@ interface RivalryDisplay {
 }
 
 const rivalries = computed<RivalryDisplay[]>(() => {
-  const matrix = liveData.value?.h2hMatrix ?? h2hMatrix
-  const teamsList = liveData.value?.teams ?? teams
+  const matrix = liveOr(liveData.value?.h2hMatrix, h2hMatrix) ?? []
+  const teamsList = liveOr(liveData.value?.teams, teams) ?? []
   if (!matrix || matrix.length === 0) return []
   const myId = teamsList.find((t) => t.isMyTeam)?.id ?? null
 
