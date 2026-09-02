@@ -241,8 +241,12 @@
       class="form-section"
     >
       <form class="connect-form" @submit.prevent="onSubmit">
+        <!-- The field takes either. Username is what most people reach
+             for, and it is how Sleeper identifies you everywhere else,
+             so it leads. The label used to hardcode "baseball", which
+             was simply wrong once football shipped. -->
         <label class="form-label" for="league-id-input">
-          Paste your Sleeper baseball league ID
+          Your Sleeper username &mdash; or a {{ selectedSport }} league ID
         </label>
         <input
           id="league-id-input"
@@ -251,12 +255,12 @@
           class="form-input"
           autocomplete="off"
           spellcheck="false"
-          inputmode="numeric"
-          placeholder="e.g. 1234567890123456789"
+          placeholder="e.g. stuckabuc"
           required
         />
         <p class="form-help">
-          Find it in your Sleeper league URL:
+          Enter your username and pick from your {{ selectedSport }} leagues, or paste an
+          ID from your league URL:
           <code>sleeper.app/leagues/<span class="form-help-em">[ID]</span></code>
         </p>
         <button
@@ -1061,6 +1065,21 @@ async function onSubmit(): Promise<void> {
   // sessions, then route to the live-league URL by Supabase UUID.
   // The fetch is just to grab the league's display name + size from
   // the Sleeper API — best-effort, the row save tolerates failures.
+  // Sleeper league ids are always numeric, so a non-numeric input is a
+  // username. Checking that first makes the common path one request
+  // instead of a failed league lookup followed by a user lookup.
+  if (!/^\d+$/.test(id)) {
+    const found = await lookUpSleeperUserLeagues(id)
+    if (found.length > 0) {
+      sleeperUserLeagues.value = found
+      return
+    }
+    sleeperError.value =
+      `No Sleeper user named "${id}", and that is not a league ID either. ` +
+      `Check the spelling, or paste the number from your league URL.`
+    return
+  }
+
   let leagueRowId: string | undefined
   if (authStore.isAuthenticated) {
     try {
@@ -1081,20 +1100,13 @@ async function onSubmit(): Promise<void> {
       // nothing. A username in the league-ID box lands here, which is
       // an easy and very likely mistake — the field wants the number
       // out of the league URL.
+      // Numeric but unknown. Sleeper returns null for an id it does not
+      // recognise, and persisting anyway wrote a row named
+      // `Sleeper League <input>` for a league that does not exist.
       if (!meta || typeof meta !== 'object') {
-        // Not a league id. Very likely a username — that is what people
-        // reach for, and it is how Sleeper identifies you everywhere
-        // else. Resolve it and offer their leagues rather than sending
-        // them off to dig a number out of a URL.
-        const found = await lookUpSleeperUserLeagues(id)
-        if (found.length > 0) {
-          sleeperUserLeagues.value = found
-          sleeperError.value = ''
-          return
-        }
         sleeperError.value =
-          `No Sleeper league or user matching "${id}". Use your Sleeper username, ` +
-          `or the number from your league URL (sleeper.app/leagues/[ID]).`
+          `No Sleeper league with the ID "${id}". Check the number in your league URL, ` +
+          `or enter your username instead and pick from the list.`
         return
       }
 
