@@ -114,7 +114,24 @@
         <h2 class="section-headline">{{ trophiesHeadline }}</h2>
       </header>
 
-      <div class="champs-rail" role="list">
+      <div class="champs-rail-wrap">
+        <button
+          type="button"
+          class="rail-arrow rail-arrow-prev"
+          aria-label="Scroll to earlier seasons"
+          @click="scrollChamps(-1)"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button
+          type="button"
+          class="rail-arrow rail-arrow-next"
+          aria-label="Scroll to later seasons"
+          @click="scrollChamps(1)"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      <div ref="champsRail" class="champs-rail" role="list">
         <!-- Current, undecided season — the live "chase" card. -->
         <article
           v-if="currentSeasonCard"
@@ -180,6 +197,7 @@
             </p>
           </footer>
         </article>
+      </div>
       </div>
     </section>
 
@@ -809,9 +827,27 @@ function champEra(rec: any): string {
 
 /** The current, undecided season — rendered as a "the chase" card so
  *  the champions rail isn't half-empty and the past ties to the now. */
+/** The champions rail overflows horizontally. A trackpad can swipe it,
+ *  but a mouse cannot scroll a horizontal container at all — so the
+ *  arrows are the only way most people can reach earlier seasons. */
+const champsRail = ref<HTMLElement | null>(null)
+function scrollChamps(direction: 1 | -1): void {
+  const el = champsRail.value
+  if (!el) return
+  // One card plus its gap, so a click advances exactly one season.
+  el.scrollBy({ left: direction * 296, behavior: 'smooth' })
+}
+
 const currentSeasonCard = computed(() => {
   const d = liveData.value
   if (!d || !isStrictLiveMode.value) return null
+  // "In progress" means no champion yet. A finished season already has
+  // a crown card built from its playoff bracket, and rendering both
+  // showed the same year twice with two DIFFERENT teams — the
+  // best-record leader on the live card and the actual bracket winner
+  // on the crown. The bracket is the truth; suppress the live card.
+  const decided = (d.seasonHistory ?? []).some((h) => h.year === d.currentSeason)
+  if (decided) return null
   const sorted = [...d.standings].sort((a, b) => a.rank - b.rank)
   const leader = sorted[0]
   if (!leader) return null
@@ -2330,13 +2366,41 @@ function openLegacyModal(id: string) { activeLegacyTeamId.value = id }
 }
 
 /* ─── 2. HALL OF CHAMPIONS ────────────────────────────────────── */
+.champs-rail-wrap { position: relative; }
 .champs-rail {
   display: flex;
   gap: 16px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
+  /* `mandatory` fights the user on a trackpad — a partial swipe snaps
+     back to where it started. `proximity` snaps when they land near a
+     card and otherwise leaves the scroll alone. */
+  scroll-snap-type: x proximity;
   padding: 4px 4px 12px;
   margin: 0 -4px;
+  scroll-behavior: smooth;
+}
+.rail-arrow {
+  position: absolute;
+  top: 170px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  color: oklch(0.92 0.005 90);
+  background: oklch(0.12 0.015 90 / 0.94);
+  border: 1px solid oklch(0.30 0.015 90);
+  backdrop-filter: blur(6px);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.rail-arrow:hover { background: oklch(0.18 0.015 90); border-color: oklch(0.78 0.18 92 / 0.5); }
+.rail-arrow-prev { left: -6px; }
+.rail-arrow-next { right: -6px; }
+@media (max-width: 640px) {
+  /* Touch devices swipe natively; the arrows would only cover cards. */
+  .rail-arrow { display: none; }
 }
 .champs-rail::-webkit-scrollbar { height: 6px; }
 .champs-rail::-webkit-scrollbar-thumb { background: oklch(0.20 0.015 90); border-radius: 3px; }
