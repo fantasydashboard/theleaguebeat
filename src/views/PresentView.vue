@@ -90,6 +90,17 @@
         <section v-else class="slide slide-signoff">
           <h2 class="signoff-headline">{{ slide.headline }}</h2>
           <p v-if="slide.sub" class="signoff-sub">{{ slide.sub }}</p>
+          <!-- The presentation is over and the room is looking at the
+               screen. Leaving them on a dead slide with only a small
+               "Exit" in the corner strands the presenter mid-sentence. -->
+          <div class="signoff-actions">
+            <router-link :to="backLink" class="signoff-action signoff-action-primary">
+              Back to the issue
+            </router-link>
+            <button type="button" class="signoff-action" @click="restart">
+              Start over
+            </button>
+          </div>
           <p class="signoff-brand">theleaguebeat.com</p>
         </section>
         </template>
@@ -129,6 +140,8 @@ const deck = ref<PresentDeck | null>(null)
 /** Which slide, and how many rows of it are revealed. */
 const slideIndex = ref(0)
 const revealIndex = ref(0)
+/** Set when the presenter advances past the sign-off. */
+const atEnd = ref(false)
 
 const backLink = computed(() => {
   const id = route.params.leagueId
@@ -168,7 +181,21 @@ function advance(): void {
   if (slideIndex.value < deck.value.slides.length - 1) {
     slideIndex.value += 1
     revealIndex.value = 0
+    return
   }
+  // Already on the sign-off. Advancing again leaves the deck rather
+  // than doing nothing, which reads as a broken key.
+  atEnd.value = true
+}
+
+watch(atEnd, (done) => {
+  if (done) void router.push(backLink.value)
+})
+
+/** Present it again without leaving the room and reloading. */
+function restart(): void {
+  slideIndex.value = 0
+  revealIndex.value = 0
 }
 
 function back(): void {
@@ -509,6 +536,36 @@ watch(() => route.params.leagueId, () => void load())
   margin: 0;
 }
 .signoff-sub { font-size: 1.2rem; color: oklch(0.72 0.008 90); margin: 0; }
+.signoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 8px;
+  position: relative;
+  z-index: 3;
+}
+.signoff-action {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 11px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid oklch(0.30 0.015 90);
+  background: transparent;
+  color: oklch(0.92 0.005 90);
+}
+.signoff-action:hover { border-color: oklch(0.78 0.18 92 / 0.6); }
+.signoff-action-primary {
+  background: oklch(0.78 0.18 92);
+  border-color: oklch(0.78 0.18 92);
+  color: oklch(0.12 0.012 90);
+}
+.signoff-action-primary:hover { filter: brightness(1.06); }
 
 /* Invisible half-screen tap targets. A presenter on a shared screen
    should not have to aim. */

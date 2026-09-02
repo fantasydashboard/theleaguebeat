@@ -2227,13 +2227,6 @@ function collectUserIdentity() {
   color: oklch(0.95 0.005 90);
 }
 .points-draft-actions { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
-.points-draft-link-primary {
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: oklch(0.78 0.18 92);
-  color: oklch(0.12 0.012 90);
-}
-.points-draft-link-primary:hover { text-decoration: none; filter: brightness(1.05); }
 .points-draft-link {
   display: inline-flex;
   align-items: center;
@@ -2247,6 +2240,19 @@ function collectUserIdentity() {
   text-decoration: none;
 }
 .points-draft-link:hover { text-decoration: underline; }
+/* Must come AFTER `.points-draft-link`: same specificity, so source
+   order decides the colour. Defined before it, the base rule's gold
+   text won and the label went gold-on-gold — invisible. */
+.points-draft-link-primary {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: oklch(0.78 0.18 92);
+  color: oklch(0.12 0.012 90);
+}
+.points-draft-link-primary:hover {
+  text-decoration: none;
+  filter: brightness(1.06);
+}
 .issue {
   display: flex;
   flex-direction: column;
