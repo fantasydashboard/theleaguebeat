@@ -57,21 +57,71 @@
         :aria-label="`${leaguesStore.leagues.length} connected leagues`"
         @click.stop
       >
-        <button
-          v-for="league in leaguesStore.leagues"
-          :key="league.id"
-          type="button"
-          class="league-switch-item"
-          :class="{ 'is-current': league.id === activeLeague?.id }"
-          role="option"
-          :aria-selected="league.id === activeLeague?.id"
-          @click="pickLeague(league.id)"
+        <!-- Same treatment as the connect screen: the platform's own
+             mark, a colour-coded sport, and seasons of one league
+             collapsed together. Before this the list was fifteen
+             identically-shaped rows, several with the same name. -->
+        <div
+          v-for="group in leagueGroups"
+          :key="group.key"
+          class="league-switch-row"
         >
-          <span class="league-switch-item-name">{{ league.league_name }}</span>
-          <span class="league-switch-item-meta">
-            {{ platformLabel(league.platform) }} · {{ league.sport }} · {{ league.season }}
-          </span>
-        </button>
+          <button
+            type="button"
+            class="league-switch-item"
+            :class="{ 'is-current': group.current.id === activeLeague?.id }"
+            role="option"
+            :aria-selected="group.current.id === activeLeague?.id"
+            @click="pickLeague(group.current.id)"
+          >
+            <img
+              :src="platformLogo(group.current.platform)"
+              :alt="platformLabel(group.current.platform)"
+              class="league-switch-logo"
+              width="28"
+              height="28"
+            />
+            <span class="league-switch-item-copy">
+              <span class="league-switch-item-name">{{ group.current.league_name }}</span>
+              <span class="league-switch-item-meta">
+                <span :class="['league-switch-sport', `sport-${group.current.sport}`]">
+                  {{ group.current.sport }}
+                </span>
+                <span v-if="scoringLabel(group.current.scoring_type)">
+                  · {{ scoringLabel(group.current.scoring_type) }}
+                </span>
+                · {{ group.current.season }}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            class="league-switch-remove"
+            :aria-label="`Remove ${group.current.league_name}`"
+            :title="`Remove ${group.current.league_name}`"
+            @click.stop="confirmRemove(group.current)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+
+          <!-- Past seasons stay reachable but subordinate, exactly as
+               on the connect screen. -->
+          <div v-if="group.past.length" class="league-switch-seasons">
+            <button
+              v-for="past in group.past"
+              :key="past.id"
+              type="button"
+              class="league-switch-season"
+              :class="{ 'is-current': past.id === activeLeague?.id }"
+              @click="pickLeague(past.id)"
+            >
+              {{ past.season }}
+            </button>
+          </div>
+        </div>
         <router-link
           to="/demo-categories/connect"
           class="league-switch-item league-switch-add"
@@ -167,6 +217,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import {
+  groupLeaguesBySeason,
+  platformLogo,
+  scoringLabel,
+} from '@/utils/leagueGrouping'
 import { useRoute, useRouter } from 'vue-router'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useAuthStore } from '@/stores/auth'
@@ -185,6 +240,34 @@ const leaguesStore = useLeaguesStore()
 const authStore = useAuthStore()
 
 const switcherOpen = ref(false)
+
+/** Seasons of one league collapse into a single entry, shared with the
+ *  connect screen so both answer "which rows are the same league" the
+ *  same way. */
+const leagueGroups = computed(() => groupLeaguesBySeason(leaguesStore.leagues))
+
+/**
+ * Removing a league is destructive and the row sits next to the one
+ * that switches to it, so it confirms first. Reconnecting takes a
+ * username, which is why this deletes rather than hides.
+ */
+async function confirmRemove(league: { id: string; league_name: string }): Promise<void> {
+  const ok = window.confirm(
+    `Remove ${league.league_name} from The League Beat?\n\n` +
+    `Its issues stop being generated. You can reconnect it any time.`,
+  )
+  if (!ok) return
+  const wasActive = league.id === routeLeagueId.value
+  const removed = await leaguesStore.removeLeague(league.id)
+  if (!removed) return
+  closeSwitcher()
+  // Standing on the page for a league that no longer exists would show
+  // "couldn't be resolved"; move somewhere real instead.
+  if (wasActive) {
+    const next = leaguesStore.leagues[0]
+    void router.push(next ? `/leagues/${next.id}/the-beat` : '/demo-categories/connect')
+  }
+}
 
 // The league UUID currently in the URL — drives the nav tab links so
 // they preserve context as the user clicks between pages.
@@ -386,6 +469,54 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Switcher rows — mirrors the connect screen's saved-leagues list. */
+.league-switch-row { position: relative; display: flex; flex-wrap: wrap; align-items: center; }
+.league-switch-row .league-switch-item { flex: 1 1 auto; display: flex; align-items: center; gap: 12px; }
+.league-switch-logo {
+  width: 28px; height: 28px; border-radius: 7px;
+  object-fit: contain; flex-shrink: 0;
+}
+.league-switch-item-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.league-switch-sport { text-transform: uppercase; }
+.league-switch-sport.sport-baseball   { color: oklch(0.74 0.18 145); }
+.league-switch-sport.sport-football   { color: oklch(0.78 0.18 92); }
+.league-switch-sport.sport-basketball { color: oklch(0.72 0.19 55); }
+.league-switch-sport.sport-hockey     { color: oklch(0.72 0.18 195); }
+
+.league-switch-remove {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 30px; height: 30px; margin-right: 8px;
+  border-radius: 8px; cursor: pointer;
+  background: transparent; border: 1px solid transparent;
+  color: oklch(0.50 0.010 90);
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+/* Revealed on hover or focus so the destructive control is never the
+   first thing the eye lands on, but is always keyboard-reachable. */
+.league-switch-row:hover .league-switch-remove,
+.league-switch-remove:focus-visible { opacity: 1; }
+.league-switch-remove:hover {
+  color: oklch(0.72 0.20 25);
+  border-color: oklch(0.72 0.20 25 / 0.45);
+}
+
+.league-switch-seasons {
+  flex: 1 0 100%;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 14px 10px 54px;
+}
+.league-switch-season {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em;
+  padding: 2px 9px; border-radius: 999px; cursor: pointer;
+  color: oklch(0.62 0.010 90);
+  background: transparent;
+  border: 1px solid oklch(0.24 0.015 90);
+}
+.league-switch-season:hover { color: oklch(0.95 0.005 90); border-color: oklch(0.78 0.18 92 / 0.5); }
+.league-switch-season.is-current { color: oklch(0.95 0.005 90); border-color: oklch(0.78 0.18 92 / 0.7); }
 .league-shell {
   --ink-1: oklch(0.97 0.005 90);
   --ink-2: oklch(0.78 0.008 90);

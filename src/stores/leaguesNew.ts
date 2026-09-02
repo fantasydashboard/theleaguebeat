@@ -75,6 +75,37 @@ export const useLeaguesStore = defineStore('leagues', () => {
     }
   }
 
+  /**
+   * Disconnect a league.
+   *
+   * Deletes the row rather than flagging it hidden: a league the user
+   * removed and later wants back is one username away from being
+   * reconnected, and a soft-delete would need its own "show archived"
+   * surface to ever be undone. Scoped to the calling user so a stray id
+   * cannot reach somebody else's row even if RLS were misconfigured.
+   *
+   * Returns false rather than throwing — the caller treats failure as a
+   * message, not an exception.
+   */
+  async function removeLeague(leagueId: string): Promise<boolean> {
+    const authStore = useAuthStore()
+    if (!supabase || !authStore.user) return false
+    try {
+      const { error: delError } = await supabase
+        .from('leagues')
+        .delete()
+        .eq('id', leagueId)
+        .eq('user_id', authStore.user.id)
+      if (delError) throw delError
+      leagues.value = leagues.value.filter((l) => l.id !== leagueId)
+      if (activeLeagueId.value === leagueId) activeLeagueId.value = null
+      return true
+    } catch (err) {
+      console.error('[leagues] removeLeague failed:', err)
+      return false
+    }
+  }
+
   // Fetch all leagues for the current user
   async function fetchLeagues() {
     const authStore = useAuthStore()
@@ -391,6 +422,7 @@ export const useLeaguesStore = defineStore('leagues', () => {
   }
 
   return {
+    removeLeague,
     ensureLeagueLoaded,
     // State
     leagues,
