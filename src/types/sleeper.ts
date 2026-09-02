@@ -12,6 +12,9 @@ export interface SleeperLeague {
   season: string
   status: string
   avatar: string
+  /** 'nfl' | 'mlb' | 'nba' | 'nhl'. Optional because older captured
+   *  shapes predate it; treat an absent value as unknown, not as MLB. */
+  sport?: string
   settings: {
     playoff_week_start: number
     playoff_teams: number

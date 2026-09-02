@@ -164,7 +164,7 @@ export interface AdapterOptions {
 export async function sleeperLeagueToCategoryData(
   leagueId: string,
   opts?: AdapterOptions,
-): Promise<CategoryLeagueData> {
+): Promise<LeagueData> {
   // 1. League + users + rosters (parallel; league is cached upstream too).
   let league: SleeperLeague
   try {
@@ -175,6 +175,20 @@ export async function sleeperLeagueToCategoryData(
     throw new Error(
       `Sleeper league ${leagueId} not found or has no category scoring data`,
     )
+  }
+
+  // Sport gate. Sleeper serves every sport from the same endpoints, and
+  // this function used to build CATEGORY standings for all of them —
+  // so a football league came back with 0-0 category records while its
+  // streaks were derived from real matchups, producing copy like "At
+  // 0-0 on a 6-game losing run". Anything that is not baseball is a
+  // points league and belongs on the points path.
+  //
+  // Every view calls THIS function and then branches on `data.format`,
+  // so delegating here is what makes football work on all of them at
+  // once rather than one view at a time.
+  if (league.sport && league.sport !== 'mlb') {
+    return sleeperLeagueToPointsData(leagueId)
   }
 
   const [users, rosters] = await Promise.all([

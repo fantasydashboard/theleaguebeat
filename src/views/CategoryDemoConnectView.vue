@@ -124,7 +124,18 @@
         <span class="sport-card-pill sport-card-pill-available">Available</span>
       </button>
 
-      <div class="sport-card sport-card-inactive" aria-disabled="true">
+      <!-- Football is Sleeper-only for now: Sleeper's API is public and
+           unauthenticated, so the whole points path is built and tested
+           against it. Yahoo and ESPN football are not wired yet, and the
+           platform picker below says so rather than offering a dead
+           button. -->
+      <button
+        type="button"
+        class="sport-card sport-card-active"
+        :class="{ 'sport-card-selected': selectedSport === 'football' }"
+        :aria-pressed="selectedSport === 'football'"
+        @click="pickSport('football')"
+      >
         <span class="sport-card-art" aria-hidden="true">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 3c-3.6 1.8-6 5.5-6 9s2.4 7.2 6 9c3.6-1.8 6-5.5 6-9s-2.4-7.2-6-9z"/>
@@ -133,8 +144,8 @@
           </svg>
         </span>
         <span class="sport-card-name">Football</span>
-        <span class="sport-card-pill sport-card-pill-soon">Coming soon</span>
-      </div>
+        <span class="sport-card-pill sport-card-pill-available">Available</span>
+      </button>
 
       <div class="sport-card sport-card-inactive" aria-disabled="true">
         <span class="sport-card-art" aria-hidden="true">
@@ -164,7 +175,7 @@
 
     <!-- ─── Platform sub-picker (revealed after sport selected) ─── -->
     <section
-      v-if="selectedSport === 'baseball'"
+      v-if="selectedSport === 'baseball' || selectedSport === 'football'"
       class="platform-section"
       aria-label="Choose a platform"
     >
@@ -186,29 +197,47 @@
         <button
           type="button"
           class="platform-card platform-card-active"
-          :class="{ 'platform-card-selected': selectedPlatform === 'yahoo' }"
+          :class="{
+            'platform-card-selected': selectedPlatform === 'yahoo',
+            'platform-card-inactive': selectedSport === 'football',
+          }"
           :aria-pressed="selectedPlatform === 'yahoo'"
+          :disabled="selectedSport === 'football'"
           @click="pickPlatform('yahoo')"
         >
           <span class="platform-card-name">Yahoo</span>
-          <span class="platform-card-pill platform-card-pill-available">Available</span>
+          <span
+            class="platform-card-pill"
+            :class="selectedSport === 'football'
+              ? 'platform-card-pill-soon'
+              : 'platform-card-pill-available'"
+          >{{ selectedSport === 'football' ? 'Baseball only' : 'Available' }}</span>
         </button>
         <button
           type="button"
           class="platform-card platform-card-active"
-          :class="{ 'platform-card-selected': selectedPlatform === 'espn' }"
+          :class="{
+            'platform-card-selected': selectedPlatform === 'espn',
+            'platform-card-inactive': selectedSport === 'football',
+          }"
           :aria-pressed="selectedPlatform === 'espn'"
+          :disabled="selectedSport === 'football'"
           @click="pickPlatform('espn')"
         >
           <span class="platform-card-name">ESPN</span>
-          <span class="platform-card-pill platform-card-pill-available">Available</span>
+          <span
+            class="platform-card-pill"
+            :class="selectedSport === 'football'
+              ? 'platform-card-pill-soon'
+              : 'platform-card-pill-available'"
+          >{{ selectedSport === 'football' ? 'Baseball only' : 'Available' }}</span>
         </button>
       </div>
     </section>
 
     <!-- ─── League ID form (Sleeper) ───────────────────────────── -->
     <section
-      v-if="selectedSport === 'baseball' && selectedPlatform === 'sleeper'"
+      v-if="(selectedSport === 'baseball' || selectedSport === 'football') && selectedPlatform === 'sleeper'"
       class="form-section"
     >
       <form class="connect-form" @submit.prevent="onSubmit">
@@ -966,13 +995,15 @@ async function onSubmit(): Promise<void> {
         .catch(() => null)
 
       // Sleeper league IDs carry no sport in them, so nothing stops a
-      // football league ID being pasted into the baseball form. The
-      // payload knows the truth; refuse rather than file an NFL league
-      // under `sport: 'baseball'` and poison every story built on it.
+      // football league ID being pasted into the baseball form or vice
+      // versa. The payload knows the truth; refuse rather than file a
+      // league under the wrong sport and poison every story built on it.
+      const chosenSport = selectedSport.value
       const metaSport = sleeperSport(meta?.sport)
-      if (metaSport && metaSport !== 'baseball') {
+      if (metaSport && metaSport !== chosenSport) {
         sleeperError.value =
-          `That league ID is a Sleeper ${metaSport} league. This form connects baseball leagues.`
+          `That league ID is a Sleeper ${metaSport} league. ` +
+          `You're connecting a ${chosenSport} league — pick ${metaSport} above, or check the ID.`
         return
       }
 
@@ -986,7 +1017,9 @@ async function onSubmit(): Promise<void> {
           scoring_settings: meta?.scoring_settings ?? null,
           settings: meta?.settings ?? null,
         },
-        'baseball',
+        // The sport the user picked, validated against the payload
+        // above — never a hardcoded default.
+        chosenSport as Sport,
       )
       if (result.success) leagueRowId = result.leagueRowId
     } catch (err) {
@@ -1000,7 +1033,7 @@ async function onSubmit(): Promise<void> {
     // route so the demo still works without the persisted record.
     router.push({
       path: '/demo-categories/home',
-      query: { leagueId: id, platform: 'sleeper' },
+      query: { leagueId: id, platform: 'sleeper', sport: selectedSport.value },
     })
   }
 }

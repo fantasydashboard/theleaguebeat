@@ -50,11 +50,12 @@
          cover archive snapshot still composes silently below for
          issue history.
     ────────────────────────────────────────────────────────────── -->
-    <TheLede :lede="liveLede" />
+    <TheLede v-if="showDemoContent" :lede="liveLede" />
 
-    <OnYourLine :data="issueData" />
+    <OnYourLine v-if="showDemoContent" :data="issueData" />
 
     <TheWire
+      v-if="showDemoContent"
       :stories="selectedStories"
       :data="issueData"
       :hero-signature="heroStorySignature"
@@ -66,7 +67,7 @@
          framing duplicates THE LEDE's streak-watch Kind and reads
          as cacophony when both are loud the same day.
     ────────────────────────────────────────────────────────────── -->
-    <template v-if="weeklyNonHeroSections.length > 0">
+    <template v-if="showDemoContent && weeklyNonHeroSections.length > 0">
       <EditorialBreak size="small" tone="teal" />
       <template v-for="section in weeklyNonHeroSections" :key="`${section.type}:${section.story?.signature ?? 'anchor'}`">
         <MatchupOfWeek
@@ -99,7 +100,7 @@
          midseason this framing is editorially wrong (no urgency yet,
          the bubble isn't real until the math tightens). -->
     <section
-      v-if="showPlayoffPush"
+      v-if="showDemoContent && showPlayoffPush"
       class="bubble"
       aria-labelledby="bubble-headline"
     >
@@ -196,7 +197,16 @@
          The replacement ("This Week's Movers") derived from live data
          is a follow-up — until then we'd rather show nothing than fake
          box-score stories with demo player names. -->
-    <section v-if="!isStrictLiveMode" class="story-track-section" aria-labelledby="swings-h">
+    <!-- Fixture swings are DEMO content. The old guard was
+         `!isStrictLiveMode`, but the query-param path
+         (?leagueId=&platform=) binds a real league without being
+         strict mode — so a live league rendered demo baseball
+         swings underneath its own masthead. Verified in a browser
+         against a real Sleeper football league, which showed
+         "Skubal struck out 12" and a live SV race between two
+         demo baseball teams. Gate on whether ANY live league is
+         bound, not on which route bound it. -->
+    <section v-if="!isLiveBound" class="story-track-section" aria-labelledby="swings-h">
       <header class="section-head section-head-flex">
         <div>
           <p class="section-eyebrow section-eyebrow-teal">Yesterday's big swings</p>
@@ -389,7 +399,7 @@
     <!-- ─────────────────────────────────────────────────────────────
          5. STANDINGS — Compact (top 6 playoff line)
     ────────────────────────────────────────────────────────────── -->
-    <section class="standings" aria-labelledby="standings-headline">
+    <section v-if="showDemoContent" class="standings" aria-labelledby="standings-headline">
       <header class="section-head section-head-flex">
         <div>
           <p class="section-eyebrow section-eyebrow-magenta">Standings</p>
@@ -502,7 +512,7 @@
          Your team + the biggest climber render bold; the rest of the
          league sits faint behind for context.
     ────────────────────────────────────────────────────────────── -->
-    <section class="momentum" aria-labelledby="momentum-headline">
+    <section v-if="showDemoContent" class="momentum" aria-labelledby="momentum-headline">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal">
           The climb
@@ -1228,6 +1238,27 @@ const strictLeagueRecord = computed(() => {
 })
 const isStrictLiveMode = computed(() => typeof route.params.leagueId === 'string')
 
+/** True when this page is showing a REAL league, by either route shape:
+ *  the strict `/leagues/:id/...` path or the anonymous
+ *  `?leagueId=&platform=` fallback the Sleeper connect flow lands on.
+ *  Fixture-backed sections must check this, never the route shape. */
+const isLiveBound = computed(
+  () => isStrictLiveMode.value || liveLeagueId.value !== null,
+)
+
+/**
+ * Whether the page may render its fixture-backed sections.
+ *
+ * In pure demo mode: always. Bound to a real league: only once that
+ * league's data has actually arrived. Otherwise a failed or in-flight
+ * live load left the demo issue rendering underneath the error banner —
+ * a football manager saw "we couldn't load this league" sitting on top
+ * of a fully-written baseball issue about teams that are not theirs.
+ */
+const showDemoContent = computed(
+  () => !isLiveBound.value || liveData.value !== null,
+)
+
 /** Earliest season we have stored for this league — same util the
  *  layout feeds the masthead. Published into the issue store on load
  *  (below) so the masthead AND the cover read one source of truth for
@@ -1303,6 +1334,22 @@ async function loadLiveData() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
+
+    // This is the DEMO Beat, and it is category-only: `renderHomePage`
+    // and every computed below expect the category shape. Points
+    // leagues have a real Beat at /leagues/:id/the-beat (BeatFeedView),
+    // which requires an account.
+    //
+    // Before the adapter's sport gate existed this branch was never
+    // reached — football came back wearing the category shape with 0-0
+    // records, and the page rendered nonsense like "At 0-0 on a 6-game
+    // losing run" instead of failing. Say what is true instead.
+    if (data.format !== 'h2h-category') {
+      liveError.value =
+        'Football leagues read on your own league page. Sign in and connect this league to open it.'
+      return
+    }
+
     liveData.value = data
     liveEditorial.value = renderHomePage(data)
     liveLede.value = renderLedePage(data)
