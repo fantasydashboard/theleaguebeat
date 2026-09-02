@@ -353,6 +353,14 @@
         <li><a href="#section-matchups">02 — Matchups</a></li>
         <li v-if="showDraftSection"><a href="#section-draft">03 — Draft</a></li>
         <li><a href="#section-departments">{{ departmentsSectionNumber }} — Departments</a></li>
+        <!-- The draft BOARD stays reachable all season even once the
+             early-season section has stopped running. The board is
+             archival — in a keeper or dynasty league it is referenced
+             all year — and before this it was routable but unlinked,
+             so a completed draft looked like it had never happened. -->
+        <li v-if="hasDraftData && !showDraftSection">
+          <router-link :to="`/leagues/${routeLeagueId}/draft`">The draft board</router-link>
+        </li>
       </ol>
     </nav>
 
@@ -1199,9 +1207,20 @@ function nextIssueLink() {
    stays at 03.
 ───────────────────────────────────────────────────────────────── */
 
+/** Does this league have a draft on record at all? Some leagues are
+ *  imported or have none, and a Draft section for a league with no
+ *  draft is a heading over nothing. */
+const hasDraftData = computed(() => {
+  const d = liveData.value?.draft ?? livePointsData.value?.draft
+  return (d?.picks?.length ?? 0) > 0
+})
+
+/** The in-Issue draft SECTION is an early-season read — how the picks
+ *  are aging — so it stays gated to the opening weeks. It also now
+ *  requires the league to actually have a draft. */
 const showDraftSection = computed(() => {
   const wk = issueWeek.value
-  return wk >= 1 && wk <= 7
+  return wk >= 1 && wk <= 7 && hasDraftData.value
 })
 
 const draftSectionNumber = computed(() => '03')

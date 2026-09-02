@@ -2417,7 +2417,81 @@ export async function sleeperLeagueToPointsData(
   const currentWeek = clampWeek(league.settings?.leg ?? 1)
   const matchupsByWeek = await fetchAllMatchupsAsRecord(leagueId, currentWeek)
 
-  return buildSleeperPointsData({ league, rosters, users, matchupsByWeek })
+  // Draft and bracket in parallel — independent of each other and of
+  // the history walk below. All three are optional: a league with no
+  // draft, or a season with no bracket, is a fact about that league.
+  const [draftData, winnersBracket] = await Promise.all([
+    sleeperService.getDraftData(leagueId).catch(() => null),
+    sleeperService.getWinnersBracket(leagueId).catch(() => []),
+  ])
+
+  const history = await fetchSleeperHistory(league)
+
+  return buildSleeperPointsData({
+    league,
+    rosters,
+    users,
+    matchupsByWeek,
+    draft: draftData ? { info: draftData, picks: draftData.picks ?? [] } : null,
+    winnersBracket: winnersBracket ?? [],
+    history,
+  })
+}
+
+/**
+ * Walks `previous_league_id` back through prior seasons.
+ *
+ * Sequential by necessity — each season's id only becomes known once
+ * the previous response arrives — so it is bounded at four hops to keep
+ * a page load from turning into a dozen round trips. Rosters, users and
+ * the bracket for each season come back in parallel.
+ *
+ * Per-season MATCHUPS are deliberately not fetched: `roster.settings`
+ * already carries the final record, which is all season-level history
+ * needs, and pulling ~17 weeks per season would multiply the request
+ * count for data nothing reads.
+ */
+const HISTORY_DEPTH = 4
+
+async function fetchSleeperHistory(league: SleeperLeague): Promise<
+  { league: SleeperLeague; rosters: SleeperRoster[]; users: SleeperUser[]; winnersBracket: SleeperBracketMatch[] }[]
+> {
+  const out: {
+    league: SleeperLeague
+    rosters: SleeperRoster[]
+    users: SleeperUser[]
+    winnersBracket: SleeperBracketMatch[]
+  }[] = []
+  const seen = new Set<string>([league.league_id])
+  let cursor = (league as { previous_league_id?: string | null }).previous_league_id
+
+  for (let i = 0; i < HISTORY_DEPTH && cursor; i++) {
+    // Guard a cyclic chain rather than trusting upstream data.
+    if (seen.has(cursor)) break
+    seen.add(cursor)
+    const id = cursor
+    try {
+      const prior = await sleeperService.getLeague(id)
+      if (!prior) break
+      const [priorRosters, priorUsers, priorBracket] = await Promise.all([
+        sleeperService.getLeagueRosters(id).catch(() => []),
+        sleeperService.getLeagueUsers(id).catch(() => []),
+        sleeperService.getWinnersBracket(id).catch(() => []),
+      ])
+      out.push({
+        league: prior,
+        rosters: priorRosters ?? [],
+        users: priorUsers ?? [],
+        winnersBracket: (priorBracket ?? []) as SleeperBracketMatch[],
+      })
+      cursor = (prior as { previous_league_id?: string | null }).previous_league_id
+    } catch {
+      // A season we cannot read stops the walk; the seasons already
+      // collected are still real and still worth showing.
+      break
+    }
+  }
+  return out
 }
 
 /** Same fetch-with-cache-and-stop-on-404 behavior as `fetchAllMatchups`
