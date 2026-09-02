@@ -150,6 +150,14 @@ const router = createRouter({
           component: () => import('@/views/CategoryDemoDraftView.vue'),
         },
         {
+          // Present mode — full-screen slides a commissioner can walk
+          // their league through, live or over a screenshare. One deck
+          // per URL so a specific deck can be linked and reopened.
+          path: 'present/:deckId',
+          name: 'my-league-present',
+          component: () => import('@/views/PresentView.vue'),
+        },
+        {
           // Chronicles — the editorial archive. Year-Cards + The
           // Eras + The Receipts. Previously this route hosted a
           // separate "landing" hub page that just linked to two

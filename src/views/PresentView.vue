@@ -1,0 +1,502 @@
+<template>
+  <div class="present" tabindex="-1" @keydown="onKey">
+    <!-- Loading / error / empty states, before any deck exists. -->
+    <div v-if="loading" class="present-msg">Building the deck…</div>
+
+    <div v-else-if="error" class="present-msg">
+      <p class="present-msg-head">This deck couldn't be built.</p>
+      <p class="present-msg-body">{{ error }}</p>
+      <router-link :to="backLink" class="present-exit">Back to the league</router-link>
+    </div>
+
+    <div v-else-if="!deck" class="present-msg">
+      <p class="present-msg-head">Nothing to present yet.</p>
+      <p class="present-msg-body">
+        This league has no draft on record. Decks appear as the season
+        gives them something to say.
+      </p>
+      <router-link :to="backLink" class="present-exit">Back to the league</router-link>
+    </div>
+
+    <template v-else>
+      <!-- Progress. Counts revealed rows as their own step, so the bar
+           advances evenly rather than jumping through list slides. -->
+      <div class="present-progress" aria-hidden="true">
+        <span class="present-progress-fill" :style="{ width: `${progressPct}%` }"></span>
+      </div>
+
+      <header class="present-chrome">
+        <span class="present-chrome-brand">The League Beat</span>
+        <span class="present-chrome-deck">{{ deck.title }}</span>
+        <router-link :to="backLink" class="present-chrome-exit">Exit</router-link>
+      </header>
+
+      <main class="present-stage" role="region" :aria-label="`Slide ${slideIndex + 1} of ${deck.slides.length}`">
+        <!-- The null guard has to be its own wrapper: without it the
+             template cannot narrow the discriminated union below. -->
+        <template v-if="slide">
+        <!-- COLD OPEN -->
+        <section v-if="slide.kind === 'cold-open'" class="slide slide-cold">
+          <p class="cold-brand">The League Beat</p>
+          <h1 class="cold-title">{{ slide.title }}</h1>
+          <p class="cold-sub">{{ slide.subtitle }}</p>
+          <p v-if="slide.meta" class="cold-meta">{{ slide.meta }}</p>
+        </section>
+
+        <!-- STATEMENT -->
+        <section v-else-if="slide.kind === 'statement'" class="slide slide-statement">
+          <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
+          <h2 class="slide-headline">{{ slide.headline }}</h2>
+          <p v-if="slide.support" class="slide-support">{{ slide.support }}</p>
+          <ul v-if="slide.chips?.length" class="slide-chips" role="list">
+            <li v-for="c in slide.chips" :key="c.label" class="slide-chip">
+              <span class="slide-chip-value">{{ c.value }}</span>
+              <span class="slide-chip-label">{{ c.label }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- LIST -->
+        <section v-else-if="slide.kind === 'list'" class="slide slide-list">
+          <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
+          <h2 class="slide-headline">{{ slide.headline }}</h2>
+          <ol class="list-rows" role="list">
+            <li
+              v-for="(row, i) in slide.rows"
+              :key="`${row.label}-${i}`"
+              class="list-row"
+              :class="{ 'is-hidden': i > revealIndex }"
+            >
+              <span v-if="row.lead" class="list-lead">{{ row.lead }}</span>
+              <span class="list-copy">
+                <span class="list-label">{{ row.label }}</span>
+                <span v-if="row.sub" class="list-sub">{{ row.sub }}</span>
+              </span>
+              <span v-if="row.value" class="list-value">{{ row.value }}</span>
+            </li>
+          </ol>
+        </section>
+
+        <!-- SIGN OFF -->
+        <section v-else class="slide slide-signoff">
+          <h2 class="signoff-headline">{{ slide.headline }}</h2>
+          <p v-if="slide.sub" class="signoff-sub">{{ slide.sub }}</p>
+          <p class="signoff-brand">theleaguebeat.com</p>
+        </section>
+        </template>
+      </main>
+
+      <!-- Click targets. Big and invisible, so a presenter can advance
+           without hunting for a control on a shared screen. -->
+      <button class="present-tap present-tap-prev" aria-label="Previous" @click="back"></button>
+      <button class="present-tap present-tap-next" aria-label="Next" @click="advance"></button>
+
+      <footer class="present-hint" aria-hidden="true">
+        <span>{{ stepIndex + 1 }} / {{ totalSteps }}</span>
+        <span class="present-hint-keys">← → to move · Esc to exit</span>
+      </footer>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useLeaguesStore } from '@/stores/leaguesNew'
+import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
+import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
+import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
+import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
+import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
+
+const route = useRoute()
+const router = useRouter()
+const leaguesStore = useLeaguesStore()
+
+const loading = ref(true)
+const error = ref<string | null>(null)
+const deck = ref<PresentDeck | null>(null)
+
+/** Which slide, and how many rows of it are revealed. */
+const slideIndex = ref(0)
+const revealIndex = ref(0)
+
+const backLink = computed(() => {
+  const id = route.params.leagueId
+  return typeof id === 'string' ? `/leagues/${id}/the-issue` : '/'
+})
+
+const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
+
+/** A list slide with reveal-one-by-one consumes one step per row. */
+const stepsBefore = computed(() => {
+  const d = deck.value
+  if (!d) return 0
+  return d.slides.slice(0, slideIndex.value).reduce((total, s) => {
+    if (s.kind === 'list' && s.revealOneByOne) return total + Math.max(1, s.rows.length)
+    return total + 1
+  }, 0)
+})
+const stepIndex = computed(() => stepsBefore.value + revealIndex.value)
+const totalSteps = computed(() => (deck.value ? deckStepCount(deck.value) : 0))
+const progressPct = computed(() =>
+  totalSteps.value <= 1 ? 100 : ((stepIndex.value + 1) / totalSteps.value) * 100,
+)
+
+/** Rows still to reveal on the current slide, if any. */
+const rowsRemaining = computed(() => {
+  const s = slide.value
+  if (!s || s.kind !== 'list' || !s.revealOneByOne) return 0
+  return Math.max(0, s.rows.length - 1 - revealIndex.value)
+})
+
+function advance(): void {
+  if (!deck.value) return
+  if (rowsRemaining.value > 0) {
+    revealIndex.value += 1
+    return
+  }
+  if (slideIndex.value < deck.value.slides.length - 1) {
+    slideIndex.value += 1
+    revealIndex.value = 0
+  }
+}
+
+function back(): void {
+  if (!deck.value) return
+  if (revealIndex.value > 0) {
+    revealIndex.value -= 1
+    return
+  }
+  if (slideIndex.value > 0) {
+    slideIndex.value -= 1
+    const prev = deck.value.slides[slideIndex.value]
+    // Stepping back into a list lands on its LAST row, not its first —
+    // otherwise going back re-reveals rows the room has already seen.
+    revealIndex.value =
+      prev.kind === 'list' && prev.revealOneByOne ? Math.max(0, prev.rows.length - 1) : 0
+  }
+}
+
+function onKey(e: KeyboardEvent): void {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+    e.preventDefault()
+    advance()
+  } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault()
+    back()
+  } else if (e.key === 'Escape') {
+    void router.push(backLink.value)
+  }
+}
+
+async function load(): Promise<void> {
+  loading.value = true
+  error.value = null
+  deck.value = null
+  try {
+    const uuid = route.params.leagueId
+    if (typeof uuid !== 'string') throw new Error('No league in the URL.')
+    await leaguesStore.ensureLeagueLoaded(uuid)
+    const record = leaguesStore.leagues.find((l) => l.id === uuid)
+    if (!record) throw new Error("This league couldn't be resolved.")
+
+    const id = record.platform_league_id
+    const data =
+      record.platform === 'espn'
+        ? await espnLeagueToCategoryData(id)
+        : record.platform === 'yahoo'
+          ? await yahooLeagueToCategoryData(id)
+          : await sleeperLeagueToCategoryData(id)
+
+    const teamName = (teamId: string) =>
+      data.teams.find((t) => t.id === teamId)?.name ?? `Team ${teamId}`
+
+    // Only the draft deck exists so far. The others land as their data
+    // does — the wire needs transactions, the board needs played weeks.
+    deck.value = buildDraftDeck({
+      leagueName: record.league_name || data.leagueName,
+      season: data.currentSeason,
+      picks: [...(data.draft?.picks ?? [])],
+      teamName,
+    })
+  } catch (err) {
+    error.value = (err as Error).message || 'Something went wrong.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void load()
+  // Focus the container so arrow keys work without a click first.
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>('.present')?.focus()
+  })
+})
+
+watch(() => route.params.leagueId, () => void load())
+</script>
+
+<style scoped>
+.present {
+  position: fixed;
+  inset: 0;
+  background: oklch(0.06 0.014 90);
+  color: oklch(0.97 0.005 90);
+  font-family: 'Barlow', sans-serif;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  overflow: hidden;
+}
+
+.present-progress {
+  height: 3px;
+  background: oklch(0.16 0.015 90);
+  flex: 0 0 auto;
+}
+.present-progress-fill {
+  display: block;
+  height: 100%;
+  background: oklch(0.78 0.18 92);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.present-chrome {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.52 0.010 90);
+}
+.present-chrome-deck { color: oklch(0.78 0.18 92); }
+.present-chrome-exit {
+  margin-left: auto;
+  color: oklch(0.60 0.010 90);
+  text-decoration: none;
+  position: relative;
+  z-index: 3;
+}
+.present-chrome-exit:hover { color: oklch(0.95 0.005 90); }
+
+.present-stage {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  padding: 3vh 6vw;
+  min-height: 0;
+}
+
+.slide {
+  width: min(1100px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Cold open + sign-off are centred; content slides are left-aligned so
+   long headlines do not wander line to line. */
+.slide-cold, .slide-signoff { text-align: center; align-items: center; }
+
+.cold-brand, .signoff-brand {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+  margin: 0;
+}
+.cold-title {
+  font-weight: 900;
+  font-size: clamp(2.6rem, 7vw, 5.6rem);
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  margin: 0;
+  text-wrap: balance;
+}
+.cold-sub {
+  font-weight: 900;
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+  letter-spacing: -0.02em;
+  color: oklch(0.78 0.18 92);
+  margin: 0;
+}
+.cold-meta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+  margin: 0;
+}
+
+.slide-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: oklch(0.70 0.27 350);
+  margin: 0;
+}
+.slide-headline {
+  font-weight: 900;
+  font-size: clamp(2rem, 5.4vw, 4.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  margin: 0;
+  text-wrap: balance;
+}
+.slide-support {
+  font-size: clamp(1rem, 1.8vw, 1.4rem);
+  line-height: 1.5;
+  color: oklch(0.72 0.008 90);
+  margin: 0;
+  max-width: 46ch;
+}
+
+.slide-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.slide-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid oklch(0.22 0.015 90);
+  background: oklch(0.09 0.014 90);
+}
+.slide-chip-value {
+  font-weight: 900;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+}
+.slide-chip-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+}
+
+.list-rows {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: oklch(0.09 0.014 90);
+  border: 1px solid oklch(0.18 0.015 90);
+  transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Hidden rows keep their space so the list does not jump as it fills. */
+.list-row.is-hidden { opacity: 0; transform: translateY(6px); }
+@media (prefers-reduced-motion: reduce) {
+  .list-row { transition: opacity 120ms linear; }
+  .list-row.is-hidden { transform: none; }
+}
+.list-lead {
+  flex: 0 0 auto;
+  min-width: 64px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.18 92);
+}
+.list-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.list-label { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
+.list-sub {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+}
+.list-value { flex: 0 0 auto; font-weight: 900; font-size: 1.35rem; letter-spacing: -0.02em; }
+
+.signoff-headline {
+  font-weight: 900;
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0;
+}
+.signoff-sub { font-size: 1.2rem; color: oklch(0.72 0.008 90); margin: 0; }
+
+/* Invisible half-screen tap targets. A presenter on a shared screen
+   should not have to aim. */
+.present-tap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 1;
+}
+.present-tap-prev { left: 0; cursor: w-resize; }
+.present-tap-next { right: 0; cursor: e-resize; }
+
+.present-hint {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 24px 16px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.40 0.010 90);
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.present-msg {
+  margin: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+}
+.present-msg-head { font-weight: 900; font-size: 1.6rem; margin: 0; }
+.present-msg-body { color: oklch(0.65 0.010 90); margin: 0; max-width: 46ch; }
+.present-exit {
+  margin-top: 10px;
+  color: oklch(0.78 0.18 92);
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-decoration: none;
+}
+</style>

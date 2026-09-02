@@ -281,13 +281,20 @@
           </li>
         </ul>
 
-        <router-link
-          v-if="routeLeagueId"
-          :to="`/leagues/${routeLeagueId}/draft`"
-          class="points-draft-link"
-        >
-          See the full board
-        </router-link>
+        <div v-if="routeLeagueId" class="points-draft-actions">
+          <router-link
+            :to="`/leagues/${routeLeagueId}/present/draft`"
+            class="points-draft-link points-draft-link-primary"
+          >
+            Present the draft
+          </router-link>
+          <router-link
+            :to="`/leagues/${routeLeagueId}/draft`"
+            class="points-draft-link"
+          >
+            See the full board
+          </router-link>
+        </div>
       </section>
 
       <section
@@ -1997,8 +2004,12 @@ async function loadIssue() {
       }
       return
     }
-    if (adapted.format !== 'h2h-category') {
-      unsupportedFormat.value = adapted.format
+    // Positive check on the format we CAN render: with points handled
+    // above, `!== 'h2h-category'` narrows to never today and would
+    // silently fall through if a third format joined the union.
+    const adaptedFormat = (adapted as { format: string }).format
+    if (adaptedFormat !== 'h2h-category') {
+      unsupportedFormat.value = adaptedFormat
       unsupportedLeagueName.value = adapted.leagueName
       if (leagueRowId && adapted.leagueName) {
         void leaguesStore.maybeBackfillLeagueName(leagueRowId, adapted.leagueName)
@@ -2215,6 +2226,14 @@ function collectUserIdentity() {
   font-weight: 600;
   color: oklch(0.95 0.005 90);
 }
+.points-draft-actions { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+.points-draft-link-primary {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: oklch(0.78 0.18 92);
+  color: oklch(0.12 0.012 90);
+}
+.points-draft-link-primary:hover { text-decoration: none; filter: brightness(1.05); }
 .points-draft-link {
   display: inline-flex;
   align-items: center;
