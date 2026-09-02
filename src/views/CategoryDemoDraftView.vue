@@ -76,7 +76,7 @@
     </header>
 
     <!-- ─── 2. AWARDS ─────────────────────────────────────────── -->
-    <section v-if="showAwardsSection" class="awards" aria-labelledby="awards-heading">
+    <section v-if="!isPointsMode && showAwardsSection" class="awards" aria-labelledby="awards-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="awards-heading">The awards</p>
         <h2 class="section-headline">Three from the draft floor.</h2>
@@ -223,7 +223,7 @@
     </section>
 
     <!-- ─── 3. GRADES — PODIUM + COMPACT ROWS ─────────────────── -->
-    <section class="standings" aria-labelledby="grades-heading">
+    <section v-if="!isPointsMode" class="standings" aria-labelledby="grades-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="grades-heading">The grades</p>
         <h2 class="section-headline">Where ten owners landed.</h2>
@@ -360,7 +360,86 @@
     </section>
 
     <!-- ─── 4. THE BOARD ─────────────────────────────────────── -->
-    <section class="board" aria-labelledby="board-heading">
+    <!-- ─── POINTS DRAFT BOARD ────────────────────────────────
+         Football picks carry no value score, so this is the board
+         without the value colouring: who took whom, and where. The
+         value-driven sections above and below stay hidden rather than
+         rendering zeros that would read as real judgements.
+    ──────────────────────────────────────────────────────── -->
+    <section v-if="isPointsMode" class="board" aria-labelledby="points-board-heading">
+      <header class="section-head">
+        <p class="section-eyebrow section-eyebrow-magenta" id="points-board-heading">The board</p>
+        <h2 class="section-headline">
+          {{ livePointsData?.draft?.totalPicks ?? 0 }} picks. The whole draft.
+        </h2>
+        <p class="section-sub">
+          Every pick, by round and by team, in the order they came off the board.
+        </p>
+      </header>
+
+      <div v-if="pointsBoardRows.length === 0" class="points-board-empty">
+        This league has no draft on record.
+      </div>
+
+      <div v-else class="board-scroll">
+        <div class="board-grid" :style="{ '--team-count': pointsDraftColumns.length }">
+          <div
+            v-for="teamId in pointsDraftColumns"
+            :key="`phdr-${teamId}`"
+            class="board-col-head"
+            :class="{ 'is-my-team': pointsTeam(teamId).isMyTeam }"
+          >
+            <div
+              class="board-col-avatar"
+              :style="{ background: `linear-gradient(135deg, ${pointsTeam(teamId).avatarColor})` }"
+            >
+              <img v-if="pointsTeam(teamId).avatarUrl" :src="pointsTeam(teamId).avatarUrl" class="avatar-img" alt="" />
+              <span v-else>{{ pointsTeam(teamId).ownerInitials }}</span>
+            </div>
+            <p class="board-col-name">{{ pointsTeam(teamId).name }}</p>
+          </div>
+
+          <template v-for="row in pointsBoardRows" :key="`prd-${row.round}`">
+            <div
+              v-for="(cell, ci) in row.cells"
+              :key="`prd-${row.round}-${ci}`"
+              class="board-cell board-cell-static"
+            >
+              <!-- A cell can hold more than one pick: traded picks are
+                   routine in dynasty and keeper leagues. -->
+              <div v-for="pick in cell" :key="pick.pickOverall" class="points-pick">
+                <span class="board-cell-num">#{{ pick.pickOverall }}</span>
+                <span class="board-cell-name">{{ pick.playerName }}</span>
+                <div class="board-cell-foot">
+                  <span
+                    v-if="pick.position"
+                    class="board-cell-pos"
+                    :style="{ background: posBg(pick.position), color: posFg(pick.position) }"
+                  >{{ pick.position }}</span>
+                  <span v-if="pick.mlbTeam" class="points-pick-team">{{ pick.mlbTeam }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <p v-if="pointsPositionCounts.length" class="rounds-pills-eyebrow">Position breakdown</p>
+      <ul v-if="pointsPositionCounts.length" class="rounds-pills" role="list">
+        <li
+          v-for="pb in pointsPositionCounts"
+          :key="pb.position"
+          class="rounds-pill"
+          :style="{ background: posBg(pb.position), color: posFg(pb.position), borderColor: posBg(pb.position) }"
+        >
+          <span class="rounds-pill-pos">{{ pb.position }}</span>
+          <span class="rounds-pill-sep" aria-hidden="true">·</span>
+          <span class="rounds-pill-count">{{ pb.count }} drafted</span>
+        </li>
+      </ul>
+    </section>
+
+    <section v-if="!isPointsMode" class="board" aria-labelledby="board-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="board-heading">The board</p>
         <h2 class="section-headline">All 180 picks. Color-coded by value.</h2>
@@ -407,7 +486,7 @@
     </section>
 
     <!-- ─── 5. BY THE ROUND ──────────────────────────────────── -->
-    <section class="rounds" aria-labelledby="rounds-heading">
+    <section v-if="!isPointsMode" class="rounds" aria-labelledby="rounds-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="rounds-heading">By the round</p>
         <h2 class="section-headline">When the draft delivered. When it didn't.</h2>
@@ -449,7 +528,7 @@
     </section>
 
     <!-- ─── 6. PUNT REPORT ───────────────────────────────────── -->
-    <section class="punt" aria-labelledby="punt-heading">
+    <section v-if="!isPointsMode" class="punt" aria-labelledby="punt-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="punt-heading">Punt report</p>
         <h2 class="section-headline">Three teams ditched a cat. Two were right.</h2>
@@ -543,7 +622,7 @@
     </section>
 
     <!-- ─── 7. CATEGORY KINGS ────────────────────────────────── -->
-    <section class="kings" aria-labelledby="kings-heading">
+    <section v-if="!isPointsMode" class="kings" aria-labelledby="kings-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-teal" id="kings-heading">Category kings</p>
         <h2 class="section-headline">Three category storylines.</h2>
@@ -629,7 +708,7 @@
     </section>
 
     <!-- ─── 8. QUICK READS ───────────────────────────────────── -->
-    <section class="quick" aria-labelledby="quick-heading">
+    <section v-if="!isPointsMode" class="quick" aria-labelledby="quick-heading">
       <header class="section-head">
         <p class="section-eyebrow section-eyebrow-magenta" id="quick-heading">Quick reads</p>
       </header>
@@ -703,6 +782,8 @@ import CategoryTeamDraftModal from '@/components/demo/CategoryTeamDraftModal.vue
 import CategoryPlayerPickModal from '@/components/demo/CategoryPlayerPickModal.vue'
 import { renderDraftPage, type RenderedDraftCopy } from '@/editorial/render-draft'
 import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
+import type { LeagueDataH2HPoints } from '@/editorial/types'
+import { buildDraftBoard, draftPositionCounts } from '@/editorial/points/draftBoard'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
@@ -822,7 +903,18 @@ async function loadDraft() {
         : platform === 'yahoo'
         ? await yahooLeagueToCategoryData(id, opts)
         : await sleeperLeagueToCategoryData(id, opts)
-    // Format gate — Phase 0 routes h2h-points to UnsupportedFormatPanel.
+    // Points leagues render the real draft board. There is no value
+    // model for football picks, so the value-driven sections (awards,
+    // grades, rounds hit/miss) stay hidden rather than showing zeros.
+    if (data.format === 'h2h-points') {
+      livePointsData.value = data
+      if (leagueRowId && data.leagueName) {
+        void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
+      }
+      return
+    }
+    // Format gate — any remaining non-category format still routes to
+    // the UnsupportedFormatPanel.
     if (data.format !== 'h2h-category') {
       unsupportedFormat.value = data.format
       unsupportedLeagueName.value = data.leagueName
@@ -904,6 +996,44 @@ const bustPick  = computed(() => {
     ?? null
 })
 const bustTeam  = computed(() => bustPick.value ? getTeam(bustPick.value.draftedByTeamId) : null)
+
+/** Live h2h-points data. The draft board is the one section of this
+ *  page that is genuinely format-agnostic — picks, rounds and teams
+ *  mean the same thing in both sports — so points leagues render it
+ *  and nothing else. */
+const livePointsData = shallowRef<LeagueDataH2HPoints | null>(null)
+const isPointsMode = computed(() => livePointsData.value !== null)
+
+/** Team display for the points board, resolved from the league's own
+ *  teams. Never falls back to the fixture `getTeam`: Sleeper roster ids
+ *  are plain "1".."12" and would collide with demo team ids, printing
+ *  someone else's league onto this page. */
+function pointsTeam(teamId: string) {
+  const t = livePointsData.value?.teams.find((x) => x.id === teamId)
+  return (
+    t ?? {
+      id: teamId,
+      name: `Team ${teamId}`,
+      ownerName: `Manager ${teamId}`,
+      ownerInitials: teamId.slice(0, 2).toUpperCase(),
+      avatarUrl: undefined,
+      avatarColor: 'oklch(0.62 0.18 200), oklch(0.42 0.18 220)',
+      isMyTeam: false,
+    }
+  )
+}
+
+/** Board layout comes from the pure module so the awkward cases
+ *  (traded picks, auction drafts, uneven rounds) are tested directly
+ *  rather than through this view. */
+const pointsDraftBoard = computed(() =>
+  buildDraftBoard([...(livePointsData.value?.draft?.picks ?? [])]),
+)
+const pointsDraftColumns = computed(() => pointsDraftBoard.value.columns)
+const pointsBoardRows = computed(() => pointsDraftBoard.value.rows)
+const pointsPositionCounts = computed(() =>
+  draftPositionCounts([...(livePointsData.value?.draft?.picks ?? [])]),
+)
 
 /** Hide the entire awards header when no award has data — prevents
  *  the "Three things you need to know." headline from sitting above
@@ -1351,6 +1481,37 @@ function onOpenPickFromTeam(pickOverall: number) {
 </script>
 
 <style scoped>
+/* Points draft board — the value-free variant. */
+.board-cell-static {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.points-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.points-pick + .points-pick {
+  padding-top: 6px;
+  border-top: 1px solid oklch(0.24 0.015 90);
+}
+.points-pick-team {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: oklch(0.58 0.010 90);
+}
+.points-board-empty {
+  padding: 28px;
+  border-radius: 12px;
+  border: 1px solid oklch(0.20 0.015 90);
+  color: oklch(0.62 0.010 90);
+}
+
 /* Tokens inherited from .demo-shell in CategoryDemoLayout. */
 .catdraft {
   --accent-positive: oklch(0.72 0.18 145);
