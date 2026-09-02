@@ -21,8 +21,15 @@ class SleeperService {
     return response.json()
   }
 
-  async getUserLeagues(userId: string, season: string): Promise<SleeperLeague[]> {
-    const response = await fetch(`${BASE_URL}/user/${userId}/leagues/nfl/${season}`)
+  /** `sportCode` is Sleeper's own vocabulary — nfl / mlb / nba / nhl.
+   *  Defaults to nfl for existing callers written before it was a
+   *  parameter. */
+  async getUserLeagues(
+    userId: string,
+    season: string,
+    sportCode = 'nfl',
+  ): Promise<SleeperLeague[]> {
+    const response = await fetch(`${BASE_URL}/user/${userId}/leagues/${sportCode}/${season}`)
     if (!response.ok) throw new Error('Failed to fetch leagues')
     return response.json()
   }

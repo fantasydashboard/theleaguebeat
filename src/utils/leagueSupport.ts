@@ -8,9 +8,10 @@
  *                                 surface UnsupportedFormatPanel from
  *                                 their own format check)
  *
+ *   - H2H Points     Football — full pipeline via Sleeper (every page)
+ *
  * Not supported yet:
  *   - Rotisserie baseball
- *   - Football (any format)
  *   - Other sports (basketball, hockey, soccer)
  *
  * The layout gate stays conservative — when in doubt, surface the
@@ -45,10 +46,14 @@ export function classifyLeagueSupport(league: LeagueLike | null | undefined): Su
   const sport = (league?.sport ?? '').toLowerCase()
   const scoringType = (league?.scoring_type ?? '').toLowerCase()
 
-  // Football — a whole sport we haven't built yet. Even points football
-  // (the dominant format) is September work.
+  // Football — supported. Sleeper points football renders on every
+  // surface: The Beat, The Issue, Matchups, Power Rankings (all-play
+  // power score), Draft (board) and Chronicles (bracket-derived
+  // champions). Yahoo and ESPN football are NOT wired, and the connect
+  // screen offers Sleeper only for football, so a football league
+  // reaching here came in through the supported path.
   if (sport === 'football' || sport === 'nfl') {
-    return { ok: false, kind: 'football', sport, scoringType: league?.scoring_type ?? null }
+    return { ok: true }
   }
 
   // Other sports (basketball, hockey, soccer, etc.) — not on the roadmap

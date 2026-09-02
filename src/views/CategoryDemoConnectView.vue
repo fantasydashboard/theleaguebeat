@@ -270,6 +270,26 @@
           </svg>
         </button>
         <p v-if="sleeperError" class="form-error">{{ sleeperError }}</p>
+
+        <!-- Username results. Shown when the input resolved to a
+             Sleeper user instead of a league id. -->
+        <div v-if="sleeperUserLeagues.length" class="sleeper-picker">
+          <p class="sleeper-picker-label">
+            Found {{ sleeperUserLeagues.length }}
+            {{ selectedSport }} league{{ sleeperUserLeagues.length === 1 ? '' : 's' }}
+            on that account. Pick one.
+          </p>
+          <button
+            v-for="l in sleeperUserLeagues"
+            :key="l.id"
+            type="button"
+            class="sleeper-picker-row"
+            @click="pickSleeperLeague(l.id)"
+          >
+            <span class="sleeper-picker-name">{{ l.name }}</span>
+            <span v-if="l.size" class="sleeper-picker-meta">{{ l.size }} teams</span>
+          </button>
+        </div>
       </form>
     </section>
 
@@ -606,6 +626,7 @@ import { useLeaguesStore } from '@/stores/leaguesNew'
 import type { League } from '@/types/supabase'
 import { yahooService } from '@/services/yahoo'
 import { espnService } from '@/services/espn'
+import { sleeperService } from '@/services/sleeper'
 import { classifyLeagueSupport, type UnsupportedKind } from '@/utils/leagueSupport'
 import {
   isExtensionInstalled,
@@ -809,6 +830,21 @@ const selectedSport = ref<Sport | null>(null)
 const selectedPlatform = ref<Platform | null>(null)
 const leagueIdInput = ref('')
 const sleeperError = ref('')
+/** Leagues found when the input turned out to be a username rather than
+ *  a league id. Rendered as a picker so the user does not have to go
+ *  hunting for the number in a URL. */
+const sleeperUserLeagues = ref<{ id: string; name: string; size: number }[]>([])
+
+/** Sleeper's own sport vocabulary for our `Sport` values. */
+function sleeperSportCode(sport: string): string {
+  switch (sport) {
+    case 'football': return 'nfl'
+    case 'baseball': return 'mlb'
+    case 'basketball': return 'nba'
+    case 'hockey': return 'nhl'
+    default: return 'nfl'
+  }
+}
 
 /**
  * Map Sleeper's sport code onto our `Sport` vocabulary. Returns null for
@@ -979,10 +1015,48 @@ onMounted(() => {
   void refreshEspnCredsStatus()
 })
 
+/**
+ * Treat the input as a Sleeper username and return that user's leagues
+ * for the selected sport and current season. Returns [] on any failure
+ * — the caller reports "no league or user matching", which is true
+ * whichever of the two lookups failed.
+ */
+async function lookUpSleeperUserLeagues(
+  handle: string,
+): Promise<{ id: string; name: string; size: number }[]> {
+  try {
+    const user = await sleeperService.getUser(handle)
+    if (!user?.user_id) return []
+    const season = String(new Date().getFullYear())
+    const leagues = await sleeperService.getUserLeagues(
+      user.user_id,
+      season,
+      sleeperSportCode(selectedSport.value),
+    )
+    return (leagues ?? []).map((l) => ({
+      id: l.league_id,
+      name: l.name || `Sleeper League ${l.league_id}`,
+      size: l.total_rosters ?? 0,
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Picking from the username results just replays the normal submit
+ *  with a real league id, so validation and persistence stay in one
+ *  place rather than being duplicated here. */
+async function pickSleeperLeague(leagueId: string): Promise<void> {
+  leagueIdInput.value = leagueId
+  sleeperUserLeagues.value = []
+  await onSubmit()
+}
+
 async function onSubmit(): Promise<void> {
   const id = leagueIdInput.value.trim()
   if (!id || selectedPlatform.value !== 'sleeper') return
   sleeperError.value = ''
+  sleeperUserLeagues.value = []
   // Persist the connection so it appears in the switcher across
   // sessions, then route to the live-league URL by Supabase UUID.
   // The fetch is just to grab the league's display name + size from
@@ -999,6 +1073,31 @@ async function onSubmit(): Promise<void> {
       // versa. The payload knows the truth; refuse rather than file a
       // league under the wrong sport and poison every story built on it.
       const chosenSport = selectedSport.value
+
+      // Sleeper returns null for an id it does not recognise. Without
+      // this the connect "succeeded": we persisted a row named
+      // `Sleeper League <whatever was typed>` for a league that does
+      // not exist, and every page downstream then tried to report on
+      // nothing. A username in the league-ID box lands here, which is
+      // an easy and very likely mistake — the field wants the number
+      // out of the league URL.
+      if (!meta || typeof meta !== 'object') {
+        // Not a league id. Very likely a username — that is what people
+        // reach for, and it is how Sleeper identifies you everywhere
+        // else. Resolve it and offer their leagues rather than sending
+        // them off to dig a number out of a URL.
+        const found = await lookUpSleeperUserLeagues(id)
+        if (found.length > 0) {
+          sleeperUserLeagues.value = found
+          sleeperError.value = ''
+          return
+        }
+        sleeperError.value =
+          `No Sleeper league or user matching "${id}". Use your Sleeper username, ` +
+          `or the number from your league URL (sleeper.app/leagues/[ID]).`
+        return
+      }
+
       const metaSport = sleeperSport(meta?.sport)
       if (metaSport && metaSport !== chosenSport) {
         sleeperError.value =
@@ -1240,6 +1339,26 @@ async function onEspnSubmit(): Promise<void> {
 </script>
 
 <style scoped>
+.sleeper-picker { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.sleeper-picker-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem; font-weight: 700; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--ink-3); margin: 0 0 2px;
+}
+.sleeper-picker-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: oklch(0.07 0.014 90 / 0.55);
+  border: 1px solid oklch(0.20 0.015 90);
+  color: var(--ink-1);
+}
+.sleeper-picker-row:hover { border-color: oklch(0.78 0.18 92 / 0.45); }
+.sleeper-picker-name { font-weight: 700; }
+.sleeper-picker-meta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
 /* Tokens (--ink-N, --accent-*) inherited from .demo-shell. */
 .connect {
   display: flex;
