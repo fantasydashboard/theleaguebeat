@@ -57,71 +57,102 @@
         :aria-label="`${leaguesStore.leagues.length} connected leagues`"
         @click.stop
       >
-        <!-- Same treatment as the connect screen: the platform's own
-             mark, a colour-coded sport, and seasons of one league
-             collapsed together. Before this the list was fifteen
-             identically-shaped rows, several with the same name. -->
+        <!-- Current season only, grouped by sport. A switcher is for
+             getting to the league you are reading THIS week; fifteen
+             rows spanning four years buries that. Earlier seasons stay
+             one click away below. -->
         <div
-          v-for="group in leagueGroups"
-          :key="group.key"
-          class="league-switch-row"
+          v-for="block in currentSportBlocks"
+          :key="block.sport"
+          class="league-switch-block"
         >
-          <button
-            type="button"
-            class="league-switch-item"
-            :class="{ 'is-current': group.current.id === activeLeague?.id }"
-            role="option"
-            :aria-selected="group.current.id === activeLeague?.id"
-            @click="pickLeague(group.current.id)"
+          <p class="league-switch-block-label">{{ block.sport }}</p>
+          <div
+            v-for="group in block.groups"
+            :key="group.key"
+            class="league-switch-row"
           >
-            <img
-              :src="platformLogo(group.current.platform)"
-              :alt="platformLabel(group.current.platform)"
-              class="league-switch-logo"
-              width="28"
-              height="28"
-            />
-            <span class="league-switch-item-copy">
-              <span class="league-switch-item-name">{{ group.current.league_name }}</span>
-              <span class="league-switch-item-meta">
-                <span :class="['league-switch-sport', `sport-${group.current.sport}`]">
-                  {{ group.current.sport }}
-                </span>
-                <span v-if="scoringLabel(group.current.scoring_type)">
-                  · {{ scoringLabel(group.current.scoring_type) }}
-                </span>
-                · {{ group.current.season }}
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="league-switch-remove"
-            :aria-label="`Remove ${group.current.league_name}`"
-            :title="`Remove ${group.current.league_name}`"
-            @click.stop="confirmRemove(group.current)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-              <path d="M18 6 6 18M6 6l12 12"/>
-            </svg>
-          </button>
-
-          <!-- Past seasons stay reachable but subordinate, exactly as
-               on the connect screen. -->
-          <div v-if="group.past.length" class="league-switch-seasons">
             <button
-              v-for="past in group.past"
-              :key="past.id"
               type="button"
-              class="league-switch-season"
-              :class="{ 'is-current': past.id === activeLeague?.id }"
-              @click="pickLeague(past.id)"
+              class="league-switch-line"
+              :class="{ 'is-current': group.current.id === activeLeague?.id }"
+              role="option"
+              :aria-selected="group.current.id === activeLeague?.id"
+              @click="pickLeague(group.current.id)"
             >
-              {{ past.season }}
+              <img
+                :src="platformLogo(group.current.platform)"
+                :alt="platformLabel(group.current.platform)"
+                class="league-switch-logo"
+                width="20"
+                height="20"
+              />
+              <span class="league-switch-name">{{ group.current.league_name }}</span>
+              <span class="league-switch-year">{{ group.current.season }}</span>
+            </button>
+            <button
+              type="button"
+              class="league-switch-remove"
+              :aria-label="`Remove ${group.current.league_name}`"
+              :title="`Remove ${group.current.league_name}`"
+              @click.stop="confirmRemove(group.current)"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
             </button>
           </div>
         </div>
+
+        <!-- Earlier seasons, collapsed. Counted so the button says what
+             it will reveal rather than being a mystery. -->
+        <button
+          v-if="earlierLeagues.length > 0 && !showEarlier"
+          type="button"
+          class="league-switch-more"
+          @click="showEarlier = true"
+        >
+          Earlier seasons ({{ earlierLeagues.length }})
+        </button>
+
+        <div v-if="showEarlier && earlierLeagues.length" class="league-switch-block">
+          <p class="league-switch-block-label">Earlier seasons</p>
+          <div
+            v-for="league in earlierLeagues"
+            :key="league.id"
+            class="league-switch-row"
+          >
+            <button
+              type="button"
+              class="league-switch-line league-switch-line-past"
+              :class="{ 'is-current': league.id === activeLeague?.id }"
+              role="option"
+              :aria-selected="league.id === activeLeague?.id"
+              @click="pickLeague(league.id)"
+            >
+              <img
+                :src="platformLogo(league.platform)"
+                :alt="platformLabel(league.platform)"
+                class="league-switch-logo"
+                width="20"
+                height="20"
+              />
+              <span class="league-switch-name">{{ league.league_name }}</span>
+              <span class="league-switch-year">{{ league.season }}</span>
+            </button>
+            <button
+              type="button"
+              class="league-switch-remove"
+              :aria-label="`Remove ${league.league_name} ${league.season}`"
+              @click.stop="confirmRemove(league)"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <router-link
           to="/demo-categories/connect"
           class="league-switch-item league-switch-add"
@@ -245,6 +276,65 @@ const switcherOpen = ref(false)
  *  connect screen so both answer "which rows are the same league" the
  *  same way. */
 const leagueGroups = computed(() => groupLeaguesBySeason(leaguesStore.leagues))
+
+const showEarlier = ref(false)
+
+/**
+ * The season the switcher treats as "now" — the newest any connected
+ * league reaches, not the calendar year. A user who has not connected
+ * anything this year still gets a populated switcher rather than an
+ * empty one above a "show earlier" button.
+ */
+const latestSeason = computed(() => {
+  const seasons = leaguesStore.leagues
+    .map((l) => Number(l.season))
+    .filter((n) => Number.isFinite(n))
+  return seasons.length ? Math.max(...seasons) : null
+})
+
+const SPORT_ORDER = ['football', 'baseball', 'basketball', 'hockey'] as const
+
+/** Current-season leagues, bucketed by sport. Sports appear in a fixed
+ *  order so the list does not reshuffle as leagues come and go. */
+const currentSportBlocks = computed(() => {
+  const season = latestSeason.value
+  const groups = leagueGroups.value.filter(
+    (g) => season == null || Number(g.current.season) === season,
+  )
+  const bySport = new Map<string, typeof groups>()
+  for (const g of groups) {
+    const sport = String(g.current.sport ?? 'other')
+    const list = bySport.get(sport) ?? []
+    list.push(g)
+    bySport.set(sport, list)
+  }
+  return [...bySport.entries()]
+    .map(([sport, list]) => ({
+      sport,
+      groups: list.sort((a, b) =>
+        (a.current.league_name ?? '').localeCompare(b.current.league_name ?? ''),
+      ),
+    }))
+    .sort((a, b) => {
+      const ai = SPORT_ORDER.indexOf(a.sport as (typeof SPORT_ORDER)[number])
+      const bi = SPORT_ORDER.indexOf(b.sport as (typeof SPORT_ORDER)[number])
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi)
+    })
+})
+
+/** Everything not in the current season, newest first. Flat rather than
+ *  grouped: this is an archive to dip into, not a list to browse. */
+const earlierLeagues = computed(() => {
+  const season = latestSeason.value
+  if (season == null) return []
+  return leaguesStore.leagues
+    .filter((l) => Number(l.season) !== season)
+    .sort(
+      (a, b) =>
+        Number(b.season) - Number(a.season) ||
+        (a.league_name ?? '').localeCompare(b.league_name ?? ''),
+    )
+})
 
 /**
  * Removing a league is destructive and the row sits next to the one
@@ -469,54 +559,94 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Switcher rows — mirrors the connect screen's saved-leagues list. */
-.league-switch-row { position: relative; display: flex; flex-wrap: wrap; align-items: center; }
-.league-switch-row .league-switch-item { flex: 1 1 auto; display: flex; align-items: center; gap: 12px; }
+/* Switcher rows — one line each. The previous version stacked the
+   logo above the name because `.league-switch-item` further down sets
+   flex-direction: column; these use their own class rather than
+   fighting that rule. */
+.league-switch-block { display: flex; flex-direction: column; gap: 1px; }
+.league-switch-block + .league-switch-block { margin-top: 8px; }
+.league-switch-block-label {
+  margin: 6px 0 2px;
+  padding: 0 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: oklch(0.48 0.010 90);
+}
+.league-switch-row { display: flex; align-items: center; }
+.league-switch-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: oklch(0.92 0.005 90);
+}
+.league-switch-line:hover { background: oklch(0.13 0.015 90); }
+.league-switch-line.is-current { background: oklch(0.16 0.02 90); }
+.league-switch-line-past { color: oklch(0.72 0.008 90); }
 .league-switch-logo {
-  width: 28px; height: 28px; border-radius: 7px;
+  width: 20px; height: 20px; border-radius: 5px;
   object-fit: contain; flex-shrink: 0;
 }
-.league-switch-item-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.league-switch-sport { text-transform: uppercase; }
-.league-switch-sport.sport-baseball   { color: oklch(0.74 0.18 145); }
-.league-switch-sport.sport-football   { color: oklch(0.78 0.18 92); }
-.league-switch-sport.sport-basketball { color: oklch(0.72 0.19 55); }
-.league-switch-sport.sport-hockey     { color: oklch(0.72 0.18 195); }
-
+.league-switch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.league-switch-year {
+  flex: 0 0 auto;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: oklch(0.52 0.010 90);
+}
 .league-switch-remove {
   flex: 0 0 auto;
   display: grid; place-items: center;
-  width: 30px; height: 30px; margin-right: 8px;
-  border-radius: 8px; cursor: pointer;
+  width: 24px; height: 24px; margin-right: 4px;
+  border-radius: 6px; cursor: pointer;
   background: transparent; border: 1px solid transparent;
-  color: oklch(0.50 0.010 90);
+  color: oklch(0.46 0.010 90);
   opacity: 0;
   transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-/* Revealed on hover or focus so the destructive control is never the
-   first thing the eye lands on, but is always keyboard-reachable. */
+/* Revealed on hover or focus so a destructive control is never the
+   first thing the eye lands on, but stays keyboard-reachable. */
 .league-switch-row:hover .league-switch-remove,
 .league-switch-remove:focus-visible { opacity: 1; }
 .league-switch-remove:hover {
   color: oklch(0.72 0.20 25);
   border-color: oklch(0.72 0.20 25 / 0.45);
 }
-
-.league-switch-seasons {
-  flex: 1 0 100%;
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 0 14px 10px 54px;
-}
-.league-switch-season {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em;
-  padding: 2px 9px; border-radius: 999px; cursor: pointer;
-  color: oklch(0.62 0.010 90);
+.league-switch-more {
+  margin: 8px 4px 2px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
   background: transparent;
-  border: 1px solid oklch(0.24 0.015 90);
+  border: 1px dashed oklch(0.24 0.015 90);
+  color: oklch(0.62 0.010 90);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
 }
-.league-switch-season:hover { color: oklch(0.95 0.005 90); border-color: oklch(0.78 0.18 92 / 0.5); }
-.league-switch-season.is-current { color: oklch(0.95 0.005 90); border-color: oklch(0.78 0.18 92 / 0.7); }
+.league-switch-more:hover { color: oklch(0.92 0.005 90); border-color: oklch(0.34 0.015 90); }
 .league-shell {
   --ink-1: oklch(0.97 0.005 90);
   --ink-2: oklch(0.78 0.008 90);
@@ -682,8 +812,6 @@ onMounted(() => {
 }
 .league-switch-item:active { transform: scale(0.98); transition-duration: 90ms; }
 .league-switch-item.is-current { background: oklch(0.78 0.18 92 / 0.10); }
-.league-switch-item-name { font-size: 0.95rem; font-weight: 700; color: var(--ink-1); }
-.league-switch-item-meta { font-size: 0.78rem; color: var(--ink-3); }
 .league-switch-add {
   flex-direction: row;
   align-items: center;
