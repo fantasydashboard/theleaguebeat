@@ -84,6 +84,13 @@ export interface CategoryLeagueDataStanding {
   bleedingCount: number       // bottom-3 in this many cats
 }
 
+/** One team's score in one week of a points league. */
+export interface PointsWeeklyScore {
+  teamId: string
+  week: number
+  points: number
+}
+
 export interface CategoryLeagueDataCategoryRank {
   teamId: string
   catRanks: Record<string, number>
@@ -591,6 +598,20 @@ export interface LeagueDataH2HPoints {
    *  only completed weeks (the live current week is excluded, matching
    *  the category contract). Drives WILD_ARC / THRONE_CHANGE. */
   seasonRankHistory?: CategoryLeagueDataWeeklyRanks[]
+
+  /** Every team's own score for each completed regular-season week.
+   *
+   *  Deliberately a team's OWN score rather than a matchup result:
+   *  it is what a points league is actually measured on, and reading
+   *  it per-team rather than per-pair means it survives byes, odd
+   *  roster counts and median-match leagues (where a week holds more
+   *  results than it holds games) without any pairing logic.
+   *
+   *  This is what makes all-play computable — the record a team would
+   *  have if it played every opponent every week, which is the standard
+   *  way to strip schedule luck out of a points league. Optional:
+   *  adapters that cannot build it degrade to record-only power. */
+  weeklyScores?: PointsWeeklyScore[]
 
   /** Per-opponent all-time head-to-head, built by the shared buildH2H.
    *  Optional: adapters that can't compute it degrade (rival falls back

@@ -43,6 +43,7 @@ import type {
   CategoryLeagueDataWeeklyRanks,
   LeagueDataH2HPoints,
   LeagueDataPointsMatchup,
+  PointsWeeklyScore,
   WLT,
 } from '../types'
 import type {
@@ -1864,6 +1865,42 @@ export function pointsWeeklyOutcomes(
 }
 
 /**
+ * Every roster's own score for each completed regular-season week.
+ *
+ * Reads each matchup ENTRY directly rather than pairing them. Sleeper
+ * returns one entry per roster per week, each carrying that roster's own
+ * points, so no pairing is needed — which is the point: this survives
+ * byes, odd roster counts, `matchup_id: null` and median-match leagues
+ * (`league_average_match: 1`, where a week holds more results than it
+ * holds games) without any of the logic that pairing needs to get right.
+ *
+ * Only weeks that have actually been played are included; an unplayed
+ * week reports every roster at 0, which would read as a league-wide
+ * shutout rather than as an absence.
+ */
+function buildSleeperWeeklyScores(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  regularSeasonBoundWeek: number,
+): PointsWeeklyScore[] {
+  const out: PointsWeeklyScore[] = []
+  const weeks = Object.keys(matchupsByWeek)
+    .map(Number)
+    .filter((w) => Number.isFinite(w) && w <= regularSeasonBoundWeek)
+    .sort((a, b) => a - b)
+
+  for (const week of weeks) {
+    const list = matchupsByWeek[String(week)] ?? []
+    if (!weekHasBeenPlayed(list)) continue
+    for (const entry of list) {
+      const points = entry.points
+      if (typeof points !== 'number' || !Number.isFinite(points)) continue
+      out.push({ teamId: String(entry.roster_id), week, points })
+    }
+  }
+  return out
+}
+
+/**
  * Standings from `roster.settings` — Sleeper's authoritative season
  * record — not a matchup-by-matchup replay. Ranking sorts on win%
  * (wins + half of ties, so a 9-4-1 team doesn't rank below a plain
@@ -2169,6 +2206,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   )
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
+  const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek)
 
   return {
     format: 'h2h-points',
@@ -2185,6 +2223,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     weeklyPointsAverage,
     standings,
     seasonRankHistory,
+    weeklyScores,
   }
 }
 
