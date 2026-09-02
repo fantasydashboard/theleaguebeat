@@ -307,6 +307,7 @@ import { usePlatformsStore } from '@/stores/platforms'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
+import { hasPlayedGames } from '@/editorial/leagueCore'
 
 defineEmits<{ (e: 'open-signup'): void }>()
 
@@ -566,9 +567,13 @@ async function loadChronicles() {
       }
       return
     }
-    // Format gate — any remaining non-category format routes to the panel.
-    if (data.format !== 'h2h-category') {
-      unsupportedFormat.value = data.format
+    // Format gate. Written as a positive check on the format we CAN
+    // render: with points handled above, `!== 'h2h-category'` narrows
+    // to never today and would silently fall through to the category
+    // path if a third format were added to the union.
+    const format = (data as { format: string }).format
+    if (format !== 'h2h-category') {
+      unsupportedFormat.value = format
       unsupportedLeagueName.value = data.leagueName
       if (leagueRowId && data.leagueName) {
         void leaguesStore.maybeBackfillLeagueName(leagueRowId, data.leagueName)
@@ -848,6 +853,10 @@ const currentSeasonCard = computed(() => {
   // on the crown. The bracket is the truth; suppress the live card.
   const decided = (d.seasonHistory ?? []).some((h) => h.year === d.currentSeason)
   if (decided) return null
+  // Nobody "leads the chase" at 0-0. Before a game is played the
+  // standings are a sort order, so naming a leader and a chaser invents
+  // a race — the same fabrication the ladder and the cellar had.
+  if (!hasPlayedGames(d)) return null
   const sorted = [...d.standings].sort((a, b) => a.rank - b.rank)
   const leader = sorted[0]
   if (!leader) return null

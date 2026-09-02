@@ -4,6 +4,7 @@
  * is named, never "you"), so blocks forward cleanly to the whole chat.
  */
 import type { LeagueData, H2HRecord } from '@/editorial/types'
+import { hasPlayedGames } from '@/editorial/leagueCore'
 import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
 import { buildYourPlayers, type YourPlayersBlock } from '@/editorial/yourColumn/buildYourPlayers'
 
@@ -100,11 +101,19 @@ function buildHero(data: LeagueData, teamId: string): YourColumnBlock {
       : `${s.catWins}-${s.catLosses}`
     : ''
   const streak = s && s.streak.type !== 'T' ? `${s.streak.type}${s.streak.length}` : ''
-  const headline = s ? `Sits ${ordinal(s.rank)}, ${record}.` : `${name} this week.`
+  // Before a game is played every team is 0-0, so "Sits 1st" reports a
+  // sort position and ".000 WIN PCT" reads as failure rather than as
+  // absence. Say the season has not started, because that is the fact.
+  const played = hasPlayedGames(data)
+  const headline = !played
+    ? `The season hasn't started.`
+    : s
+      ? `Sits ${ordinal(s.rank)}, ${record}.`
+      : `${name} this week.`
   // Chips carry facts the headline DIDN'T (streak, win pct) — never an
   // echo of the rank/record already in the sentence.
   const chips: { value: string; label: string }[] = []
-  if (s) {
+  if (s && played) {
     if (streak) chips.push({ value: streak, label: 'STREAK' })
     chips.push({
       value: `.${Math.round(s.winPct * 1000).toString().padStart(3, '0')}`,
@@ -131,16 +140,19 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     const oppId = m.homeTeamId === teamId ? m.awayTeamId : m.homeTeamId
     const opp = m.homeTeamId === teamId ? m.awayPoints : m.homePoints
     const oppName = nameOf(data, oppId)
+    // A game that has not kicked off is UPCOMING, not "level at
+    // 0.0-0.0" — and it must not be labelled live.
+    const started = mine > 0 || opp > 0
     const verbPhrase =
       mine > opp ? `leads ${oppName}` : mine < opp ? `trails ${oppName}` : `level with ${oppName}`
     // Chips carry what the score line can't: the live gap, and where the
     // week projects to land. Never an echo of the two numbers above.
     const myProj = m.homeTeamId === teamId ? m.homeProjected : m.awayProjected
     const oppProj = m.homeTeamId === teamId ? m.awayProjected : m.homeProjected
-    const chips: { value: string; label: string }[] = [
-      { value: Math.abs(mine - opp).toFixed(1), label: mine >= opp ? 'AHEAD' : 'BACK' },
-    ]
-    if (myProj != null && oppProj != null) {
+    const chips: { value: string; label: string }[] = started
+      ? [{ value: Math.abs(mine - opp).toFixed(1), label: mine >= opp ? 'AHEAD' : 'BACK' }]
+      : []
+    if (started && myProj != null && oppProj != null) {
       chips.push({
         value: Math.abs(myProj - oppProj).toFixed(1),
         label: myProj >= oppProj ? 'PROJ AHEAD' : 'PROJ BACK',
@@ -148,10 +160,16 @@ function buildMatchup(data: LeagueData, teamId: string): YourColumnBlock | undef
     }
     return {
       label: 'Your matchup',
-      eyebrow: 'LIVE',
-      headline: `${cap(verbPhrase)}, ${nbScore(`${mine.toFixed(1)}-${opp.toFixed(1)}`)}.`,
+      eyebrow: started ? 'LIVE' : 'UPCOMING',
+      // An unkicked game has no score line. "Level with X, 0.0-0.0"
+      // over two empty bars describes a game that has not happened.
+      headline: started
+        ? `${cap(verbPhrase)}, ${nbScore(`${mine.toFixed(1)}-${opp.toFixed(1)}`)}.`
+        : `Faces ${oppName} this week.`,
       chips,
-      viz: { kind: 'scoreBar', myName: name, oppName, mine, opp, myProj: myProj ?? undefined, oppProj: oppProj ?? undefined },
+      viz: started
+        ? { kind: 'scoreBar', myName: name, oppName, mine, opp, myProj: myProj ?? undefined, oppProj: oppProj ?? undefined }
+        : undefined,
       teamIds: [teamId, oppId],
     }
   }

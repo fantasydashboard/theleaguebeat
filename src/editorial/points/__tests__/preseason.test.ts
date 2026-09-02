@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { hasPlayedGames } from '@/editorial/leagueCore'
 import { computePointsPowerScores } from '@/editorial/points/powerScore'
 import { renderBeatPoints } from '@/editorial/render-beat-points'
+import { buildYourColumn } from '@/editorial/yourColumn/buildYourColumn'
 import type { LeagueDataH2HPoints } from '@/editorial/types'
 
 function preseasonLeague(): LeagueDataH2HPoints {
@@ -76,5 +77,50 @@ describe('a league that has drafted but not played', () => {
     const played = preseasonLeague()
     played.standings![0] = { ...played.standings![0], catWins: 1 }
     expect(hasPlayedGames(played)).toBe(true)
+  })
+})
+
+describe("Your Column before the season starts", () => {
+  const data = preseasonLeague()
+  // A matchup that exists but has not kicked off: both sides on zero.
+  data.currentWeekMatchups = [{
+    id: 'm1',
+    homeTeamId: '1',
+    awayTeamId: '2',
+    homePoints: 0,
+    awayPoints: 0,
+    status: 'upcoming',
+  } as never]
+
+  const column = buildYourColumn(data, '1')
+  const text = JSON.stringify(column)
+
+  it('does not report a rank or a win percentage', () => {
+    // "Sits 1st, 0-0" reports a sort position, and ".000" reads as
+    // failure rather than as absence.
+    expect(text).not.toContain('Sits 1st')
+    expect(text).not.toContain('WIN PCT')
+    expect(text).toContain("The season hasn't started")
+  })
+
+  it('calls an unkicked matchup upcoming, not live', () => {
+    expect(text).not.toContain('"LIVE"')
+    expect(text).toContain('UPCOMING')
+    // No "level with X, 0.0-0.0" over two empty bars.
+    expect(text).not.toContain('0.0-0.0')
+    expect(text).not.toContain('AHEAD')
+  })
+
+  it('still reports a real matchup once it has kicked off', () => {
+    // The guard must not permanently mute the column.
+    const live = preseasonLeague()
+    live.standings![0] = { ...live.standings![0], catWins: 1, winPct: 1 }
+    live.currentWeekMatchups = [{
+      id: 'm1', homeTeamId: '1', awayTeamId: '2',
+      homePoints: 101.5, awayPoints: 88.2, status: 'live',
+    } as never]
+    const t = JSON.stringify(buildYourColumn(live, '1'))
+    expect(t).toContain('LIVE')
+    expect(t).toContain('101.5')
   })
 })

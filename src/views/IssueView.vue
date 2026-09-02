@@ -802,6 +802,36 @@ const pointsCoverStory = computed(() => {
 /** Unified points cover: prefers the season arc (with stat chips) and
  *  falls back to the matchup of the week (with a score sub-line). */
 const pointsCover = computed(() => {
+  // Preseason: the draft IS the cover story.
+  //
+  // Before kickoff there are no results, so the matchup cover falls
+  // back to "Kickoff hasn't happened yet" — the weakest possible lead,
+  // and the same sentence the sections below already repeat. The draft
+  // is the one thing that has actually happened, and it is what the
+  // league is arguing about in the days after it.
+  if (!pointsSeasonStarted.value && draftFacts.value) {
+    const f = draftFacts.value
+    const lede = draftLede(f, (id) => lookupTeam(id).name)
+    if (lede) {
+      const qb = f.firstAtPosition.find((x) => x.position === 'QB')
+      const chips: { value: string; label: string }[] = [
+        { value: String(f.totalPicks), label: 'picks' },
+        { value: String(f.rounds), label: 'rounds' },
+      ]
+      if (qb) chips.push({ value: `#${qb.pickOverall}`, label: 'first QB' })
+      return {
+        eyebrow: 'The draft',
+        headline: lede,
+        body: f.firstPick
+          ? `${lookupTeam(f.firstPick.draftedByTeamId).name} opened with ${f.firstPick.playerName}. The season starts when the games do.`
+          : 'The board is set. The season starts when the games do.',
+        statChips: chips,
+        portraitTeamId: f.firstPick?.draftedByTeamId ?? null,
+        subContext: '',
+      }
+    }
+  }
+
   const arc = pointsCoverStory.value
   if (arc) {
     return {
