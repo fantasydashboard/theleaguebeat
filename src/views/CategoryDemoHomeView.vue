@@ -1403,12 +1403,12 @@ onMounted(async () => {
 
   // In strict mode the leagues store may not be hydrated yet (deep link
   // or page refresh) — make sure we have the row before trying to load.
-  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
-    try {
-      await leaguesStore.fetchLeagues()
-    } catch (err) {
-      console.warn('[CategoryDemoHomeView] fetchLeagues failed:', err)
-    }
+  if (isStrictLiveMode.value) {
+    // Resolve by id, not by emptiness: a league connected moments ago
+    // is absent from an already-populated store.
+    await leaguesStore.ensureLeagueLoaded(
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined,
+    )
   }
   await loadLiveData()
 })

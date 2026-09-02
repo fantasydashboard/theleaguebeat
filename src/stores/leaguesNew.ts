@@ -50,6 +50,31 @@ export const useLeaguesStore = defineStore('leagues', () => {
   const hasSportLeagues = (sport: Sport) => 
     leagues.value.some(l => l.sport === sport && l.is_active)
 
+  /**
+   * Make sure the store can resolve `leagueId`, fetching if it cannot.
+   *
+   * Views used to refetch only when the list was EMPTY, which meant a
+   * league connected during this session was invisible to the page it
+   * navigated to: the connect screen had already populated the list, so
+   * the guard passed and the brand-new row was never loaded. The page
+   * then reported "this league couldn't be resolved" for a league that
+   * had just been created successfully.
+   *
+   * Swallows errors on purpose — callers treat an unresolved league as
+   * a render state, not an exception.
+   */
+  async function ensureLeagueLoaded(leagueId?: string): Promise<void> {
+    const present =
+      leagueId != null && leagues.value.some((l) => l.id === leagueId)
+    if (present) return
+    if (leagues.value.length > 0 && leagueId == null) return
+    try {
+      await fetchLeagues()
+    } catch (err) {
+      console.warn('[leagues] ensureLeagueLoaded failed:', err)
+    }
+  }
+
   // Fetch all leagues for the current user
   async function fetchLeagues() {
     const authStore = useAuthStore()
@@ -366,6 +391,7 @@ export const useLeaguesStore = defineStore('leagues', () => {
   }
 
   return {
+    ensureLeagueLoaded,
     // State
     leagues,
     activeLeagueId,

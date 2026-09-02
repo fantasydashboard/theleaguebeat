@@ -1021,7 +1021,18 @@ async function onSubmit(): Promise<void> {
         // above — never a hardcoded default.
         chosenSport as Sport,
       )
-      if (result.success) leagueRowId = result.leagueRowId
+      if (result.success) {
+        leagueRowId = result.leagueRowId
+        // Pull the new row into the store before navigating. The
+        // destination resolves the league from the store, and without
+        // this it reports "this league couldn't be resolved" for a
+        // league that was just created successfully.
+        try {
+          await leaguesStore.fetchLeagues()
+        } catch (err) {
+          console.warn('[CategoryDemoConnect] refresh after connect failed:', err)
+        }
+      }
     } catch (err) {
       console.warn('[CategoryDemoConnect] Sleeper persist failed:', err)
     }

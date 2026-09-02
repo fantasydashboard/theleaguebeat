@@ -870,12 +870,12 @@ const loadingSubline = computed(() => {
 })
 
 async function loadDraft() {
-  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
-    try {
-      await leaguesStore.fetchLeagues()
-    } catch (err) {
-      console.warn('[CategoryDemoDraftView] fetchLeagues failed:', err)
-    }
+  if (isStrictLiveMode.value) {
+    // Resolve by id, not by emptiness: a league connected moments ago
+    // is absent from an already-populated store.
+    await leaguesStore.ensureLeagueLoaded(
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined,
+    )
   }
 
   // Reset prior render state — component is reused across leagues.

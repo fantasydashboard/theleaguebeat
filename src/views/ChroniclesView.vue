@@ -221,12 +221,12 @@ function initialsFor(name: string | undefined): string {
 }
 
 async function loadChronicles() {
-  if (isStrictLiveMode.value && leaguesStore.leagues.length === 0) {
-    try {
-      await leaguesStore.fetchLeagues()
-    } catch (err) {
-      console.warn('[ChroniclesView] fetchLeagues failed:', err)
-    }
+  if (isStrictLiveMode.value) {
+    // Resolve by id, not by emptiness: a league connected moments ago
+    // is absent from an already-populated store.
+    await leaguesStore.ensureLeagueLoaded(
+      typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined,
+    )
   }
 
   // Reset prior render state so a league switch doesn't briefly
