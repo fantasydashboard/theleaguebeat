@@ -130,7 +130,10 @@
         <ol class="issue-toc-list" role="list">
           <li><a href="#points-section-power">01 — Power Rankings</a></li>
           <li><a href="#section-matchups">02 — Matchups</a></li>
-          <li v-if="pointsQuickReads.length"><a href="#points-section-departments">03 — Departments</a></li>
+          <li v-if="showPointsDraft"><a href="#points-section-draft">03 — The draft</a></li>
+          <li v-if="pointsQuickReads.length">
+            <a href="#points-section-departments">{{ showPointsDraft ? '04' : '03' }} — Departments</a>
+          </li>
         </ol>
       </nav>
 
@@ -252,6 +255,41 @@
 
       <!-- ─── 03 — DEPARTMENTS ─────────────────────────────────────
            Quick reads derived from standings + rank history. -->
+      <!-- The draft.
+           Between a draft and kickoff this is the only thing that has
+           actually happened, and it is when most people first look. It
+           lives here rather than in the category branch below because
+           points leagues render this template and never that one —
+           which is why a football league showed nothing about its own
+           draft despite the picks being loaded. -->
+      <section
+        v-if="showPointsDraft"
+        id="points-section-draft"
+        class="section"
+        aria-labelledby="points-draft-heading"
+      >
+        <header class="section-head">
+          <p class="section-eyebrow">03 — The draft</p>
+          <h2 class="section-headline" id="points-draft-heading">{{ draftHeadline }}</h2>
+          <p class="section-sub">{{ draftBody }}</p>
+        </header>
+
+        <ul v-if="draftFacts" class="points-draft-facts" role="list">
+          <li v-for="f in pointsDraftFacts" :key="f.label" class="points-draft-fact">
+            <span class="points-draft-fact-label">{{ f.label }}</span>
+            <span class="points-draft-fact-value">{{ f.value }}</span>
+          </li>
+        </ul>
+
+        <router-link
+          v-if="routeLeagueId"
+          :to="`/leagues/${routeLeagueId}/draft`"
+          class="points-draft-link"
+        >
+          See the full board
+        </router-link>
+      </section>
+
       <section
         v-if="pointsQuickReads.length"
         id="points-section-departments"
@@ -259,7 +297,7 @@
         aria-labelledby="points-departments-heading"
       >
         <header class="section-head">
-          <p class="section-eyebrow">03 — Departments</p>
+          <p class="section-eyebrow">{{ showPointsDraft ? '04' : '03' }} — Departments</p>
           <h2 class="section-headline" id="points-departments-heading">Quick reads.</h2>
         </header>
         <div class="departments-grid" role="list">
@@ -1229,6 +1267,37 @@ const showDraftSection = computed(() => {
   return wk >= 1 && wk <= 7 && hasDraftData.value
 })
 
+/** Points leagues show the draft whenever there is one, not only in
+ *  the opening weeks. The category page treats it as an early-season
+ *  "how the picks are aging" read, which needs a value model football
+ *  does not have — so here it is a record of what happened, and a
+ *  record stays true all season. */
+const showPointsDraft = computed(() => !!livePointsData.value && hasDraftData.value)
+
+/** The few facts worth stating outright, each only when present. */
+const pointsDraftFacts = computed(() => {
+  const f = draftFacts.value
+  if (!f) return []
+  const out: { label: string; value: string }[] = [
+    { label: 'Picks', value: `${f.totalPicks} over ${f.rounds} rounds` },
+  ]
+  const qb = f.firstAtPosition.find((x) => x.position === 'QB')
+  if (qb) {
+    out.push({ label: 'First quarterback', value: `${qb.playerName}, pick ${qb.pickOverall}` })
+  }
+  if (f.firstPick) {
+    out.push({ label: 'Opening pick', value: `${f.firstPick.playerName}, ${lookupTeam(f.firstPick.draftedByTeamId).name}` })
+  }
+  const top = f.concentrations[0]
+  if (top) {
+    out.push({
+      label: 'Loaded up',
+      value: `${lookupTeam(top.teamId).name}, ${numberWord(top.count)} ${positionWord(top.position, top.count)}`,
+    })
+  }
+  return out
+})
+
 const draftSectionNumber = computed(() => '03')
 const departmentsSectionNumber = computed(() => showDraftSection.value ? '04' : '03')
 
@@ -2059,6 +2128,50 @@ function collectUserIdentity() {
 </script>
 
 <style scoped>
+/* Points draft section. */
+.points-draft-facts {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.points-draft-fact {
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid oklch(0.20 0.015 90);
+  background: oklch(0.09 0.014 90 / 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.points-draft-fact-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.010 90);
+}
+.points-draft-fact-value {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: oklch(0.95 0.005 90);
+}
+.points-draft-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.18 92);
+  text-decoration: none;
+}
+.points-draft-link:hover { text-decoration: underline; }
 .issue {
   display: flex;
   flex-direction: column;
