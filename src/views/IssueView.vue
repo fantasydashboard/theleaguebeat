@@ -300,6 +300,13 @@
                landing on "nothing to present" is worse than not
                offering it. -->
           <router-link
+            v-if="canPresentWire"
+            :to="`/leagues/${routeLeagueId}/present/wire`"
+            class="points-draft-link points-draft-link-primary"
+          >
+            Present the wire
+          </router-link>
+          <router-link
             v-if="canPresentBoard"
             :to="`/leagues/${routeLeagueId}/present/board`"
             class="points-draft-link points-draft-link-primary"
@@ -1370,6 +1377,18 @@ const showPointsDraft = computed(() => !!livePointsData.value && hasDraftData.va
  * So a non-Sleeper league gets the button the moment week one closes,
  * and not before. Offering it earlier would land on an empty deck.
  */
+/**
+ * Whether there is a wire worth presenting.
+ *
+ * Platform-neutral: transactions are on the points contract for all
+ * three now. Gated on there being at least one move, because a deck
+ * that opens on "0 moves this week" is not a quiet week worth
+ * reporting — it is an empty deck.
+ */
+const canPresentWire = computed(
+  () => (livePointsData.value?.transactions?.length ?? 0) > 0,
+)
+
 const canPresentBoard = computed(() => {
   const data = livePointsData.value
   if (!data) return false

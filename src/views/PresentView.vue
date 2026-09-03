@@ -197,6 +197,7 @@ import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
 import { buildBoardDeck, type BoardDeckTeam } from '@/editorial/present/buildBoardDeck'
+import { buildWireDeck } from '@/editorial/present/buildWireDeck'
 import {
   rankRosterStrength,
   startingSlots,
@@ -688,7 +689,15 @@ async function load(): Promise<void> {
     // the draft. Adding a second deck is what surfaced it.
     const deckId = typeof route.params.deckId === 'string' ? route.params.deckId : 'draft'
 
-    if (deckId === 'board') {
+    if (deckId === 'wire') {
+      deck.value = buildWireDeck({
+        leagueName: record.league_name || data.leagueName,
+        season: data.currentSeason,
+        transactions: (data as unknown as LeagueDataH2HPoints).transactions,
+        teamName,
+        team: teamVisual,
+      })
+    } else if (deckId === 'board') {
       deck.value = await buildBoard({
         record,
         data,
