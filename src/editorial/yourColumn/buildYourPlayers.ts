@@ -61,6 +61,14 @@ function toRow(n: PlayerNight, tone: 'up' | 'down'): YourPlayerRow {
 }
 
 export function buildYourPlayers(nights: PlayerNight[], teamId: string): YourPlayersBlock | undefined {
+  // TEMP DIAGNOSTIC — remove once Your Players is confirmed live.
+  const latestDbg = nights.reduce((d, n) => (n.gameDate > d ? n.gameDate : d), '')
+  const ownedForMe = nights.filter((n) => n.ownedByTeamIds.includes(teamId)).length
+  const sampleOwnerIds = [...new Set(nights.flatMap((n) => n.ownedByTeamIds))].slice(0, 5)
+  console.log(
+    `[YourPlayers] nights=${nights.length} latest=${latestDbg} teamId=${teamId} ownedForMe=${ownedForMe} sampleOwnerIds=${JSON.stringify(sampleOwnerIds)}`,
+  )
+
   if (!nights.length) return undefined
   const latest = nights.reduce((d, n) => (n.gameDate > d ? n.gameDate : d), '')
   const mine = nights.filter((n) => n.gameDate === latest && n.ownedByTeamIds.includes(teamId))

@@ -161,15 +161,25 @@ describe('draft grades', () => {
 
   it('never shows a letter without the rounds figure beside it', () => {
     // The letter is league-relative and means little alone; the rounds
-    // number is the honest quantity.
+    // number is the honest quantity. "—" is the deliberate non-grade
+    // for a team with too few compared picks to rank.
     for (const r of grades!.rows) {
-      expect(r.lead).toMatch(/^[ABCD][+-]?$/)
-      expect(r.value, `no rounds beside ${r.lead}`).toMatch(/^[+-]?[\d.]+ rds$/)
+      expect(r.lead).toMatch(/^([ABCD][+-]?|—)$/)
+      expect(r.value, `no rounds beside ${r.lead}`).toMatch(/^[+-]?[\d.]+\/pick$/)
+    }
+  })
+
+  it('labels the figure as per-pick', () => {
+    // A rendering contract only — that the slide says what the number
+    // is. Whether the maths is actually per-pick, and centred on the
+    // league, is gated by gradeTeamDrafts's own tests.
+    for (const r of grades!.rows) {
+      expect(r.value, 'grade figure is not per-pick').toContain('/pick')
     }
   })
 
   it('orders best-to-worst', () => {
-    const nums = grades!.rows.map((r) => parseFloat((r.value ?? '0').replace(' rds', '')))
+    const nums = grades!.rows.map((r) => parseFloat(r.value ?? '0'))
     for (let i = 1; i < nums.length; i++) expect(nums[i - 1]).toBeGreaterThanOrEqual(nums[i])
   })
 

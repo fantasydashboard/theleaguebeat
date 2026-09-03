@@ -92,15 +92,26 @@ export interface Divergence {
 /** Per-team draft value, aggregated across every pick we could compare. */
 export interface TeamDraftValue {
   teamId: string
-  /** Total rounds of value gained against consensus. Positive is good:
-   *  the team got players later than consensus said they should. */
-  roundsGained: number
+  /**
+   * Rounds of value gained PER COMPARED PICK. Positive is good: the
+   * team got players later than the baseline said they should.
+   *
+   * Per pick, not totalled, and the difference is not cosmetic. A
+   * total rewards having more of your roster inside the baseline's
+   * sample, which is a property of who you drafted, not how well. On a
+   * real 10-team draft the two orderings disagree sharply — one team
+   * moved from sixth to second on this change alone.
+   */
+  roundsPerPick: number
+  /** `roundsPerPick` minus the league's own mean — the figure actually
+   *  shown. See `gradeTeamDrafts` for why the raw average is not. */
+  vsLeague: number
   /** How many of the team's picks could be compared at all. */
   picksCompared: number
   /** Rank within the league, 1 = most value gained. */
   rank: number
-  /** League-RELATIVE letter. See `gradeTeamDrafts` for what it does and
-   *  does not mean. */
+  /** League-RELATIVE letter, or "—" for a team with too few compared
+   *  picks to say anything. See `gradeTeamDrafts`. */
   grade: string
 }
 
@@ -193,6 +204,93 @@ export function findDraftDivergences(
   }
 }
 
+/** How far off ADP a pick must be before it is worth a slide, in
+ *  rounds. Under a round is the normal noise of any draft — ADP itself
+ *  moves that much week to week. */
+const MIN_ROUNDS_OFF_ADP = 1
+
+/**
+ * Divergences measured against real ADP.
+ *
+ * This is the preferred path, and it is simpler than the
+ * within-position workaround above for one reason: ADP already
+ * encodes positional scarcity. Quarterbacks "fall" in a one-QB league
+ * because drafters actually let them fall, so ADP has them falling
+ * too — no cancelling trick required. Where `findDraftDivergences` has
+ * to compare a player only against others at his position,
+ * this compares him against the board.
+ *
+ * Position ORDER is still computed, because "the ninth running back
+ * off the board" is how people describe a draft. It is descriptive
+ * here rather than load-bearing.
+ *
+ * @param expectedPickOf resolves a pick to the overall pick number ADP
+ *                       expected, already scaled to this league's size.
+ *                       Undefined excludes the pick — a player outside
+ *                       the sample is unmeasured, not a reach.
+ */
+export function findAdpDivergences(
+  picks: ValuedPick[],
+  expectedPickOf: (playerName: string, position: string, team: string) => number | undefined,
+  teamCount: number,
+  /** NFL team per pick, needed to identify defenses. */
+  nflTeamOf: (pick: ValuedPick) => string = () => '',
+): DraftDivergences {
+  if (teamCount <= 0) return { fell: [], reached: [], positionsCompared: [] }
+
+  const covered: { pick: ValuedPick; expected: number }[] = []
+  for (const p of picks) {
+    if (!p.playerName || !p.position) continue
+    const expected = expectedPickOf(p.playerName, p.position, nflTeamOf(p))
+    if (expected === undefined) continue
+    covered.push({ pick: p, expected })
+  }
+
+  // Position ordering, over the covered picks only, so the two figures
+  // in the copy describe the same set of players.
+  const byPosition = new Map<string, typeof covered>()
+  for (const c of covered) {
+    const list = byPosition.get(c.pick.position) ?? []
+    list.push(c)
+    byPosition.set(c.pick.position, list)
+  }
+  const actualAt = new Map<string, number>()
+  const expectedAt = new Map<string, number>()
+  for (const [, list] of byPosition) {
+    ;[...list]
+      .sort((a, b) => a.pick.pickOverall - b.pick.pickOverall)
+      .forEach((c, i) => actualAt.set(c.pick.playerId, i + 1))
+    ;[...list]
+      .sort((a, b) => a.expected - b.expected || a.pick.pickOverall - b.pick.pickOverall)
+      .forEach((c, i) => expectedAt.set(c.pick.playerId, i + 1))
+  }
+
+  const all: Divergence[] = []
+  for (const { pick, expected } of covered) {
+    const roundsDelta = (pick.pickOverall - expected) / teamCount
+    if (Math.abs(roundsDelta) < MIN_ROUNDS_OFF_ADP) continue
+    const expectedRound = Math.max(1, Math.ceil(expected / teamCount))
+    all.push({
+      pick,
+      consensusAtPosition: expectedAt.get(pick.playerId) ?? 0,
+      actualAtPosition: actualAt.get(pick.playerId) ?? 0,
+      delta: roundsDelta > 0 ? 1 : -1,
+      expectedPickOverall: Math.round(expected),
+      roundsDelta,
+      significance: Math.abs(roundsDelta) / expectedRound,
+    })
+  }
+
+  const bySignificance = (a: Divergence, b: Divergence) =>
+    b.significance - a.significance || Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta)
+
+  return {
+    fell: all.filter((d) => d.roundsDelta > 0).sort(bySignificance),
+    reached: all.filter((d) => d.roundsDelta < 0).sort(bySignificance),
+    positionsCompared: [...byPosition.keys()].sort(),
+  }
+}
+
 /** Rounds to the nearest half, which is the granularity people actually
  *  speak in: "a round early", "a round and a half late". */
 export function roundsLabel(roundsDelta: number): string {
@@ -203,53 +301,96 @@ export function roundsLabel(roundsDelta: number): string {
   return `${n} ${direction}`
 }
 
-/** "the 9th running back off the board, a round and a half late" */
-export function describeDivergence(d: Divergence, positionPlural: string): string {
+/**
+ * "the 9th running back off the board, a round and a half late on
+ * half-PPR ADP"
+ *
+ * The basis is a parameter rather than a constant because the two
+ * measurement paths are not equally strong, and the copy must not
+ * imply they are. Real ADP is named as ADP; the `search_rank` fallback
+ * names itself as a Sleeper ranking.
+ */
+export function describeDivergence(
+  d: Divergence,
+  positionPlural: string,
+  basis: string,
+): string {
   return (
     `${ordinal(d.actualAtPosition)} ${positionPlural} off the board, ` +
-    `${roundsLabel(d.roundsDelta)} on Sleeper's ranking.`
+    `${roundsLabel(d.roundsDelta)} on ${basis}.`
   )
 }
+
+/** Below this many compared picks, a team's average is one or two
+ *  picks wide and a single outlier decides its grade. Such teams are
+ *  listed with their figure but no letter. */
+const MIN_PICKS_FOR_GRADE = 3
 
 /**
  * Team-by-team draft value.
  *
- * Sums each team's rounds gained against consensus. A team that took
- * players consensus rated higher than where they went accumulates
- * positive rounds.
+ * ON THE PER-PICK AVERAGE. Teams are compared on rounds gained per
+ * COMPARED pick. Summing instead makes the grade partly a function of
+ * how many of a team's players the baseline happens to cover, which is
+ * not a thing anyone drafted well or badly. Averaging is also the
+ * honest treatment of the gap: a pick outside the sample is unmeasured,
+ * not a zero.
+ *
+ * ON SHOWING A RELATIVE FIGURE. The displayed number is the team's
+ * average minus the league's. It has to be, because the raw averages
+ * are systematically positive: a published ADP list is truncated, so a
+ * player who fell from round two to round thirteen is always inside it
+ * and counted, while a player who went early from outside the list
+ * cannot be counted at all. Falls are captured in full and reaches are
+ * undercounted, and the result is a slide where all ten teams "gained"
+ * — which reads as everybody having won their draft. Centring on the
+ * league mean states the same ordering without that implication. The
+ * bias shrinks as coverage rises: an in-season ADP list covers a draft
+ * almost completely, an archived one far less.
  *
  * ON THE LETTER GRADES. They are LEAGUE-RELATIVE and nothing more —
- * assigned by how far a team sits from its own league's mean, so
  * somebody always lands top and somebody always lands bottom. They do
- * not mean a draft was objectively good; consensus is frequently wrong
- * and a team can gain rounds by taking players everyone else had
- * correctly faded. Absolute grades need projections, which is UFD's
- * model. The rounds figure beside each letter is the honest number, and
- * it is why the letter is never shown without it.
+ * not mean a draft was objectively good; a baseline is frequently
+ * wrong, and a team can gain rounds by taking players everyone else
+ * had correctly faded. Absolute grades need projections, which is
+ * UFD's model. The rounds figure sits beside each letter for that
+ * reason, and the letter is never shown without it.
  */
 export function gradeTeamDrafts(divergences: Divergence[]): TeamDraftValue[] {
   const byTeam = new Map<string, { rounds: number; count: number }>()
   for (const d of divergences) {
     const cur = byTeam.get(d.pick.teamId) ?? { rounds: 0, count: 0 }
-    // A pick that FELL to you is value gained, so the sign flips.
+    // A pick that FELL to you is value gained, so the sign carries.
     cur.rounds += d.roundsDelta
     cur.count += 1
     byTeam.set(d.pick.teamId, cur)
   }
   if (byTeam.size === 0) return []
 
-  const rows = [...byTeam.entries()].map(([teamId, v]) => ({
+  const raw = [...byTeam.entries()].map(([teamId, v]) => ({
     teamId,
-    roundsGained: Math.round(v.rounds * 10) / 10,
+    perPick: v.rounds / v.count,
     picksCompared: v.count,
   }))
 
-  const spread = Math.max(...rows.map((r) => r.roundsGained)) -
-    Math.min(...rows.map((r) => r.roundsGained))
+  const mean = raw.reduce((t, r) => t + r.perPick, 0) / raw.length
+  const rows = raw.map((r) => ({
+    teamId: r.teamId,
+    roundsPerPick: Math.round(r.perPick * 10) / 10,
+    vsLeague: Math.round((r.perPick - mean) * 10) / 10,
+    picksCompared: r.picksCompared,
+  }))
+
+  const spread =
+    Math.max(...rows.map((r) => r.vsLeague)) - Math.min(...rows.map((r) => r.vsLeague))
 
   const sorted = [...rows].sort(
-    (a, b) => b.roundsGained - a.roundsGained || a.teamId.localeCompare(b.teamId),
+    (a, b) => b.vsLeague - a.vsLeague || a.teamId.localeCompare(b.teamId),
   )
+
+  // Only teams with enough compared picks sit on the curve; grading a
+  // team off two picks would hand out a letter the data cannot support.
+  const gradable = sorted.filter((r) => r.picksCompared >= MIN_PICKS_FOR_GRADE)
 
   /**
    * Graded on a CURVE by rank, not by distance from the mean.
@@ -262,11 +403,12 @@ export function gradeTeamDrafts(divergences: Divergence[]): TeamDraftValue[] {
    * and it is no less truthful because the whole measure was already
    * league-relative.
    */
-  const letter = (rank: number): string => {
+  const letter = (rankAmongGradable: number): string => {
     // A league where every draft gained the same is not a league with a
     // best and worst draft; grading them apart would invent a spread.
     if (spread === 0) return 'B'
-    const pct = sorted.length === 1 ? 0 : (rank - 1) / (sorted.length - 1)
+    const pct =
+      gradable.length === 1 ? 0 : (rankAmongGradable - 1) / (gradable.length - 1)
     if (pct <= 0.15) return 'A'
     if (pct <= 0.35) return 'B+'
     if (pct <= 0.65) return 'B'
@@ -274,7 +416,16 @@ export function gradeTeamDrafts(divergences: Divergence[]): TeamDraftValue[] {
     return 'D'
   }
 
-  return sorted.map((r, i) => ({ ...r, rank: i + 1, grade: letter(i + 1) }))
+  let gradedSoFar = 0
+  return sorted.map((r, i) => {
+    const eligible = r.picksCompared >= MIN_PICKS_FOR_GRADE
+    if (eligible) gradedSoFar += 1
+    return {
+      ...r,
+      rank: i + 1,
+      grade: eligible ? letter(gradedSoFar) : '—',
+    }
+  })
 }
 
 function ordinal(n: number): string {

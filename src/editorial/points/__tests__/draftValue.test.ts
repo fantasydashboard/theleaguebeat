@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { findDraftDivergences, type ValuedPick } from '@/editorial/points/draftValue'
+import {
+  findDraftDivergences,
+  gradeTeamDrafts,
+  type Divergence,
+  type ValuedPick,
+} from '@/editorial/points/draftValue'
 
 const pick = (n: number, pos: string, id: string): ValuedPick => ({
   pickOverall: n, round: Math.ceil(n / 10), playerId: id,
@@ -98,5 +103,82 @@ describe('significance weighting', () => {
     // divided by expected round 1 = 6.
     expect(d.roundsDelta).toBeCloseTo(6, 5)
     expect(d.significance).toBeCloseTo(6, 5)
+  })
+})
+
+describe('gradeTeamDrafts', () => {
+  /** A divergence carrying only the fields the grade reads. */
+  const div = (teamId: string, roundsDelta: number, i: number): Divergence => ({
+    pick: {
+      pickOverall: i + 1,
+      round: 1,
+      playerId: `${teamId}-${i}`,
+      playerName: `Player ${teamId}${i}`,
+      position: 'RB',
+      teamId,
+    },
+    consensusAtPosition: 1,
+    actualAtPosition: 1,
+    delta: roundsDelta > 0 ? 1 : -1,
+    expectedPickOverall: 1,
+    roundsDelta,
+    significance: Math.abs(roundsDelta),
+  })
+
+  /** n divergences of equal size for one team. */
+  const team = (id: string, each: number, n: number) =>
+    Array.from({ length: n }, (_, i) => div(id, each, i))
+
+  it('ranks on value per pick, not on total value', () => {
+    // THE distinguishing case. `few` averages +3.0 over 2 picks
+    // (total +6); `many` averages +1.5 over 6 picks (total +9).
+    // Summing puts `many` first, which rewards having more of your
+    // roster inside the baseline's sample rather than drafting better.
+    const graded = gradeTeamDrafts([
+      ...team('few', 3, 4),
+      ...team('many', 1.5, 8),
+    ])
+    expect(graded.map((g) => g.teamId)).toEqual(['few', 'many'])
+    expect(graded[0].roundsPerPick).toBeCloseTo(3, 5)
+    expect(graded[1].roundsPerPick).toBeCloseTo(1.5, 5)
+  })
+
+  it('reports figures centred on the league, so they are not all positive', () => {
+    // Every team here gained against the baseline — the normal shape,
+    // since a truncated ADP list captures falls in full while reaches
+    // from outside it cannot be counted. Reporting the raw averages
+    // would put a "+" beside all three and read as everybody winning.
+    const graded = gradeTeamDrafts([
+      ...team('a', 3, 4),
+      ...team('b', 2, 4),
+      ...team('c', 1, 4),
+    ])
+    expect(graded.every((g) => g.roundsPerPick > 0)).toBe(true)
+    expect(Math.max(...graded.map((g) => g.vsLeague))).toBeGreaterThan(0)
+    expect(Math.min(...graded.map((g) => g.vsLeague))).toBeLessThan(0)
+    // Centred means the deviations cancel.
+    const total = graded.reduce((t, g) => t + g.vsLeague, 0)
+    expect(total).toBeCloseTo(0, 5)
+  })
+
+  it('withholds a letter from a team with too few compared picks', () => {
+    // Two picks is not a draft grade — one outlier would decide it.
+    const graded = gradeTeamDrafts([
+      ...team('thin', 5, 2),
+      ...team('solid', 1, 6),
+      ...team('other', 0, 6),
+    ])
+    expect(graded.find((g) => g.teamId === 'thin')?.grade).toBe('—')
+    expect(graded.find((g) => g.teamId === 'solid')?.grade).toMatch(/^[ABCD]\+?$/)
+  })
+
+  it('does not invent a spread when every draft came out level', () => {
+    const graded = gradeTeamDrafts([...team('a', 2, 4), ...team('b', 2, 4)])
+    expect(graded.map((g) => g.grade)).toEqual(['B', 'B'])
+    expect(graded.every((g) => g.vsLeague === 0)).toBe(true)
+  })
+
+  it('returns nothing when there is nothing to compare', () => {
+    expect(gradeTeamDrafts([])).toEqual([])
   })
 })

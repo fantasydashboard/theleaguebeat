@@ -11,11 +11,13 @@
  * and the presenter finds out which they have BEFORE they start
  * talking.
  *
- * Deliberately no pick GRADES. Judging a pick needs a projection model,
- * and that model is UFD's. What the deck does say is position-relative
- * order ("the fifth running back off the board"), which is true whatever
- * the league's settings are — see `positionOrder` for why the obvious
- * shortcut fails.
+ * Deliberately no ABSOLUTE pick grades. Saying a pick was good needs a
+ * projection model, and that model is UFD's. What the deck says instead
+ * is divergence from where a player was expected to go — measured
+ * against real ADP for the league's own scoring format where that
+ * resolves, and against Sleeper's `search_rank` only as a fallback. The
+ * copy names whichever was used; see `points/adp.ts` for the gap
+ * between them.
  */
 import type { CategoryLeagueDataDraftPick } from '../types'
 import {
@@ -26,10 +28,12 @@ import {
 } from '../points/draftStory'
 import {
   findDraftDivergences,
+  findAdpDivergences,
   describeDivergence,
   gradeTeamDrafts,
   type ValuedPick,
 } from '../points/draftValue'
+import type { AdpLookup } from '../points/adp'
 import type { PresentDeck, PresentSlide } from './types'
 
 /** What the deck needs to draw a team. Resolved by the caller, which
@@ -49,9 +53,15 @@ export interface DraftDeckInput {
   teamName: (teamId: string) => string
   /** Optional richer lookup, for logos. Falls back to `teamName`. */
   team?: (teamId: string) => DeckTeam | undefined
-  /** Consensus rank for a player, lower being better. Optional: with
-   *  no source of consensus the deck simply omits the steal and reach
-   *  slides rather than guessing at them. */
+  /**
+   * Real ADP, when it could be resolved. This is the PREFERRED
+   * baseline — see `points/adp.ts` for why it beats the fallback by a
+   * wide, measured margin.
+   */
+  adp?: AdpLookup
+  /** Consensus rank for a player, lower being better. The FALLBACK
+   *  baseline, used only when ADP could not be fetched. With neither,
+   *  the deck omits the steal and reach slides rather than guessing. */
   consensusRank?: (playerId: string) => number | undefined
 }
 
@@ -159,10 +169,12 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     })
   }
 
-  // Steals and reaches. Measured WITHIN each position, so positional
-  // scarcity cancels out — see draftValue.ts for why comparing across
-  // positions produces four quarterbacks and no credibility.
-  if (input.consensusRank) {
+  // Steals and reaches. Two baselines, and they are not equal: real
+  // ADP when it resolved, Sleeper's `search_rank` only as a fallback.
+  // The copy names whichever was used, because the reader is being
+  // asked to accept a judgement about their own draft and is entitled
+  // to know what it rests on.
+  if (input.adp || input.consensusRank) {
     const valued: ValuedPick[] = input.picks.map((p) => ({
       pickOverall: p.pickOverall,
       round: p.round,
@@ -171,7 +183,31 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       position: p.position,
       teamId: p.draftedByTeamId,
     }))
-    const div = findDraftDivergences(valued, input.consensusRank, facts.teamCount)
+    // `mlbTeam` is the platform team abbreviation whatever the sport —
+    // the field predates football and is the NFL team here. Needed to
+    // resolve defenses, which no source names the same way twice.
+    const nflTeam = new Map(input.picks.map((p) => [p.playerId, p.mlbTeam ?? '']))
+
+    const div = input.adp
+      ? findAdpDivergences(
+          valued,
+          input.adp.expectedPickOf,
+          facts.teamCount,
+          (p) => nflTeam.get(p.playerId) ?? '',
+        )
+      : findDraftDivergences(valued, input.consensusRank!, facts.teamCount)
+
+    // Named for the reader, so the basis of every figure on the next
+    // four slides is stated rather than assumed.
+    const basis = input.adp
+      ? `${input.adp.format} ADP`
+      : "Sleeper's player ranking"
+    const basisSupport = input.adp
+      ? `Against ${input.adp.basis}. Ranked by how much the gap matters, ` +
+        'not how wide it is.'
+      : "Against Sleeper's player ranking — the only ordering it publishes, and a " +
+        'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
+        'matters, not how wide it is.'
 
     if (div.fell.length > 0) {
       const top = div.fell[0]
@@ -179,17 +215,14 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         kind: 'statement',
         eyebrow: 'The steal',
         headline: `${input.teamName(top.pick.teamId)} got ${top.pick.playerName} at ${top.pick.pickOverall}.`,
-        support: describeDivergence(top, positionWord(top.pick.position, 1)),
+        support: describeDivergence(top, positionWord(top.pick.position, 1), basis),
       })
       if (div.fell.length > 1) {
         slides.push({
           kind: 'list',
           eyebrow: 'Fell furthest',
           headline: 'Who lasted longer than they should have.',
-          support:
-            "Against Sleeper's player ranking — the only ordering it publishes, and a " +
-            'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
-            'matters, not how wide it is.',
+          support: basisSupport,
           revealOneByOne: true,
           rows: div.fell.slice(0, 5).map((d) => ({
             lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
@@ -207,10 +240,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         kind: 'list',
         eyebrow: 'Went early',
         headline: 'Picks the room did not see coming.',
-        support:
-          "Against Sleeper's player ranking — the only ordering it publishes, and a " +
-          'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
-          'matters, not how wide it is.',
+        support: basisSupport,
         revealOneByOne: true,
         rows: div.reached.slice(0, 5).map((d) => ({
           lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
@@ -230,16 +260,16 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       slides.push({
         kind: 'list',
         eyebrow: 'Draft grades',
-        headline: "Graded on a curve, against Sleeper's rankings.",
+        headline: `Graded on a curve, against ${basis}.`,
         support:
-          "Rounds of value each team gained by taking players later than Sleeper's " +
-          'ranking had them. Letters are relative to this league.',
+          `Rounds gained per pick against ${basis}, next to the league ` +
+          'average. Letters are relative to this league.',
         revealOneByOne: true,
         rows: graded.map((g) => ({
           lead: g.grade,
           label: input.teamName(g.teamId),
           sub: `${g.picksCompared} picks compared`,
-          value: `${g.roundsGained > 0 ? '+' : ''}${g.roundsGained} rds`,
+          value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}/pick`,
           ...teamVisual(input, g.teamId),
         })),
       })
