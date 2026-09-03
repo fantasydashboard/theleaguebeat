@@ -59,7 +59,10 @@ import type {
 } from '../transactions/types'
 import type { PlayerNight } from '../players/types'
 import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
-import { buildPointsStandings } from './pointsStandings'
+import {
+  buildPointsStandings,
+  buildWeeklyScoresFromMatchups,
+} from './pointsStandings'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta, hydrateMatchupDailyTrends } from '../snapshots'
@@ -298,6 +301,10 @@ async function buildYahooLeagueData(
 
     const { standings, seasonRankHistory } = buildPointsStandings(teamList, allPointsWeeks)
 
+    // Per-team weekly scores, which is what all-play power needs. The
+    // board deck was Sleeper-only purely because this was missing.
+    const weeklyScores = buildWeeklyScoresFromMatchups(allPointsWeeks)
+
     // Chronicles: champions + all-time manager legacy. The category
     // builders are format-agnostic (champion = final rank 1; legacy sums
     // standings W/L/T, which is the matchup record for points).
@@ -356,6 +363,7 @@ async function buildYahooLeagueData(
       weeklyPointsAverage,
       standings,
       seasonRankHistory,
+      weeklyScores,
       seasonHistory,
       managerLegacy,
       h2hRecords,

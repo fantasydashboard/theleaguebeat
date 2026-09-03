@@ -58,7 +58,10 @@ import { buildPlayerNights, normalizeName } from '../players/buildPlayerNights'
 import { buildInjuryReports, type InjuryReport } from '../players/injuries'
 import { buildSlumpReports, type SlumpReport } from '../players/slumps'
 import { hydrateSnapshotDelta } from '../snapshots'
-import { buildPointsStandings } from './pointsStandings'
+import {
+  buildPointsStandings,
+  buildWeeklyScoresFromMatchups,
+} from './pointsStandings'
 import { teamColorHash } from './colorHash'
 import {
   computeProjectionFromPerCat,
@@ -364,6 +367,10 @@ export async function espnLeagueToCategoryData(
 
     const { standings, seasonRankHistory } = buildPointsStandings(teamsOutMinimal, allPointsWeeks)
 
+    // Per-team weekly scores, which is what all-play power needs. The
+    // board deck was Sleeper-only purely because this was missing.
+    const weeklyScores = buildWeeklyScoresFromMatchups(allPointsWeeks)
+
     // Chronicles champions — buildSeasonHistory reads only prior seasons'
     // final W/L/T + rank (champion = rank 1), so it's format-agnostic.
     // ESPN has no manager-legacy builder (its category path has none
@@ -401,6 +408,7 @@ export async function espnLeagueToCategoryData(
       weeklyPointsAverage,
       standings,
       seasonRankHistory,
+      weeklyScores,
       seasonHistory,
       h2hRecords,
       playerNights: pointsPlayerNights,

@@ -20,6 +20,7 @@
  */
 
 import type {
+  PointsWeeklyScore,
   CategoryLeagueDataTeam,
   CategoryLeagueDataStanding,
   CategoryLeagueDataWeeklyRanks,
@@ -155,4 +156,47 @@ export function buildPointsStandings(
   standings.sort((a, b) => a.rank - b.rank)
 
   return { standings, seasonRankHistory }
+}
+
+
+/**
+ * Every team's own score for each completed week.
+ *
+ * The contract wants a team's OWN score rather than a matchup result,
+ * because that is what a points league is measured on and because
+ * reading it per-team survives byes, odd roster counts and
+ * median-match leagues without any pairing logic. All-play — the
+ * record a team would hold having played everyone every week — is
+ * computable from this and from nothing else the contract carries.
+ *
+ * Platform-neutral by construction: both the ESPN and Yahoo adapters
+ * already map their raw weeks into `LeagueDataPointsMatchup[]` for the
+ * standings above, so this reads the same input and needs no per-
+ * platform knowledge. Sleeper builds its own from raw matchups because
+ * it never goes through this shape.
+ *
+ * A 0-0 matchup is an unplayed week, not two catastrophic
+ * performances, and is skipped. Downstream `computePointsPowerScores`
+ * also drops non-positive scores, but emitting them here would put
+ * fiction on the contract for every other consumer to re-filter.
+ */
+export function buildWeeklyScoresFromMatchups(
+  byWeek: Map<number, LeagueDataPointsMatchup[]>,
+): PointsWeeklyScore[] {
+  const out: PointsWeeklyScore[] = []
+  const weeks = [...byWeek.keys()].sort((a, b) => a - b)
+
+  for (const week of weeks) {
+    for (const m of byWeek.get(week) ?? []) {
+      if (m.status !== 'final') continue
+      if (m.homePoints === 0 && m.awayPoints === 0) continue
+      if (Number.isFinite(m.homePoints)) {
+        out.push({ teamId: m.homeTeamId, week, points: m.homePoints })
+      }
+      if (Number.isFinite(m.awayPoints)) {
+        out.push({ teamId: m.awayTeamId, week, points: m.awayPoints })
+      }
+    }
+  }
+  return out
 }

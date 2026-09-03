@@ -364,7 +364,51 @@ async function buildBoard(args: {
   picks?: { playerId: string; position: string; draftedByTeamId: string }[]
 }): Promise<PresentDeck | null> {
   const { baseline, rosterPositions, leagueId } = args
-  if (!baseline || !rosterPositions?.length) return null
+
+  // IN-SEASON FIRST, and platform-neutral. All-play power needs only
+  // `weeklyScores` and `standings`, both on the league contract, so
+  // once games are played the board works for ESPN and Yahoo without
+  // any of the Sleeper-specific fetches below. Computing this before
+  // the preseason path is what lets those platforms skip them.
+  const pointsData = args.data as unknown as LeagueDataH2HPoints
+  const power = hasPlayedGames(pointsData) ? computePointsPowerScores(pointsData) : []
+  const records = (pointsData.standings ?? []).map((st) => ({
+    teamId: st.teamId,
+    wins: st.catWins,
+    losses: st.catLosses,
+    ties: st.catTies,
+  }))
+
+  let previousPowerRank: ((teamId: string) => number | undefined) | undefined
+  if (power.length >= 4 && (pointsData.weeklyScores?.length ?? 0) > 0) {
+    const latest = Math.max(...pointsData.weeklyScores!.map((w) => w.week))
+    const priorScores = pointsData.weeklyScores!.filter((w) => w.week < latest)
+    if (priorScores.length > 0) {
+      const prior = computePointsPowerScores({ ...pointsData, weeklyScores: priorScores })
+      const byTeam = new Map(
+        [...prior].sort((a, b) => b.score - a.score).map((r, i) => [r.teamId, i + 1]),
+      )
+      previousPowerRank = (teamId) => byTeam.get(teamId)
+    }
+  }
+
+  // The preseason edition needs Sleeper's rosters, schedule and
+  // projections, none of which exist for the other platforms. When
+  // there are results, none of it is needed.
+  if (!baseline || !rosterPositions?.length) {
+    return power.length >= 4
+      ? buildBoardDeck({
+          leagueName: args.record.league_name || args.data.leagueName,
+          season: args.data.currentSeason,
+          strength: [],
+          power,
+          records,
+          previousPowerRank,
+          teamName: args.teamName,
+          team: args.teamVisual,
+        })
+      : null
+  }
 
   const rostersRes = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`)
   if (!rostersRes.ok) return null
@@ -386,39 +430,6 @@ async function buildBoard(args: {
     }
   }
   const strength = rankRosterStrength(players, baseline.pointsOf, rosterPositions)
-
-  // Once there are results, they beat the forecast. The board is the
-  // same deck either way — it changes its evidence, not its claim —
-  // and a projection-based ranking in week six would just be a stale
-  // forecast wearing a power ranking's clothes.
-  const pointsData = args.data as unknown as LeagueDataH2HPoints
-  const power = hasPlayedGames(pointsData) ? computePointsPowerScores(pointsData) : []
-  const records = (pointsData.standings ?? []).map((st) => ({
-    teamId: st.teamId,
-    wins: st.catWins,
-    losses: st.catLosses,
-    ties: st.catTies,
-  }))
-
-  // Last week's power ranking, for movement. Recomputed from the same
-  // scores with the latest week withheld rather than stored — a
-  // snapshot table would have to exist before the first week it could
-  // describe, and this needs no migration to be correct today.
-  let previousPowerRank: ((teamId: string) => number | undefined) | undefined
-  if (power.length >= 4 && (pointsData.weeklyScores?.length ?? 0) > 0) {
-    const latest = Math.max(...pointsData.weeklyScores!.map((w) => w.week))
-    const priorScores = pointsData.weeklyScores!.filter((w) => w.week < latest)
-    if (priorScores.length > 0) {
-      const prior = computePointsPowerScores({
-        ...pointsData,
-        weeklyScores: priorScores,
-      })
-      const ranked = [...prior].sort((a, b) => b.score - a.score)
-      const byTeam = new Map(ranked.map((r, i) => [r.teamId, i + 1]))
-      previousPowerRank = (teamId) => byTeam.get(teamId)
-    }
-  }
-
   if (power.length < 4 && strength.length < 4) return null
 
   // The schedule, for projected records. Sleeper publishes every week's

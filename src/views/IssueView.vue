@@ -1358,16 +1358,24 @@ const showPointsDraft = computed(() => !!livePointsData.value && hasDraftData.va
 /**
  * Whether the power-rankings deck can actually be built.
  *
- * It needs Sleeper's ADP and season projections, which are matched on
- * Sleeper `player_id`. An ESPN or Yahoo draft pick carries that
- * platform's own player id and resolves to nothing, so the deck comes
- * back empty. Sleeper's player blob does publish `espn_id` and
- * `yahoo_id` cross-references, so this is bridgeable — but until that
- * bridge exists the button should not be offered.
+ * Two editions, two requirements:
+ *
+ *   in season   all-play power, from `weeklyScores` and `standings` on
+ *               the contract. Every platform builds these now, so any
+ *               league qualifies once games have been played.
+ *   preseason   projections, current rosters and the published
+ *               schedule — all Sleeper-specific fetches. ESPN and
+ *               Yahoo cannot produce this edition.
+ *
+ * So a non-Sleeper league gets the button the moment week one closes,
+ * and not before. Offering it earlier would land on an empty deck.
  */
-const canPresentBoard = computed(
-  () => showPointsDraft.value && livePlatform.value === 'sleeper',
-)
+const canPresentBoard = computed(() => {
+  const data = livePointsData.value
+  if (!data) return false
+  if (livePlatform.value === 'sleeper') return showPointsDraft.value
+  return hasPlayedGames(data)
+})
 
 /** The few facts worth stating outright, each only when present. */
 const pointsDraftFacts = computed(() => {
