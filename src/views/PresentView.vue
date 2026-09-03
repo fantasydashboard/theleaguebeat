@@ -66,7 +66,13 @@
                bottom of their own grade sheet. -->
           <ol
             class="list-rows"
-            :class="{ 'is-dense': slide.rows.length > 6 }"
+            :class="{
+              'is-dense': slide.rows.length > 6,
+              'is-split': slide.rows.length > 6,
+            }"
+            :style="slide.rows.length > 6
+              ? { '--rows-per-column': rowsPerColumn(slide.rows.length) }
+              : undefined"
             role="list"
           >
             <li
@@ -163,6 +169,22 @@ const backLink = computed(() => {
 })
 
 const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
+
+/**
+ * Rows per column for a long list.
+ *
+ * The grid derives its column COUNT from this — `grid-auto-flow:
+ * column` with a fixed row count creates as many columns as the rows
+ * need. So capping rows per column caps the list's HEIGHT, and the
+ * height is the whole problem: a fourteen-team league in two columns
+ * is seven rows tall, which overflows a 700px-high window by a hair
+ * and takes the winner with it. Three columns at five rows is the same
+ * height as a ten-team league, which fits every viewport measured.
+ */
+function rowsPerColumn(total: number): number {
+  const columns = total > 12 ? 3 : 2
+  return Math.ceil(total / columns)
+}
 
 /** A list slide with reveal-one-by-one consumes one step per row. */
 const stepsBefore = computed(() => {
@@ -539,6 +561,35 @@ watch(() => route.params.leagueId, () => void load())
 }
 /* Long lists: tighter rows and a smaller logo, so a ten-team grade
    sheet fits on one screen without scrolling. */
+/*
+ * Long lists run in two columns rather than one tall one.
+ *
+ * A ten-team grade sheet does not fit a laptop viewport in a single
+ * column, and the countdown reveals worst-to-best — so the rows that
+ * overflowed were precisely the ones the slide exists to show. The
+ * presenter reached the end of their own reveal and the winner was
+ * off screen.
+ *
+ * `grid-auto-flow: column` with a fixed row count fills DOWN the first
+ * column and then down the second, which keeps reading order and keeps
+ * the reveal order: rows appear in sequence, the last one lands bottom
+ * right, and every row stays on screen once revealed.
+ */
+.list-rows.is-split {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--rows-per-column, 5), auto);
+  grid-auto-columns: 1fr;
+  column-gap: 14px;
+}
+/* One column again when there is no width to split into — two columns
+   on a phone would make every row too narrow to read. */
+@media (max-width: 900px) {
+  .list-rows.is-split {
+    display: flex;
+    flex-direction: column;
+  }
+}
 .list-rows.is-dense { gap: 4px; }
 .list-rows.is-dense .list-row { padding: 8px 14px; gap: 12px; }
 .list-rows.is-dense .list-label { font-size: 1.02rem; }
