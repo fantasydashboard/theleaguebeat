@@ -12,8 +12,13 @@ const strength = (spec: [string, number][]): TeamStrength[] => {
       pointsPerWeek,
       vsLeaguePerWeek: Math.round((pointsPerWeek - mean) * 10) / 10,
       slotsFilled: 9,
-      bestStarterId: `${teamId}-star`,
-      bestStarterPoints: 300,
+      bestStarterId: `${teamId}-qb`,
+      bestStarterPoints: 340,
+      edgePlayerId: `${teamId}-rb`,
+      edgePlayerPosition: 'RB',
+      edgePlayerVsLeague: 42,
+      bestPosition: { position: 'RB', vsLeague: 55 },
+      worstPosition: { position: 'TE', vsLeague: -30 },
       rank: 0,
     }))
     .sort((a, b) => b.pointsPerWeek - a.pointsPerWeek)
@@ -82,14 +87,41 @@ describe('buildBoardDeck', () => {
     })
   })
 
-  it('names the best STARTER, not the best rostered player', () => {
+  it('names the positional EDGE, not the highest scorer', () => {
+    // Quarterbacks out-project every other position in raw points, so
+    // naming the top scorer named the QB on all ten cards and told the
+    // room nothing. The edge is measured against positional peers.
     const deck = buildBoardDeck({
       ...base,
       strength: five,
-      playerName: (id) => (id === 'a-star' ? 'Josh Allen' : undefined),
+      playerName: (id) =>
+        id.endsWith('-qb') ? 'Josh Allen' : id.endsWith('-rb') ? 'Bijan Robinson' : undefined,
     })
     const top = cards(deck).find((c) => c.rank === 1)!
-    expect(top.notes?.some((n) => n.includes('Josh Allen'))).toBe(true)
+    const notes = (top.notes ?? []).join(' ')
+    expect(notes).toContain('Bijan Robinson')
+    expect(notes).not.toContain('Josh Allen')
+  })
+
+  it('leaves out record and opponent-average chips', () => {
+    // Across a real 10-team league they span 6.1-7.9 to 7.9-6.1 and
+    // 105.2 to 106.7 — ten cards showing effectively the same two
+    // numbers. Positional strength varies by an order of magnitude
+    // more and is what a manager can act on.
+    const deck = buildBoardDeck({ ...base, strength: five })
+    for (const c of cards(deck)) {
+      const labels = (c.chips ?? []).map((ch) => ch.label).join(' ')
+      expect(labels).not.toContain('projected record')
+      expect(labels).not.toContain('opponents avg')
+      expect(labels).toContain('/wk at RB')
+    }
+  })
+
+  it('says power rankings, not just "the board"', () => {
+    const deck = buildBoardDeck({ ...base, strength: five })!
+    expect(deck.title).toBe('Power rankings')
+    const cold = deck.slides[0] as { subtitle?: string }
+    expect(cold.subtitle).toBe('Power rankings')
   })
 
   it('says when a starting slot has nobody in it', () => {

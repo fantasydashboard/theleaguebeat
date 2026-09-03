@@ -7,7 +7,16 @@
  * season gives it better material:
  *
  *   preseason  projected points per week from current rosters
- *   in season  all-play power from real results (computePointsPowerScores)
+ *   in season  record, all-play, and the luck read from real results
+ *              (computePointsPowerScores already computes the first two)
+ *
+ * The preseason card deliberately carries NEITHER projected record nor
+ * opponent average. Across a real 10-team league they span 6.1-7.9 to
+ * 7.9-6.1 and 105.2 to 106.7 — ten cards showing the same two numbers,
+ * which costs the card its best space and teaches a room nothing. Once
+ * games are played there is a real record to show, an all-play record
+ * beside it, and a luck verdict between them; those earn the space
+ * that a projection of them never could.
  *
  * This file builds the preseason edition. It exists because preseason
  * is the one moment a projection-based ranking is the honest answer
@@ -104,7 +113,7 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
   slides.push({
     kind: 'cold-open',
     title: input.leagueName,
-    subtitle: 'The board',
+    subtitle: 'Power rankings',
     // The basis stated once, up front, rather than repeated on ten
     // cards. Every number after this is projected points per week.
     meta: `${input.season} · preseason · ${format}projections`,
@@ -123,9 +132,12 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
     const priorRank = input.draftRank?.(t.teamId)
     const notes: string[] = []
 
-    const bestName = t.bestStarterId ? input.playerName?.(t.bestStarterId) : undefined
-    if (bestName && t.bestStarterPoints) {
-      notes.push(`Leans on ${bestName} — ${t.bestStarterPoints} projected points.`)
+    const edgeName = t.edgePlayerId ? input.playerName?.(t.edgePlayerId) : undefined
+    if (edgeName && t.edgePlayerVsLeague !== undefined && t.edgePlayerVsLeague > 0) {
+      notes.push(
+        `${edgeName} is the edge — ${t.edgePlayerVsLeague} points a week clear of ` +
+          `the average starting ${t.edgePlayerPosition} in this league.`,
+      )
     }
     // A hole is a starting slot with nobody eligible for it. The
     // projection counts it as zero, so saying so explains a low number
@@ -135,6 +147,12 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
       notes.push(
         `${holes} starting slot${holes === 1 ? '' : 's'} with nobody to fill ` +
           `${holes === 1 ? 'it' : 'them'} — counted as zero here.`,
+      )
+    }
+    if (t.worstPosition && t.worstPosition.vsLeague < 0) {
+      notes.push(
+        `Gets ${Math.abs(t.worstPosition.vsLeague)} points a week less from ` +
+          `${t.worstPosition.position} than the league does.`,
       )
     }
     if (p && p.scheduleSwing !== 0) {
@@ -158,13 +176,34 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
         priorRank !== undefined && priorRank !== t.rank
           ? { places: priorRank - t.rank, label: 'since draft night' }
           : undefined,
+      // Projected record and opponent average are deliberately NOT
+      // here. Across a real 10-team league they span 6.1-7.9 to
+      // 7.9-6.1 and 105.2 to 106.7 — a spread so narrow that ten cards
+      // showed effectively the same two numbers, which teaches a room
+      // nothing and costs the card its best space. Positional strength
+      // varies by an order of magnitude more, and is what a manager can
+      // actually act on.
       chips: [
-        ...(p ? [{ value: recordLabel(p), label: 'projected record' }] : []),
         {
           value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}`,
           label: 'vs league avg',
         },
-        ...(p ? [{ value: `${p.opponentPointsPerWeek}`, label: 'opponents avg' }] : []),
+        ...(t.bestPosition && t.bestPosition.vsLeague > 0
+          ? [
+              {
+                value: `+${t.bestPosition.vsLeague}`,
+                label: `/wk at ${t.bestPosition.position}`,
+              },
+            ]
+          : []),
+        ...(t.worstPosition && t.worstPosition.vsLeague < 0
+          ? [
+              {
+                value: `${t.worstPosition.vsLeague}`,
+                label: `/wk at ${t.worstPosition.position}`,
+              },
+            ]
+          : []),
       ],
       notes,
       ...teamVisual(input, t.teamId),
@@ -242,5 +281,5 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
     sub: 'It only counts once they play.',
   })
 
-  return { id: 'board', title: 'The board', slides }
+  return { id: 'board', title: 'Power rankings', slides }
 }

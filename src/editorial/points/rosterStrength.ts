@@ -58,6 +58,34 @@ export interface TeamStrength {
   bestStarterId?: string
   /** Projected points of that player. */
   bestStarterPoints?: number
+  /**
+   * The starter furthest ABOVE the league's average starter at his own
+   * position — the team's genuine edge.
+   *
+   * Not the same as the highest scorer, and that difference is the
+   * whole reason this exists. Quarterbacks out-project every other
+   * position in raw points, so "who scores most" named the QB on all
+   * ten cards and told a league nothing it did not already know.
+   * Measuring against positional peers surfaces the player a team is
+   * actually ahead on.
+   */
+  edgePlayerId?: string
+  edgePlayerPosition?: string
+  /** How far above the average starter at that position, PER WEEK.
+   *  Season totals read as abstract next to a per-week headline; the
+   *  card states one unit throughout. */
+  edgePlayerVsLeague?: number
+  /**
+   * Strongest and thinnest starting positions against the league, per
+   * week across the whole position group.
+   *
+   * A total, not a per-starter average, and deliberately: a team that
+   * flexes three receivers really does get more of its week from
+   * receivers than the league does. That is a fact about the lineup it
+   * fields, which is what this measures.
+   */
+  bestPosition?: { position: string; vsLeague: number }
+  worstPosition?: { position: string; vsLeague: number }
 }
 
 /**
@@ -113,7 +141,14 @@ export function startingSlots(rosterPositions: readonly string[]): string[] {
 export function bestLineupPoints(
   players: readonly { position: string; points: number; playerId?: string }[],
   slots: readonly string[],
-): { total: number; filled: number; best?: { playerId?: string; points: number } } {
+): {
+  total: number
+  filled: number
+  best?: { playerId?: string; points: number }
+  /** Who actually started, so callers can analyse the lineup by
+   *  position rather than re-deriving it. */
+  starters: { playerId?: string; position: string; points: number }[]
+} {
   const ordered = [...slots].sort(
     (a, b) => eligibleFor(a).size - eligibleFor(b).size,
   )
@@ -123,6 +158,7 @@ export function bestLineupPoints(
   let total = 0
   let filled = 0
   let best: { playerId?: string; points: number } | undefined
+  const starters: { playerId?: string; position: string; points: number }[] = []
   for (const slot of ordered) {
     const eligible = eligibleFor(slot)
     const i = pool.findIndex((p, idx) => !used[idx] && eligible.has(p.position.toUpperCase()))
@@ -130,13 +166,18 @@ export function bestLineupPoints(
     used[i] = true
     total += pool[i].points
     filled += 1
+    starters.push({
+      playerId: pool[i].playerId,
+      position: pool[i].position.toUpperCase(),
+      points: pool[i].points,
+    })
     // Best STARTER, not best rostered player — a monster on the bench
     // is not what this team puts on the field.
     if (!best || pool[i].points > best.points) {
       best = { playerId: pool[i].playerId, points: pool[i].points }
     }
   }
-  return { total, filled, best }
+  return { total, filled, best, starters }
 }
 
 /**
@@ -181,23 +222,83 @@ export function rankRosterStrength(
   if (byTeam.size === 0) return []
 
   const perWeek = projectionWeeks > 0 ? projectionWeeks : PROJECTION_WEEKS
-  const rows = [...byTeam.entries()].map(([teamId, squad]) => {
-    const { total, filled, best } = bestLineupPoints(squad, slots)
+  const lineups = [...byTeam.entries()].map(([teamId, squad]) => ({
+    teamId,
+    ...bestLineupPoints(squad, slots),
+  }))
+
+  // League averages per position, over STARTERS only. Bench players
+  // are excluded for the same reason they score nothing above: they
+  // are not what a team puts on the field, and including them would
+  // let a deep bench disguise a thin lineup.
+  const leaguePositionTotals = new Map<string, number[]>()
+  const leaguePlayerPoints = new Map<string, number[]>()
+  for (const l of lineups) {
+    const perPosition = new Map<string, number>()
+    for (const st of l.starters) {
+      perPosition.set(st.position, (perPosition.get(st.position) ?? 0) + st.points)
+      leaguePlayerPoints.set(st.position, [
+        ...(leaguePlayerPoints.get(st.position) ?? []),
+        st.points,
+      ])
+    }
+    for (const [position, points] of perPosition) {
+      leaguePositionTotals.set(position, [
+        ...(leaguePositionTotals.get(position) ?? []),
+        points,
+      ])
+    }
+  }
+  const mean = (xs: number[]) => xs.reduce((t, x) => t + x, 0) / xs.length
+  const positionMean = new Map(
+    [...leaguePositionTotals].map(([position, totals]) => [position, mean(totals)]),
+  )
+  const playerMean = new Map(
+    [...leaguePlayerPoints].map(([position, pts]) => [position, mean(pts)]),
+  )
+
+  const rows = lineups.map((l) => {
+    const perPosition = new Map<string, number>()
+    for (const st of l.starters) {
+      perPosition.set(st.position, (perPosition.get(st.position) ?? 0) + st.points)
+    }
+    const deltas = [...perPosition].map(([position, points]) => ({
+      position,
+      vsLeague:
+        Math.round(((points - (positionMean.get(position) ?? points)) / perWeek) * 10) / 10,
+    }))
+    const sorted = [...deltas].sort((a, b) => b.vsLeague - a.vsLeague)
+
+    // The edge player: furthest above the average starter at his own
+    // position, rather than the highest raw scorer.
+    let edge: { playerId?: string; position: string; vsLeague: number } | undefined
+    for (const st of l.starters) {
+      const over = st.points - (playerMean.get(st.position) ?? st.points)
+      if (!edge || over > edge.vsLeague) {
+        edge = { playerId: st.playerId, position: st.position, vsLeague: over }
+      }
+    }
+
     return {
-      teamId,
-      projectedPoints: Math.round(total * 10) / 10,
-      pointsPerWeek: Math.round((total / perWeek) * 10) / 10,
-      slotsFilled: filled,
-      bestStarterId: best?.playerId,
-      bestStarterPoints: best ? Math.round(best.points * 10) / 10 : undefined,
+      teamId: l.teamId,
+      projectedPoints: Math.round(l.total * 10) / 10,
+      pointsPerWeek: Math.round((l.total / perWeek) * 10) / 10,
+      slotsFilled: l.filled,
+      bestStarterId: l.best?.playerId,
+      bestStarterPoints: l.best ? Math.round(l.best.points * 10) / 10 : undefined,
+      edgePlayerId: edge?.playerId,
+      edgePlayerPosition: edge?.position,
+      edgePlayerVsLeague: edge ? Math.round((edge.vsLeague / perWeek) * 10) / 10 : undefined,
+      bestPosition: sorted[0],
+      worstPosition: sorted.length > 1 ? sorted[sorted.length - 1] : undefined,
     }
   })
 
-  const mean = rows.reduce((t, r) => t + r.pointsPerWeek, 0) / rows.length
+  const leagueMean = rows.reduce((t, r) => t + r.pointsPerWeek, 0) / rows.length
   return rows
     .map((r) => ({
       ...r,
-      vsLeaguePerWeek: Math.round((r.pointsPerWeek - mean) * 10) / 10,
+      vsLeaguePerWeek: Math.round((r.pointsPerWeek - leagueMean) * 10) / 10,
     }))
     .sort(
       (a, b) => b.projectedPoints - a.projectedPoints || a.teamId.localeCompare(b.teamId),

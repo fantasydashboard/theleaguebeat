@@ -101,7 +101,12 @@
         </section>
 
         <!-- TEAM CARD — one team, one slide. -->
-        <section v-else-if="slide.kind === 'team-card'" class="slide slide-team">
+        <section
+          v-else-if="slide.kind === 'team-card'"
+          class="slide slide-team"
+          :class="{ 'has-team-color': !!slide.logoColor }"
+          :style="slide.logoColor ? { '--team-wash': slide.logoColor } : undefined"
+        >
           <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
           <div class="team-head">
             <span class="team-rank">{{ slide.rank }}</span>
@@ -798,6 +803,40 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
    the reason the slide exists, and in a countdown the room is tracking
    it more than the name. */
 .slide-team { display: flex; flex-direction: column; gap: 18px; }
+/*
+ * The team's own colour behind its card.
+ *
+ * A wash rather than a fill, and at low opacity on purpose: these are
+ * user-uploaded avatar colours, so a card has to stay readable whether
+ * the team picked navy or highlighter yellow. Bleeding it from one
+ * corner and fading to nothing keeps the type on near-black — where
+ * the contrast is known — while still making each team's slide
+ * unmistakably theirs as the deck advances.
+ *
+ * Sits on ::before with the content above it, so no text ever inherits
+ * the tint.
+ */
+.slide-team.has-team-color::before {
+  content: '';
+  /* Fixed, not absolute: the slide sits inside a width-constrained
+     stage, so an absolutely-positioned wash ended at the content edge
+     and left a hard vertical seam down a full-screen presentation. */
+  position: fixed;
+  inset: 0;
+  /* The stored value is a comma-separated pair of gradient stops, so
+     it is used AS a gradient rather than parsed into a single colour —
+     no string handling, and a two-tone team reads as two-tone. */
+  background: linear-gradient(135deg, var(--team-wash));
+  opacity: 0.3;
+  /* Faded out with a mask so the colour is dense in one corner and
+     gone by the time it reaches the copy. */
+  -webkit-mask-image: radial-gradient(60% 75% at 8% 22%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(60% 75% at 8% 22%, #000 0%, transparent 75%);
+  pointer-events: none;
+  z-index: 0;
+}
+.slide-team.has-team-color { position: relative; }
+.slide-team > * { position: relative; z-index: 1; }
 .team-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .team-rank {
   font-size: clamp(3.5rem, 8vw, 6rem);
