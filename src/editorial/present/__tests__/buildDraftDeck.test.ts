@@ -159,7 +159,9 @@ describe('draft grades', () => {
     rank: number
     fieldSize: number
     tier?: string
+    teamName: string
     statValue: string
+    statLabel: string
     chips?: { value: string; label: string }[]
     notes?: string[]
   }[]
@@ -179,12 +181,93 @@ describe('draft grades', () => {
 
   it('never shows a letter without the rounds figure beside it', () => {
     // The letter is league-relative and means little alone; the rounds
-    // figure is the honest quantity.
+    // figure is the honest quantity. It now leads the card rather than
+    // sitting in a chip, which is a stronger version of the same rule.
     for (const c of cards) {
       if (!c.tier) continue
       expect(c.tier).toMatch(/^[ABCD][+-]?$/)
-      const labels = (c.chips ?? []).map((ch) => ch.label).join(' ')
-      expect(labels, `no rounds beside ${c.tier}`).toContain('rounds / pick')
+      expect(c.statLabel, `no rounds beside ${c.tier}`).toContain('rounds per pick')
+      expect(c.statValue, `no rounds figure beside ${c.tier}`).toMatch(/^[+-]?[\d.]+$/)
+    }
+  })
+
+  it('orders by draft grade, not by projected roster', () => {
+    // Sorting on points per week is what the power-rankings deck does,
+    // so the draft deck ranking that way made one of them redundant —
+    // and put worse drafts above better ones, since roster strength is
+    // not a measure of drafting.
+    const figures = cards.map((c) => parseFloat(c.statValue))
+    for (let i = 1; i < figures.length; i++) {
+      expect(figures[i - 1]).toBeLessThanOrEqual(figures[i])
+    }
+  })
+
+  it('crowns the team the countdown built to', () => {
+    // Ranking the cards by draft grade and crowning the best ROSTER
+    // would have the deck contradict itself on its final slide.
+    const last = cards[cards.length - 1]
+    const verdict = deck.slides.find(
+      (s) => 'eyebrow' in s && s.eyebrow === 'The verdict',
+    ) as { headline: string } | undefined
+    expect(verdict).toBeDefined()
+    expect(last.rank).toBe(1)
+    expect(verdict!.headline).toContain(last.teamName)
+  })
+
+  it('crowns the draft winner even when another team has the better roster', () => {
+    // The branch that runs when projections resolve — the one the
+    // fixture above never reaches, since it passes only consensusRank.
+    // A mutation crowning the ROSTER winner survived until this
+    // existed.
+    //
+    // The baseline deliberately makes the WORST-graded team the
+    // strongest projected roster, so the two winners cannot coincide
+    // and the assertion has something to catch.
+    const valueOrder = cards.map((c) => c.teamName)
+    const worstGraded = valueOrder[0] // countdown starts at the worst
+    const teamIdOf = (name: string) =>
+      picks.find((p) => nameOf(p.draftedByTeamId) === name)?.draftedByTeamId ?? ''
+    const boostedTeam = teamIdOf(worstGraded)
+
+    const withProjections = buildDraftDeck({
+      leagueName: data.leagueName,
+      season: data.currentSeason,
+      picks,
+      teamName: nameOf,
+      rosterPositions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN'],
+      baseline: {
+        adpOf: (id) => order.get(id),
+        pointsOf: (id) => {
+          const pick = picks.find((p) => p.playerId === id)
+          if (!pick) return undefined
+          return pick.draftedByTeamId === boostedTeam ? 1000 : 1
+        },
+        positionOf: (id) => picks.find((p) => p.playerId === id)?.position,
+        nameOf: (id) => picks.find((p) => p.playerId === id)?.playerName,
+        basis: 'test ADP',
+        formatLabel: 'test',
+      },
+    })!
+
+    const projCards = withProjections.slides.filter(
+      (sl) => sl.kind === 'team-card',
+    ) as unknown as { rank: number; teamName: string }[]
+    const verdict = withProjections.slides.find(
+      (sl) => 'eyebrow' in sl && sl.eyebrow === 'The verdict',
+    ) as { headline: string; support?: string } | undefined
+
+    const topDraft = projCards[projCards.length - 1].teamName
+    expect(verdict!.headline).toContain(topDraft)
+    // ...and the boosted roster is mentioned as the twist, not crowned.
+    expect(verdict!.headline).not.toContain(worstGraded)
+    expect(verdict!.support).toContain(worstGraded)
+  })
+
+  it('leads with the figure it sorts on', () => {
+    // A big number that does not explain the order reads as a broken
+    // sort — the same defect this deck already fixed once in its lists.
+    for (const c of cards) {
+      expect(c.statLabel).toContain('rounds per pick')
     }
   })
 

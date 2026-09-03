@@ -232,13 +232,30 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     // the two grades frequently disagree, and the disagreement is only
     // visible when they sit on the same card.
     //
-    // Ordered by projected roster where projections resolved, because
-    // that is the grade the deck's verdict crowns. Value against the
-    // board orders it otherwise.
+    // ORDERED BY DRAFT GRADE, not by projected roster.
+    //
+    // It used to sort on projected points per week, which is precisely
+    // what the power-rankings deck sorts on — so the two decks ranked
+    // the same league the same way and one of them was redundant. It
+    // also put teams with a worse draft above teams with a better one,
+    // because roster strength is not a measure of drafting.
+    //
+    // A draft deck should rank the DRAFT. Value against the board is
+    // the draft-specific claim; roster strength is what the team is
+    // worth afterwards, and that belongs to the board.
+    //
+    // Teams with no measurable divergence get no grade, so they are
+    // appended rather than dropped — a manager missing from their own
+    // league's draft deck would be a bug, not an omission.
+    const gradedIds = new Set(graded.map((g) => g.teamId))
+    const ungraded = strength
+      .filter((t) => !gradedIds.has(t.teamId))
+      .map((t, i) => ({ teamId: t.teamId, rank: graded.length + i + 1 }))
+    const ranked: { teamId: string; rank: number }[] = [
+      ...graded.map((g) => ({ teamId: g.teamId, rank: g.rank })),
+      ...ungraded,
+    ]
     const gradeBy = new Map(graded.map((g) => [g.teamId, g]))
-    const ranked: { teamId: string; rank: number }[] = strength.length
-      ? strength.map((t) => ({ teamId: t.teamId, rank: t.rank }))
-      : graded.map((g) => ({ teamId: g.teamId, rank: g.rank }))
     const strengthBy = new Map(strength.map((t) => [t.teamId, t]))
 
     // Each team's own best steal and worst reach, so a card can show
@@ -297,24 +314,24 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           // guard against verdict language, and the eyebrow already
           // says Draft grades — the pill does not need to repeat it.
           tier: g?.grade && g.grade !== '—' ? g.grade : undefined,
-          statValue: t ? `${t.pointsPerWeek}` : `${g?.vsLeague ?? 0}`,
-          statLabel: t ? 'projected points per week' : 'rounds gained per pick',
+          // The figure that sorts. Showing projected points here while
+          // sorting on draft value is the same defect this deck already
+          // fixed once in its list ordering: a big number that does not
+          // explain the order reads as a broken sort.
+          statValue: g ? `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}` : '—',
+          statLabel: 'rounds per pick gained on the board',
           chips: [
+            ...(g ? [{ value: `${g.picksCompared}`, label: 'picks compared' }] : []),
+            // Roster strength stays as CONTEXT — it is what the draft
+            // produced — but it no longer orders anything here. The
+            // board deck is where it is the claim.
             ...(t
               ? [
+                  { value: `${t.pointsPerWeek}`, label: 'projected pts / week' },
                   {
-                    value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}`,
-                    label: 'vs league avg',
+                    value: `${ordinal(t.rank)}`,
+                    label: 'roster in the league',
                   },
-                ]
-              : []),
-            ...(g
-              ? [
-                  {
-                    value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}`,
-                    label: 'rounds / pick vs board',
-                  },
-                  { value: `${g.picksCompared}`, label: 'picks compared' },
                 ]
               : []),
           ],
@@ -329,31 +346,41 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     // a second ten-row pass over the same league said nothing the room
     // had not just been shown one team at a time.
     if (strength.length >= 4) {
-      // The crown. This is what the removed "the steal" slide's visual
-      // weight is worth spending on: the one claim in the deck the room
-      // will actually argue about afterwards.
-      const best = strength[0]
-      const worst = strength[strength.length - 1]
-      const gap = Math.round((best.pointsPerWeek - worst.pointsPerWeek) * 10) / 10
-      const beatBoard = graded.length >= 4 ? graded[0] : undefined
+      // The crown — and it must crown the team the COUNTDOWN built to,
+      // which is now the best draft grade rather than the best roster.
+      // Ranking the cards one way and crowning the other would have the
+      // deck contradict itself on its last slide.
+      //
+      // The roster winner, when it is somebody else, becomes the twist
+      // instead of the verdict: it is the more interesting fact once
+      // the deck has spent ten cards establishing who drafted well.
+      const bestDraft = graded[0]
+      const bestRoster = strength[0]
+      const differs = bestRoster && bestRoster.teamId !== bestDraft.teamId
       slides.push({
         kind: 'statement',
         eyebrow: 'The verdict',
-        headline: `${input.teamName(best.teamId)} drafted the best team.`,
+        headline: `${input.teamName(bestDraft.teamId)} won the draft.`,
         support:
-          `${best.pointsPerWeek} projected points a week — ${gap} more than ` +
-          `${input.teamName(worst.teamId)} at the bottom of the room. ` +
-          // The contrast is the story whenever the two grades disagree,
-          // and they usually do: beating the market and owning the best
-          // roster are different achievements.
-          (beatBoard && beatBoard.teamId !== best.teamId
-            ? `${input.teamName(beatBoard.teamId)} beat the board by more, and still did not draft this team. `
-            : '') +
+          `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague} rounds per pick ` +
+          `against ${basis}, the best in the room. ` +
+          (differs
+            ? `${input.teamName(bestRoster.teamId)} walks away with the stronger ` +
+              'roster on projection — beating the board and owning the best team ' +
+              'are different achievements, and this room split them. '
+            : 'They walk away with the strongest projected roster too. ') +
           'Projections are a forecast, not a result. The season decides.',
         chips: [
-          { value: ordinal(best.rank), label: 'projected' },
-          { value: `${best.pointsPerWeek}`, label: 'pts / week' },
-          { value: `+${best.vsLeaguePerWeek}`, label: 'vs league' },
+          {
+            value: `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague}`,
+            label: 'rounds / pick',
+          },
+          ...(bestDraft.grade !== '—'
+            ? [{ value: bestDraft.grade, label: 'grade' }]
+            : []),
+          ...(bestRoster
+            ? [{ value: `${bestRoster.pointsPerWeek}`, label: 'top roster pts / wk' }]
+            : []),
         ],
       })
     } else if (graded.length >= 4) {
