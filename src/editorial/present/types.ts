@@ -43,6 +43,10 @@ export interface ListSlide {
   kind: 'list'
   eyebrow: string
   headline: string
+  /** One line under the headline explaining what the figures mean. A
+   *  column of numbers with no stated basis invites the presenter to
+   *  guess at it out loud. */
+  support?: string
   rows: {
     /** Left gutter — a rank, a round, a pick number. */
     lead?: string

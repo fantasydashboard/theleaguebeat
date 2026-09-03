@@ -60,7 +60,15 @@
         <section v-else-if="slide.kind === 'list'" class="slide slide-list">
           <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
           <h2 class="slide-headline">{{ slide.headline }}</h2>
-          <ol class="list-rows" role="list">
+          <p v-if="slide.support" class="slide-support slide-support-tight">{{ slide.support }}</p>
+          <!-- Dense once a list runs long: ten rows at the roomy size
+               overflow the stage, and the presenter cannot reach the
+               bottom of their own grade sheet. -->
+          <ol
+            class="list-rows"
+            :class="{ 'is-dense': slide.rows.length > 6 }"
+            role="list"
+          >
             <li
               v-for="(row, i) in slide.rows"
               :key="`${row.label}-${i}`"
@@ -365,6 +373,9 @@ watch(() => route.params.leagueId, () => void load())
   place-items: center;
   padding: 3vh 6vw;
   min-height: 0;
+  /* Last resort on a short window: the content stays reachable rather
+     than being clipped at the fold. */
+  overflow-y: auto;
 }
 
 .slide {
@@ -420,6 +431,8 @@ watch(() => route.params.leagueId, () => void load())
   color: oklch(0.70 0.27 350);
   margin: 0;
 }
+.slide-list .slide-headline { font-size: clamp(1.6rem, 3.6vw, 2.9rem); }
+.slide-support-tight { font-size: clamp(0.85rem, 1.2vw, 1rem); margin-bottom: 2px; }
 .slide-headline {
   font-weight: 900;
   font-size: clamp(2rem, 5.4vw, 4.4rem);
@@ -476,6 +489,15 @@ watch(() => route.params.leagueId, () => void load())
   gap: 6px;
   width: 100%;
 }
+/* Long lists: tighter rows and a smaller logo, so a ten-team grade
+   sheet fits on one screen without scrolling. */
+.list-rows.is-dense { gap: 4px; }
+.list-rows.is-dense .list-row { padding: 8px 14px; gap: 12px; }
+.list-rows.is-dense .list-label { font-size: 1.02rem; }
+.list-rows.is-dense .list-sub { font-size: 0.68rem; }
+.list-rows.is-dense .list-value { font-size: 1.1rem; }
+.list-rows.is-dense .list-logo { width: 28px; height: 28px; border-radius: 7px; }
+.list-rows.is-dense .list-lead { min-width: 52px; font-size: 0.86rem; }
 .list-row {
   display: flex;
   align-items: center;

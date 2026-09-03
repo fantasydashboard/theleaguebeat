@@ -179,3 +179,43 @@ describe('draft grades', () => {
     expect(text, 'still using raw slot counts').not.toMatch(/\d+ spots? (earlier|later)/)
   })
 })
+
+describe('draft slots and ordering', () => {
+  const picks = [...(data.draft?.picks ?? [])]
+  const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
+  const deck = buildDraftDeck({
+    leagueName: data.leagueName, season: data.currentSeason, picks,
+    teamName: nameOf, consensusRank: (id) => order.get(id),
+  })!
+
+  it('labels picks as round-and-slot, not overall number', () => {
+    // "#120" tells nobody anything; "12.10" is how a board is read.
+    const leads = deck.slides
+      .filter((s) => s.kind === 'list')
+      .flatMap((s) => (s as { rows: { lead?: string }[] }).rows.map((r) => r.lead ?? ''))
+      .filter((l) => /^\d/.test(l))
+    expect(leads.length).toBeGreaterThan(0)
+    for (const l of leads) expect(l).toMatch(/^\d{1,2}\.\d{2}$/)
+  })
+
+  it('orders the value lists by the rounds figure it displays', () => {
+    // Sorting by position slots put a 4-round gap below a 3.5 one.
+    for (const eyebrow of ['Fell furthest', 'Went early']) {
+      const slide = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === eyebrow)
+      if (!slide) continue
+      const nums = (slide as { rows: { value?: string }[] }).rows.map((r) =>
+        parseFloat((r.value ?? '0').replace(/[^\d.]/g, '')),
+      )
+      for (let i = 1; i < nums.length; i++) {
+        expect(nums[i - 1], `${eyebrow} out of order`).toBeGreaterThanOrEqual(nums[i])
+      }
+    }
+  })
+
+  it('states the basis on every list of figures', () => {
+    for (const s of deck.slides) {
+      if (s.kind !== 'list') continue
+      expect(s.support, `${s.eyebrow} has no stated basis`).toBeTruthy()
+    }
+  })
+})

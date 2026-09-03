@@ -55,6 +55,15 @@ export interface DraftDeckInput {
   consensusRank?: (playerId: string) => number | undefined
 }
 
+/** Draft slot in the form people actually say it: "1.01", "12.10".
+ *  An overall pick number of 120 tells nobody anything; round-and-slot
+ *  is how a draft board is read. */
+function draftSlot(pickOverall: number, round: number, teamCount: number): string {
+  if (teamCount <= 0 || round <= 0) return `#${pickOverall}`
+  const inRound = pickOverall - (round - 1) * teamCount
+  return `${round}.${String(inRound).padStart(2, '0')}`
+}
+
 /** Compact round figure for a list row: "3.5 rds", "1 rd". The
  *  direction is already carried by which slide the row is on. */
 function shortRounds(roundsDelta: number): string {
@@ -113,12 +122,13 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       kind: 'list',
       eyebrow: 'Off the board',
       headline: 'Where each position went first.',
+      support: 'Draft slot, as round and pick.',
       revealOneByOne: true,
       rows: facts.firstAtPosition.slice(0, 6).map((f) => ({
         lead: f.position,
         label: f.playerName,
         sub: input.teamName(f.teamId),
-        value: `#${f.pickOverall}`,
+        value: draftSlot(f.pickOverall, f.round, facts.teamCount),
         ...teamVisual(input, f.teamId),
       })),
     })
@@ -161,9 +171,10 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           kind: 'list',
           eyebrow: 'Fell furthest',
           headline: 'Who lasted longer than they should have.',
+        support: 'How much later they went than the consensus order at their position.',
           revealOneByOne: true,
           rows: div.fell.slice(0, 5).map((d) => ({
-            lead: `#${d.pick.pickOverall}`,
+            lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
             label: d.pick.playerName,
             sub: input.teamName(d.pick.teamId),
             value: shortRounds(d.roundsDelta),
@@ -178,9 +189,10 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         kind: 'list',
         eyebrow: 'Went early',
         headline: 'Picks the room did not see coming.',
+        support: 'How much earlier they went than the consensus order at their position.',
         revealOneByOne: true,
         rows: div.reached.slice(0, 5).map((d) => ({
-          lead: `#${d.pick.pickOverall}`,
+          lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
           label: d.pick.playerName,
           sub: input.teamName(d.pick.teamId),
           value: shortRounds(d.roundsDelta),
@@ -198,6 +210,9 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         kind: 'list',
         eyebrow: 'Draft grades',
         headline: 'Graded on a curve, against consensus.',
+        support:
+          'Rounds of value each team gained by taking players later than consensus ' +
+          'had them. Letters are relative to this league.',
         revealOneByOne: true,
         rows: graded.map((g) => ({
           lead: g.grade,

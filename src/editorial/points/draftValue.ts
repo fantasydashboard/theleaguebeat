@@ -149,9 +149,18 @@ export function findDraftDivergences(
     })
   }
 
+  // Sorted by ROUNDS, which is what the slides display. Sorting by
+  // position slots instead put a four-round gap below a three-and-a-half
+  // one, because slots and rounds do not rank the same way: a slot gap
+  // late in a run of one position spans fewer picks than the same gap
+  // in a thin one.
   return {
-    fell: all.filter((d) => d.delta > 0).sort((a, b) => b.delta - a.delta),
-    reached: all.filter((d) => d.delta < 0).sort((a, b) => a.delta - b.delta),
+    fell: all
+      .filter((d) => d.delta > 0)
+      .sort((a, b) => b.roundsDelta - a.roundsDelta || b.delta - a.delta),
+    reached: all
+      .filter((d) => d.delta < 0)
+      .sort((a, b) => a.roundsDelta - b.roundsDelta || a.delta - b.delta),
     positionsCompared: positionsCompared.sort(),
   }
 }
