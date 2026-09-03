@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  findAdpDivergences,
   findDraftDivergences,
   gradeTeamDrafts,
   type Divergence,
@@ -63,33 +64,59 @@ describe('draft divergences', () => {
   })
 })
 
-describe('significance weighting', () => {
-  it('ranks an early-round gap above a wider late one', () => {
-    // The whole point of the weighting. Both players fall; the one
-    // consensus wanted in round 2 matters more than the one it wanted
-    // in round 12, even though the later gap is wider in rounds.
-    const picks: ValuedPick[] = [
-      // Round-2 tier: early is taken 4th at the position.
-      pick(11, 'RB', 'early'), pick(12, 'RB', 'e2'), pick(13, 'RB', 'e3'),
-      pick(14, 'RB', 'e4'), pick(41, 'RB', 'e5'),
-      // Round-12 tier: late falls much further in raw rounds.
-      pick(111, 'RB', 'l1'), pick(112, 'RB', 'l2'), pick(113, 'RB', 'l3'),
-      pick(114, 'RB', 'l4'), pick(160, 'RB', 'late'),
-    ]
-    const rank: Record<string, number> = {
-      early: 4, e2: 1, e3: 2, e4: 3, e5: 5,
-      l1: 6, l2: 7, l3: 8, l4: 9, late: 10,
-    }
-    // `early` is consensus RB4 but went 1st -> a reach at the top.
-    // `late` is consensus RB10 and went 10th -> no divergence.
-    const out = findDraftDivergences(picks, (id) => rank[id], 10)
-    const all = [...out.fell, ...out.reached]
-    for (const d of all) {
-      expect(Number.isFinite(d.significance)).toBe(true)
-      expect(d.significance).toBeGreaterThanOrEqual(0)
-    }
+describe('list ordering', () => {
+  const p = (n: number, name: string): ValuedPick => ({
+    pickOverall: n, round: Math.ceil(n / 10), playerId: name,
+    playerName: name, position: 'RB', teamId: 't1',
   })
 
+  it('puts the biggest gap first, not the most significant one', () => {
+    // THE distinguishing case, and the reason the ordering changed.
+    // `big` slid 6 rounds from round 4; `early` slid 2 rounds from
+    // round 1. Weighting by significance ranks `early` first (2.0 vs
+    // 1.5) and produces a column reading "2 rds" above "6 rds" — which
+    // reads as a broken sort and makes a reader distrust every other
+    // figure on the slide.
+    const exp: Record<string, number> = { big: 40, early: 10 }
+    const out = findAdpDivergences(
+      [p(100, 'big'), p(30, 'early')],
+      (name) => exp[name],
+      10,
+    )
+    expect(out.fell.map((d) => d.pick.playerName)).toEqual(['big', 'early'])
+    expect(out.fell.map((d) => d.roundsDelta)).toEqual([6, 2])
+  })
+
+  it('breaks a tie on significance, so the premium slide leads', () => {
+    // Both slid exactly 3 rounds. The one expected in round 2 is the
+    // better story than the one expected in round 4, and this is the
+    // one place that judgement costs the reader nothing — the visible
+    // round figures are equal either way.
+    const exp: Record<string, number> = { fromLate: 40, fromEarly: 20 }
+    const out = findAdpDivergences(
+      [p(70, 'fromLate'), p(50, 'fromEarly')],
+      (name) => exp[name],
+      10,
+    )
+    expect(out.fell.map((d) => d.roundsDelta)).toEqual([3, 3])
+    expect(out.fell.map((d) => d.pick.playerName)).toEqual(['fromEarly', 'fromLate'])
+  })
+
+  it('orders the search_rank fallback the same way', () => {
+    // Both baselines feed the same slides; an ordering that differed
+    // between them would make the deck inconsistent for no reason the
+    // reader could see.
+    const picks: ValuedPick[] = [
+      p(1, 'a'), p(2, 'b'), p(3, 'c'), p(4, 'd'), p(5, 'e'), p(61, 'f'),
+    ]
+    const rank: Record<string, number> = { f: 1, a: 2, b: 3, c: 4, d: 5, e: 6 }
+    const out = findDraftDivergences(picks, (id) => rank[id], 10)
+    const mags = out.fell.map((d) => Math.abs(d.roundsDelta))
+    expect(mags).toEqual([...mags].sort((x, y) => y - x))
+  })
+})
+
+describe('significance weighting', () => {
   it('divides the gap by the round consensus expected him in', () => {
     const picks: ValuedPick[] = [
       pick(1, 'WR', 'a'), pick(2, 'WR', 'b'), pick(3, 'WR', 'c'),

@@ -74,12 +74,12 @@ function draftSlot(pickOverall: number, round: number, teamCount: number): strin
   return `${round}.${String(inRound).padStart(2, '0')}`
 }
 
-/** Where consensus had him, in the same round-and-slot form. Showing
- *  it is what makes the ordering legible: the lists rank by how much a
- *  gap MATTERS rather than how wide it is, so a column of round figures
- *  is deliberately not monotonic. Seeing "went 3.10, expected 2.06"
- *  next to "went 11.01, expected 7.01" explains the order at a glance
- *  instead of looking like a sorting bug. */
+/** Where the baseline had him, in the same round-and-slot form.
+ *  Carries the fact the round figure alone cannot: "7 rds late" says
+ *  how far he slid, "expected 7.10" says from where. A quarterback
+ *  sliding from round seven and a receiver sliding from round two are
+ *  different stories, and the reader can only tell them apart with
+ *  both numbers on the row. */
 function expectedSlot(
   d: { expectedPickOverall: number },
   teamCount: number,
@@ -203,11 +203,9 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       ? `${input.adp.format} ADP`
       : "Sleeper's player ranking"
     const basisSupport = input.adp
-      ? `Against ${input.adp.basis}. Ranked by how much the gap matters, ` +
-        'not how wide it is.'
-      : "Against Sleeper's player ranking — the only ordering it publishes, and a " +
-        'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
-        'matters, not how wide it is.'
+      ? `Against ${input.adp.basis}, biggest gap first.`
+      : "Against Sleeper's player ranking — the only ordering it publishes, " +
+        'and a proxy for ADP rather than ADP itself. Biggest gap first.'
 
     if (div.fell.length > 0) {
       const top = div.fell[0]

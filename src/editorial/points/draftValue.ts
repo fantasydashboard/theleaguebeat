@@ -124,6 +124,31 @@ export interface DraftDivergences {
 }
 
 /**
+ * Biggest gap first, with significance only as a tie-break.
+ *
+ * Ordering by significance instead — the gap divided by the round it
+ * was expected in — is defensible arithmetic and unreadable output.
+ * The slide shows a column of round figures, and weighting the order
+ * makes that column non-monotonic: a 2.5 sitting above a 7 under the
+ * headline "who lasted longer than they should have" reads as a
+ * sorting bug, and a reader who thinks the sort is broken discounts
+ * every other number in the deck. The figure on screen has to be the
+ * figure that sorts.
+ *
+ * Significance survives as the tie-break, which is where it costs
+ * nothing: between two picks that both slid three rounds, the one
+ * expected earlier led the better story.
+ *
+ * A significance FLOOR was tried instead of a re-sort, to keep
+ * late-round noise out while ordering by size. It does not work: gaps
+ * among reaches divide by a large expected round by construction, and
+ * on a real draft no threshold useful for fallers left a single reach
+ * standing.
+ */
+const byMagnitude = (a: Divergence, b: Divergence) =>
+  Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta) || b.significance - a.significance
+
+/**
  * @param picks   every pick in the draft
  * @param rankOf  consensus rank for a player id; lower is better.
  *                Return undefined for players with no ranking — they
@@ -189,17 +214,9 @@ export function findDraftDivergences(
     })
   }
 
-  // Ordered by SIGNIFICANCE, not raw rounds. Rounds alone push every
-  // list into the double-digit rounds, where gaps are wide and the
-  // players are replaceable — the lists end up technically correct and
-  // uninteresting. The displayed figure stays the honest round count;
-  // only the ordering is weighted.
-  const bySignificance = (a: Divergence, b: Divergence) =>
-    b.significance - a.significance || Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta)
-
   return {
-    fell: all.filter((d) => d.delta > 0).sort(bySignificance),
-    reached: all.filter((d) => d.delta < 0).sort(bySignificance),
+    fell: all.filter((d) => d.delta > 0).sort(byMagnitude),
+    reached: all.filter((d) => d.delta < 0).sort(byMagnitude),
     positionsCompared: positionsCompared.sort(),
   }
 }
@@ -281,12 +298,9 @@ export function findAdpDivergences(
     })
   }
 
-  const bySignificance = (a: Divergence, b: Divergence) =>
-    b.significance - a.significance || Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta)
-
   return {
-    fell: all.filter((d) => d.roundsDelta > 0).sort(bySignificance),
-    reached: all.filter((d) => d.roundsDelta < 0).sort(bySignificance),
+    fell: all.filter((d) => d.roundsDelta > 0).sort(byMagnitude),
+    reached: all.filter((d) => d.roundsDelta < 0).sort(byMagnitude),
     positionsCompared: [...byPosition.keys()].sort(),
   }
 }
