@@ -215,7 +215,15 @@ import {
   projectionsUrl,
   scoringFor,
   type DraftBaseline,
+  type SleeperScoring,
+  ASSUMED_SCORING,
 } from '@/editorial/points/sleeperProjections'
+import {
+  bridgePicks,
+  buildPlayerIdBridge,
+  SLEEPER_PLAYERS_URL,
+  type BridgePlatform,
+} from '@/editorial/points/playerIdBridge'
 import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
 
 const route = useRoute()
@@ -562,7 +570,12 @@ async function load(): Promise<void> {
     let consensusRank: ((playerId: string) => number | undefined) | undefined
     const picks = [...(data.draft?.picks ?? [])]
 
-    if (picks.length > 0 && record.platform === 'sleeper' && record.sport === 'football') {
+    const FOOTBALL_PLATFORMS = ['sleeper', 'espn', 'yahoo']
+    if (
+      picks.length > 0 &&
+      FOOTBALL_PLATFORMS.includes(record.platform) &&
+      record.sport === 'football'
+    ) {
       try {
         // Scoring settings decide WHICH series applies — a half-PPR
         // league read against PPR ADP misvalues every receiver, and
@@ -572,19 +585,53 @@ async function load(): Promise<void> {
         // persists `previous_league_id`. Backfilling that column would
         // still leave every league connected before today without it;
         // this is ~2KB, public and unauthenticated, and always current.
-        const lgRes = await fetch(`https://api.sleeper.app/v1/league/${id}`)
-        if (lgRes.ok) {
-          const lg = (await lgRes.json()) as {
-            scoring_settings?: Record<string, unknown>
-            roster_positions?: string[]
-            settings?: { playoff_week_start?: number }
+        // Scoring format. Sleeper exposes its own settings; for ESPN
+        // and Yahoo the league contract already carries the format, so
+        // read it there rather than inventing a per-platform fetch.
+        let scoring: SleeperScoring = 'half_ppr'
+        if (record.platform === 'sleeper') {
+          const lgRes = await fetch(`https://api.sleeper.app/v1/league/${id}`)
+          if (lgRes.ok) {
+            const lg = (await lgRes.json()) as {
+              scoring_settings?: Record<string, unknown>
+              roster_positions?: string[]
+              settings?: { playoff_week_start?: number }
+            }
+            rosterPositions = lg.roster_positions
+            playoffWeekStart = lg.settings?.playoff_week_start
+            scoring = scoringFor(lg.scoring_settings, lg.roster_positions)
           }
-          rosterPositions = lg.roster_positions
-          playoffWeekStart = lg.settings?.playoff_week_start
-          const scoring = scoringFor(lg.scoring_settings, lg.roster_positions)
-          const res = await fetch(projectionsUrl(data.currentSeason))
-          if (res.ok) {
-            baseline = buildDraftBaseline(await res.json(), scoring) ?? undefined
+        } else {
+          // ESPN and Yahoo: reception scoring is not on the contract,
+          // so this is an assumption and the deck's basis line says so.
+          scoring = ASSUMED_SCORING
+        }
+
+        const res = await fetch(projectionsUrl(data.currentSeason))
+        if (res.ok) {
+          baseline = buildDraftBaseline(await res.json(), scoring) ?? undefined
+        }
+
+        // ESPN and Yahoo picks carry their own player ids, which
+        // resolve to nothing against Sleeper's projections. Bridging
+        // them costs the 15MB player blob — paid only by the platforms
+        // that need it, never by Sleeper.
+        if (baseline && record.platform !== 'sleeper') {
+          const blobRes = await fetch(SLEEPER_PLAYERS_URL)
+          if (blobRes.ok) {
+            const bridge = buildPlayerIdBridge(
+              await blobRes.json(),
+              record.platform as BridgePlatform,
+            )
+            const result = bridgePicks(picks, bridge)
+            picks.length = 0
+            picks.push(...result.picks)
+            if (result.bridged === 0) baseline = undefined
+          } else {
+            // No bridge means every graded slide would be empty. Better
+            // to fall through to the factual deck than to publish a
+            // draft where nobody reached or fell.
+            baseline = undefined
           }
         }
       } catch {

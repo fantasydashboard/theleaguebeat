@@ -83,6 +83,22 @@ export function scoringFor(
   return 'half_ppr'
 }
 
+/**
+ * Fallback for leagues whose reception scoring we cannot see.
+ *
+ * `scoring_type` on the leagues row distinguishes points from
+ * categories; it says nothing about whether a catch is worth one point,
+ * half, or none. ESPN and Yahoo know, but the league contract does not
+ * carry it, so their leagues are read against half-PPR.
+ *
+ * Half rather than full because it is the midpoint: a half-PPR table
+ * is at most half a format wrong for either a standard or a full-PPR
+ * league, where picking either extreme is a full format wrong for the
+ * other. The honest fix is putting reception scoring on the contract,
+ * which is adapter work this does not block on.
+ */
+export const ASSUMED_SCORING: SleeperScoring = 'half_ppr'
+
 const FORMAT_LABEL: Record<SleeperScoring, string> = {
   std: 'standard',
   half_ppr: 'half-PPR',
