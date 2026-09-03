@@ -292,7 +292,15 @@
           >
             Present the draft
           </router-link>
+          <!-- Sleeper only, and shown conditionally rather than
+               offered and then failing. The board is built from
+               Sleeper's ADP and projections, which are keyed by Sleeper
+               player_id; an ESPN or Yahoo pick carries that platform's
+               own id and resolves to nothing. Offering the button and
+               landing on "nothing to present" is worse than not
+               offering it. -->
           <router-link
+            v-if="canPresentBoard"
             :to="`/leagues/${routeLeagueId}/present/board`"
             class="points-draft-link points-draft-link-primary"
           >
@@ -1346,6 +1354,20 @@ const showDraftSection = computed(() => {
  *  does not have — so here it is a record of what happened, and a
  *  record stays true all season. */
 const showPointsDraft = computed(() => !!livePointsData.value && hasDraftData.value)
+
+/**
+ * Whether the power-rankings deck can actually be built.
+ *
+ * It needs Sleeper's ADP and season projections, which are matched on
+ * Sleeper `player_id`. An ESPN or Yahoo draft pick carries that
+ * platform's own player id and resolves to nothing, so the deck comes
+ * back empty. Sleeper's player blob does publish `espn_id` and
+ * `yahoo_id` cross-references, so this is bridgeable — but until that
+ * bridge exists the button should not be offered.
+ */
+const canPresentBoard = computed(
+  () => showPointsDraft.value && livePlatform.value === 'sleeper',
+)
 
 /** The few facts worth stating outright, each only when present. */
 const pointsDraftFacts = computed(() => {

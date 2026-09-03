@@ -12,8 +12,8 @@
     <div v-else-if="!deck" class="present-msg">
       <p class="present-msg-head">Nothing to present yet.</p>
       <p class="present-msg-body">
-        This league has no draft on record. Decks appear as the season
-        gives them something to say.
+        There isn't enough here to build this deck yet. Decks appear as
+        the season gives them something to say.
       </p>
       <router-link :to="backLink" class="present-exit">Back to the league</router-link>
     </div>
