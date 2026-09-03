@@ -24,7 +24,7 @@
  */
 import type { PresentDeck, PresentSlide } from './types'
 import { ordinal } from '../points/draftValue'
-import type { TeamStrength } from '../points/rosterStrength'
+import { tierFor, type TeamStrength } from '../points/rosterStrength'
 import {
   scheduleWeight,
   type ProjectedSeasonRow,
@@ -55,6 +55,18 @@ export interface BoardDeckInput {
   team?: (teamId: string) => BoardDeckTeam | undefined
   /** Scoring format label for the basis line, e.g. "half-PPR". */
   formatLabel?: string
+  /** Player display name, for the "best starter" line. */
+  playerName?: (playerId: string) => string | undefined
+  /** How many starting slots the league requires — a team below this
+   *  has a hole its projection is quietly counting as zero. */
+  startingSlotCount?: number
+  /**
+   * Rank on draft night, for the movement figure. Preseason's honest
+   * analogue of "since last week": there is no last week yet, but
+   * there IS a draft, and the gap between the team someone drafted and
+   * the team they hold now is exactly what waivers did.
+   */
+  draftRank?: (teamId: string) => number | undefined
 }
 
 function teamVisual(input: BoardDeckInput, teamId: string) {
@@ -93,34 +105,71 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
     kind: 'cold-open',
     title: input.leagueName,
     subtitle: 'The board',
-    meta: `${input.season} · preseason · ${input.strength.length} teams`,
+    // The basis stated once, up front, rather than repeated on ten
+    // cards. Every number after this is projected points per week.
+    meta: `${input.season} · preseason · ${format}projections`,
   })
 
-  // The ranking, revealed a team at a time, worst to best. The
-  // countdown is the whole point of presenting rather than sending a
-  // link: the room waits for first place instead of reading it.
+  // One slide per team, worst to best.
+  //
+  // This was a single ten-row list. A table read off a screen gives
+  // every team two seconds and the room no reason to react to any of
+  // them; a card each turns a ranking into ten moments, and the moment
+  // is the whole reason to present rather than send a link.
   const countdown = [...input.strength].reverse()
-  slides.push({
-    kind: 'list',
-    eyebrow: 'Power rankings',
-    headline: 'Where everyone stands before a snap.',
-    support:
-      `Projected points per week from the best lineup each roster can ` +
-      `field, on Sleeper's ${format}projections` +
-      (projectedBy.size ? ', with the record that schedule projects.' : '.') +
-      ' Counting up to the strongest team in the league.',
-    revealOneByOne: true,
-    rows: countdown.map((t) => {
-      const p = projectedBy.get(t.teamId)
-      return {
-        lead: ordinal(t.rank),
-        label: input.teamName(t.teamId),
-        sub: p ? `projects ${recordLabel(p)}` : `${t.projectedPoints.toLocaleString()} projected pts`,
-        value: `${t.pointsPerWeek}/wk`,
-        ...teamVisual(input, t.teamId),
-      }
-    }),
-  })
+  const field = input.strength.length
+  for (const t of countdown) {
+    const p = projectedBy.get(t.teamId)
+    const priorRank = input.draftRank?.(t.teamId)
+    const notes: string[] = []
+
+    const bestName = t.bestStarterId ? input.playerName?.(t.bestStarterId) : undefined
+    if (bestName && t.bestStarterPoints) {
+      notes.push(`Leans on ${bestName} — ${t.bestStarterPoints} projected points.`)
+    }
+    // A hole is a starting slot with nobody eligible for it. The
+    // projection counts it as zero, so saying so explains a low number
+    // rather than leaving the team looking merely bad.
+    if (input.startingSlotCount && t.slotsFilled < input.startingSlotCount) {
+      const holes = input.startingSlotCount - t.slotsFilled
+      notes.push(
+        `${holes} starting slot${holes === 1 ? '' : 's'} with nobody to fill ` +
+          `${holes === 1 ? 'it' : 'them'} — counted as zero here.`,
+      )
+    }
+    if (p && p.scheduleSwing !== 0) {
+      notes.push(
+        p.scheduleSwing > 0
+          ? `The schedule is kind: ${ordinal(p.powerRank)} on roster, ${ordinal(p.seasonRank)} once it is counted.`
+          : `The schedule is not kind: ${ordinal(p.powerRank)} on roster, ${ordinal(p.seasonRank)} once it is counted.`,
+      )
+    }
+
+    slides.push({
+      kind: 'team-card',
+      eyebrow: 'Power rankings',
+      rank: t.rank,
+      fieldSize: field,
+      teamName: input.teamName(t.teamId),
+      tier: tierFor(t.rank, field),
+      statValue: `${t.pointsPerWeek}`,
+      statLabel: 'projected points per week',
+      movement:
+        priorRank !== undefined && priorRank !== t.rank
+          ? { places: priorRank - t.rank, label: 'since draft night' }
+          : undefined,
+      chips: [
+        ...(p ? [{ value: recordLabel(p), label: 'projected record' }] : []),
+        {
+          value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}`,
+          label: 'vs league avg',
+        },
+        ...(p ? [{ value: `${p.opponentPointsPerWeek}`, label: 'opponents avg' }] : []),
+      ],
+      notes,
+      ...teamVisual(input, t.teamId),
+    })
+  }
 
   // The crown.
   const best = input.strength[0]

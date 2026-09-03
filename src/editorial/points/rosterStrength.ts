@@ -53,6 +53,28 @@ export interface TeamStrength {
   slotsFilled: number
   /** 1 = strongest projected roster. */
   rank: number
+  /** Highest-projected player who makes the starting lineup, for the
+   *  team card. The bench's best is not the team's best. */
+  bestStarterId?: string
+  /** Projected points of that player. */
+  bestStarterPoints?: number
+}
+
+/**
+ * Contender / Bubble / Rebuilder, by thirds of the field.
+ *
+ * Ported from the sister product's power rankings so the two describe
+ * a league the same way — a team told it is a "Contender" in one place
+ * and given no such label in the other is a product with two opinions.
+ * Deliberately strength-only: it holds up in preseason, where the
+ * luck read that sits beside it over there cannot (with every team at
+ * 0-0 there is nothing for luck to be measured against).
+ */
+export function tierFor(rank: number, fieldSize: number): 'Contender' | 'Bubble' | 'Rebuilder' {
+  const third = Math.max(1, Math.round(fieldSize / 3))
+  if (rank <= third) return 'Contender'
+  if (rank >= fieldSize - third + 1) return 'Rebuilder'
+  return 'Bubble'
 }
 
 /** Positions a FLEX slot accepts. Deliberately not configurable: every
@@ -89,9 +111,9 @@ export function startingSlots(rosterPositions: readonly string[]): string[] {
  * understate the team through no fault of its draft.
  */
 export function bestLineupPoints(
-  players: readonly { position: string; points: number }[],
+  players: readonly { position: string; points: number; playerId?: string }[],
   slots: readonly string[],
-): { total: number; filled: number } {
+): { total: number; filled: number; best?: { playerId?: string; points: number } } {
   const ordered = [...slots].sort(
     (a, b) => eligibleFor(a).size - eligibleFor(b).size,
   )
@@ -100,6 +122,7 @@ export function bestLineupPoints(
 
   let total = 0
   let filled = 0
+  let best: { playerId?: string; points: number } | undefined
   for (const slot of ordered) {
     const eligible = eligibleFor(slot)
     const i = pool.findIndex((p, idx) => !used[idx] && eligible.has(p.position.toUpperCase()))
@@ -107,8 +130,13 @@ export function bestLineupPoints(
     used[i] = true
     total += pool[i].points
     filled += 1
+    // Best STARTER, not best rostered player — a monster on the bench
+    // is not what this team puts on the field.
+    if (!best || pool[i].points > best.points) {
+      best = { playerId: pool[i].playerId, points: pool[i].points }
+    }
   }
-  return { total, filled }
+  return { total, filled, best }
 }
 
 /**
@@ -139,7 +167,7 @@ export function rankRosterStrength(
   const slots = startingSlots(rosterPositions)
   if (slots.length === 0) return []
 
-  const byTeam = new Map<string, { position: string; points: number }[]>()
+  const byTeam = new Map<string, { position: string; points: number; playerId: string }[]>()
   for (const p of players) {
     if (!p.teamId || !p.position) continue
     // An unprojected player is worth nothing to a lineup here. That is
@@ -147,19 +175,21 @@ export function rankRosterStrength(
     // the player who would not start.
     const points = pointsOf(p.playerId) ?? 0
     const list = byTeam.get(p.teamId) ?? []
-    list.push({ position: p.position, points })
+    list.push({ position: p.position, points, playerId: p.playerId })
     byTeam.set(p.teamId, list)
   }
   if (byTeam.size === 0) return []
 
   const perWeek = projectionWeeks > 0 ? projectionWeeks : PROJECTION_WEEKS
   const rows = [...byTeam.entries()].map(([teamId, squad]) => {
-    const { total, filled } = bestLineupPoints(squad, slots)
+    const { total, filled, best } = bestLineupPoints(squad, slots)
     return {
       teamId,
       projectedPoints: Math.round(total * 10) / 10,
       pointsPerWeek: Math.round((total / perWeek) * 10) / 10,
       slotsFilled: filled,
+      bestStarterId: best?.playerId,
+      bestStarterPoints: best ? Math.round(best.points * 10) / 10 : undefined,
     }
   })
 

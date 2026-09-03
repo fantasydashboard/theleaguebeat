@@ -8,7 +8,7 @@
  * the variance estimate.
  */
 import { buildDraftBaseline, projectionsUrl, scoringFor } from '../src/editorial/points/sleeperProjections'
-import { rankRosterStrength, type RosterPlayer } from '../src/editorial/points/rosterStrength'
+import { rankRosterStrength, startingSlots, type RosterPlayer } from '../src/editorial/points/rosterStrength'
 import { projectSeason, weeklyScoreSpread, type ScheduledGame } from '../src/editorial/points/projectedSeason'
 import { buildBoardDeck } from '../src/editorial/present/buildBoardDeck'
 
@@ -64,10 +64,25 @@ console.log(`\n${league.name} — ${season}`)
 console.log(`rosters ${rosters.length} · schedule ${schedule.length} games over ${endWeek} weeks`)
 console.log(`variance: ${measuredSpread ? measuredSpread.toFixed(1) + ' (measured from ' + (season - 1) + ')' : 'default'}\n`)
 
+const drafts = await get(`https://api.sleeper.app/v1/league/${leagueId}/drafts`)
+let draftRank: ((t: string) => number | undefined) | undefined
+if (drafts.length) {
+  const picks = await get(`https://api.sleeper.app/v1/draft/${drafts[0].draft_id}/picks`)
+  const drafted = rankRosterStrength(
+    picks.filter((p: any) => p.roster_id != null).map((p: any) => ({
+      playerId: p.player_id, position: p.metadata?.position ?? '', teamId: String(p.roster_id),
+    })), baseline.pointsOf, league.roster_positions)
+  const m = new Map(drafted.map((t) => [t.teamId, t.rank]))
+  draftRank = (t) => m.get(t)
+}
+
 const deck = buildBoardDeck({
   leagueName: league.name, season, strength, projected, measuredSpread,
   teamName: (id) => nameOf.get(id) ?? `Team ${id}`,
   formatLabel: baseline.formatLabel,
+  playerName: baseline.nameOf,
+  startingSlotCount: startingSlots(league.roster_positions).length,
+  draftRank,
 })
 if (!deck) { console.log('No deck built.'); process.exit(0) }
 for (const [i, s] of deck.slides.entries()) {
@@ -81,6 +96,13 @@ for (const [i, s] of deck.slides.entries()) {
     console.log(`  ${s.eyebrow.toUpperCase()}\n  ${s.headline}`)
     if (s.support) console.log(`  ~ ${s.support}`)
     for (const r of s.rows) console.log(`    ${(r.lead ?? '').padEnd(6)} ${r.label.padEnd(22)} ${(r.value ?? '').padStart(9)}   ${r.sub ?? ''}`)
+  } else if (s.kind === 'team-card') {
+    console.log(`  ${s.eyebrow.toUpperCase()}`)
+    const mv = s.movement ? `  ${s.movement.places > 0 ? '▲' : '▼'}${Math.abs(s.movement.places)} ${s.movement.label}` : ''
+    console.log(`  ${s.rank} of ${s.fieldSize}  ${s.teamName}  [${s.tier ?? ''}]${mv}`)
+    console.log(`  ${s.statValue} ${s.statLabel}`)
+    if (s.chips) console.log(`  ${s.chips.map((c) => `${c.value} ${c.label}`).join('  ·  ')}`)
+    for (const n of s.notes ?? []) console.log(`   – ${n}`)
   } else console.log(`  ${s.headline}\n  ${s.sub ?? ''}`)
 }
 console.log('─'.repeat(64))

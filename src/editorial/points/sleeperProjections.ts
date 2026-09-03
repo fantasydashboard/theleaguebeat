@@ -52,6 +52,9 @@ export interface DraftBaseline {
    *  against the 15MB player blob just to learn that a player is a
    *  running back. */
   positionOf: (playerId: string) => string | undefined
+  /** Display name. Same reasoning as `positionOf` — the projections
+   *  payload has it, so nothing needs the 15MB player blob. */
+  nameOf: (playerId: string) => string | undefined
   /** Human label, e.g. "Sleeper half-PPR ADP". */
   basis: string
   /** e.g. "half-PPR" — for copy that names the format. */
@@ -130,13 +133,21 @@ export function buildDraftBaseline(
   const adp = new Map<string, number>()
   const points = new Map<string, number>()
   const position = new Map<string, string>()
+  const name = new Map<string, string>()
 
   for (const entry of raw as RawProjection[]) {
     if (!entry || typeof entry !== 'object') continue
     const id = entry.player_id
     if (typeof id !== 'string' || !id) continue
-    const pos = (entry as { player?: { position?: unknown } }).player?.position
+    const player = (entry as {
+      player?: { position?: unknown; first_name?: unknown; last_name?: unknown }
+    }).player
+    const pos = player?.position
     if (typeof pos === 'string' && pos) position.set(id, pos.toUpperCase())
+    const full = [player?.first_name, player?.last_name]
+      .filter((part): part is string => typeof part === 'string' && !!part)
+      .join(' ')
+    if (full) name.set(id, full)
 
     const stats = entry.stats
     if (!stats || typeof stats !== 'object') continue
@@ -155,6 +166,7 @@ export function buildDraftBaseline(
     adpOf: (playerId) => adp.get(playerId),
     pointsOf: (playerId) => points.get(playerId),
     positionOf: (playerId) => position.get(playerId),
+    nameOf: (playerId) => name.get(playerId),
     basis: `Sleeper ${label} ADP`,
     formatLabel: label,
   }

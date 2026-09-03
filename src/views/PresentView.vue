@@ -100,6 +100,56 @@
           </ol>
         </section>
 
+        <!-- TEAM CARD — one team, one slide. -->
+        <section v-else-if="slide.kind === 'team-card'" class="slide slide-team">
+          <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
+          <div class="team-head">
+            <span class="team-rank">{{ slide.rank }}</span>
+            <span class="team-rank-of">of {{ slide.fieldSize }}</span>
+            <span
+              v-if="slide.logoUrl || slide.logoColor"
+              class="team-logo"
+              :style="{ background: slide.logoColor ? `linear-gradient(135deg, ${slide.logoColor})` : undefined }"
+              aria-hidden="true"
+            >
+              <img v-if="slide.logoUrl" :src="slide.logoUrl" class="team-logo-img" alt="" />
+              <span v-else class="team-logo-initials">{{ slide.logoInitials }}</span>
+            </span>
+            <span class="team-identity">
+              <h2 class="team-name">{{ slide.teamName }}</h2>
+              <span class="team-meta">
+                <span v-if="slide.tier" class="team-tier">{{ slide.tier }}</span>
+                <!-- Movement is omitted entirely when there is nothing
+                     to report, never rendered as a hollow "+0". -->
+                <span
+                  v-if="slide.movement"
+                  class="team-move"
+                  :data-dir="slide.movement.places > 0 ? 'up' : 'down'"
+                >
+                  {{ slide.movement.places > 0 ? '▲' : '▼' }}
+                  {{ Math.abs(slide.movement.places) }} {{ slide.movement.label }}
+                </span>
+              </span>
+            </span>
+          </div>
+
+          <p class="team-stat">
+            <span class="team-stat-value">{{ slide.statValue }}</span>
+            <span class="team-stat-label">{{ slide.statLabel }}</span>
+          </p>
+
+          <ul v-if="slide.chips?.length" class="slide-chips" role="list">
+            <li v-for="c in slide.chips" :key="c.label" class="slide-chip">
+              <span class="slide-chip-value">{{ c.value }}</span>
+              <span class="slide-chip-label">{{ c.label }}</span>
+            </li>
+          </ul>
+
+          <ul v-if="slide.notes?.length" class="team-notes" role="list">
+            <li v-for="n in slide.notes" :key="n" class="team-note">{{ n }}</li>
+          </ul>
+        </section>
+
         <!-- SIGN OFF -->
         <section v-else class="slide slide-signoff">
           <h2 class="signoff-headline">{{ slide.headline }}</h2>
@@ -142,7 +192,11 @@ import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
 import { buildBoardDeck, type BoardDeckTeam } from '@/editorial/present/buildBoardDeck'
-import { rankRosterStrength, type RosterPlayer } from '@/editorial/points/rosterStrength'
+import {
+  rankRosterStrength,
+  startingSlots,
+  type RosterPlayer,
+} from '@/editorial/points/rosterStrength'
 import {
   projectSeason,
   weeklyScoreSpread,
@@ -290,6 +344,8 @@ async function buildBoard(args: {
   /** From the live league object. `0` means UNSET on Sleeper, not
    *  "no playoffs", which is why this is validated rather than used. */
   playoffWeekStart?: number
+  /** The draft, for the "since draft night" movement figure. */
+  picks?: { playerId: string; position: string; draftedByTeamId: string }[]
 }): Promise<PresentDeck | null> {
   const { baseline, rosterPositions, leagueId } = args
   if (!baseline || !rosterPositions?.length) return null
@@ -361,6 +417,24 @@ async function buildBoard(args: {
       )
     : undefined
 
+  // Where each team ranked on the roster it DRAFTED. The difference
+  // from where it ranks now is what waivers did — preseason's honest
+  // analogue of week-over-week movement, since there is no last week.
+  let draftRank: ((teamId: string) => number | undefined) | undefined
+  if (args.picks?.length) {
+    const drafted = rankRosterStrength(
+      args.picks.map<RosterPlayer>((p) => ({
+        playerId: p.playerId,
+        position: p.position,
+        teamId: p.draftedByTeamId,
+      })),
+      baseline.pointsOf,
+      rosterPositions,
+    )
+    const byTeam = new Map(drafted.map((t) => [t.teamId, t.rank]))
+    draftRank = (teamId) => byTeam.get(teamId)
+  }
+
   return buildBoardDeck({
     leagueName: args.record.league_name || args.data.leagueName,
     season: args.data.currentSeason,
@@ -370,6 +444,9 @@ async function buildBoard(args: {
     teamName: args.teamName,
     team: args.teamVisual,
     formatLabel: baseline.formatLabel,
+    playerName: baseline.nameOf,
+    startingSlotCount: startingSlots(rosterPositions).length,
+    draftRank,
   })
 }
 
@@ -519,6 +596,7 @@ async function load(): Promise<void> {
         teamVisual,
         leagueId: id,
         playoffWeekStart,
+        picks,
       })
     } else {
       deck.value = buildDraftDeck({
@@ -712,6 +790,71 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: oklch(0.55 0.010 90);
+}
+
+
+/* ── TEAM CARD ──────────────────────────────────────────────────────
+   One team per slide. The rank is the largest thing on screen: it is
+   the reason the slide exists, and in a countdown the room is tracking
+   it more than the name. */
+.slide-team { display: flex; flex-direction: column; gap: 18px; }
+.team-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.team-rank {
+  font-size: clamp(3.5rem, 8vw, 6rem);
+  font-weight: 800;
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+  color: oklch(0.85 0.17 92);
+}
+.team-rank-of {
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.62 0.01 90);
+  align-self: flex-end;
+  margin-left: -8px;
+  padding-bottom: 6px;
+}
+.team-logo {
+  width: 64px; height: 64px; border-radius: 16px;
+  display: grid; place-items: center; overflow: hidden; flex: none;
+}
+.team-logo-img { width: 100%; height: 100%; object-fit: cover; }
+.team-logo-initials { font-weight: 700; font-size: 1.2rem; }
+.team-identity { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.team-name {
+  font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+  font-weight: 800; line-height: 1.05; margin: 0;
+  letter-spacing: -0.02em;
+}
+.team-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.team-tier {
+  font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid oklch(0.3 0.02 90); color: oklch(0.78 0.01 90);
+}
+.team-move {
+  font-size: 0.78rem; letter-spacing: 0.06em; font-weight: 600;
+}
+.team-move[data-dir='up'] { color: oklch(0.78 0.17 145); }
+.team-move[data-dir='down'] { color: oklch(0.68 0.19 25); }
+.team-stat { display: flex; align-items: baseline; gap: 12px; margin: 0; }
+.team-stat-value {
+  font-size: clamp(2.4rem, 5.5vw, 4rem);
+  font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+}
+.team-stat-label {
+  font-size: 0.86rem; color: oklch(0.65 0.01 90);
+  letter-spacing: 0.04em;
+}
+.team-notes {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: 62ch;
+}
+.team-note {
+  font-size: 0.98rem; line-height: 1.5; color: oklch(0.72 0.01 90);
+  padding-left: 14px; border-left: 2px solid oklch(0.28 0.02 90);
 }
 
 .list-rows {

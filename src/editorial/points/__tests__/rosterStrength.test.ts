@@ -57,6 +57,20 @@ describe('bestLineupPoints', () => {
     expect(total).toBe(100)
   })
 
+  it('reports the best STARTER, not the best rostered player', () => {
+    // A kicker with no K slot cannot start anywhere, so he is not this
+    // team's best player in any sense that reaches a lineup — and the
+    // card that names him would be naming someone who never plays.
+    const squad = [
+      { position: 'K', points: 500, playerId: 'kicker' },
+      { position: 'RB', points: 100, playerId: 'back' },
+      { position: 'WR', points: 90, playerId: 'wideout' },
+    ]
+    const { best, total } = bestLineupPoints(squad, ['RB', 'WR'])
+    expect(best?.playerId).toBe('back')
+    expect(total).toBe(190)
+  })
+
   it('lets a superflex slot take a quarterback', () => {
     const squad = [p('QB', 300), p('RB', 100)]
     const { total } = bestLineupPoints(squad, ['QB', 'SUPER_FLEX'])

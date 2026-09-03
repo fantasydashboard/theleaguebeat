@@ -68,6 +68,46 @@ export interface ListSlide {
   revealOneByOne?: boolean
 }
 
+/**
+ * One team, one slide.
+ *
+ * The list slide ranks a league; this one presents a TEAM. A ten-row
+ * table read off a screen gives every team two seconds and the room
+ * no reason to react to any of them. A card each turns a ranking into
+ * ten moments, which is the entire reason to present rather than send
+ * a link.
+ *
+ * Everything here is resolved at build time. The renderer draws what
+ * it is handed and never reaches back into league data.
+ */
+export interface TeamCardSlide {
+  kind: 'team-card'
+  eyebrow: string
+  /** 1 = best. Shown large — it is the reason the slide exists. */
+  rank: number
+  /** e.g. "10 teams", for "3rd of 10". */
+  fieldSize: number
+  teamName: string
+  /** Short verdict word, e.g. "Contender". Omitted when the data
+   *  cannot support one rather than defaulted to something bland. */
+  tier?: string
+  /** The headline number and what it is. */
+  statValue: string
+  statLabel: string
+  /** Movement since a stated earlier point — omitted when there is no
+   *  earlier point to compare against, never rendered as "+0" to fill
+   *  the space. */
+  movement?: { places: number; label: string }
+  /** Supporting figures, at most three. */
+  chips?: { value: string; label: string }[]
+  /** One or two lines of detail: best player, thinnest slot. */
+  notes?: string[]
+  teamId?: string
+  logoUrl?: string
+  logoColor?: string
+  logoInitials?: string
+}
+
 /** Closing card. */
 export interface SignOffSlide {
   kind: 'sign-off'
@@ -79,6 +119,7 @@ export type PresentSlide =
   | ColdOpenSlide
   | StatementSlide
   | ListSlide
+  | TeamCardSlide
   | SignOffSlide
 
 export interface PresentDeck {
