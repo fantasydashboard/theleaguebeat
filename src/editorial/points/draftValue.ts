@@ -1,6 +1,16 @@
 /**
  * Steals and reaches, measured honestly.
  *
+ * WHAT THE BASELINE ACTUALLY IS. Sleeper publishes NO ADP — the player
+ * record carries exactly one ranking field, `search_rank`, and the
+ * draft object carries none. `search_rank` is a prominence/search
+ * ordering, not aggregated draft position: it is static, format-blind
+ * (it knows nothing of PPR, superflex or roster size) and full of ties.
+ * It correlates with real draft order at about 0.79, so it carries
+ * genuine signal, but it is a PROXY and the copy says "Sleeper's player
+ * ranking" rather than "consensus" for that reason. True ADP would have
+ * to come from UFD or a third-party feed.
+ *
  * THE PROBLEM WITH THE OBVIOUS APPROACH. Sleeper's `search_rank` is the
  * only consensus-ish number available without a projection model, and
  * comparing it to pick order directly does not work. Against a real
@@ -197,7 +207,7 @@ export function roundsLabel(roundsDelta: number): string {
 export function describeDivergence(d: Divergence, positionPlural: string): string {
   return (
     `${ordinal(d.actualAtPosition)} ${positionPlural} off the board, ` +
-    `${roundsLabel(d.roundsDelta)}.`
+    `${roundsLabel(d.roundsDelta)} on Sleeper's ranking.`
   )
 }
 

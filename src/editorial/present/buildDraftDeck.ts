@@ -186,9 +186,10 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           kind: 'list',
           eyebrow: 'Fell furthest',
           headline: 'Who lasted longer than they should have.',
-        support:
-          'Ordered by how much the gap matters, not how wide it is — a gap on ' +
-          'an early pick outweighs the same gap late.',
+          support:
+            "Against Sleeper's player ranking — the only ordering it publishes, and a " +
+            'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
+            'matters, not how wide it is.',
           revealOneByOne: true,
           rows: div.fell.slice(0, 5).map((d) => ({
             lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
@@ -206,7 +207,10 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         kind: 'list',
         eyebrow: 'Went early',
         headline: 'Picks the room did not see coming.',
-        support: 'How much earlier they went than the consensus order at their position.',
+        support:
+          "Against Sleeper's player ranking — the only ordering it publishes, and a " +
+          'proxy for ADP rather than ADP itself. Ranked by how much the gap ' +
+          'matters, not how wide it is.',
         revealOneByOne: true,
         rows: div.reached.slice(0, 5).map((d) => ({
           lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
@@ -226,10 +230,10 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       slides.push({
         kind: 'list',
         eyebrow: 'Draft grades',
-        headline: 'Graded on a curve, against consensus.',
+        headline: "Graded on a curve, against Sleeper's rankings.",
         support:
-          'Rounds of value each team gained by taking players later than consensus ' +
-          'had them. Letters are relative to this league.',
+          "Rounds of value each team gained by taking players later than Sleeper's " +
+          'ranking had them. Letters are relative to this league.',
         revealOneByOne: true,
         rows: graded.map((g) => ({
           lead: g.grade,
