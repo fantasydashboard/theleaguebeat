@@ -141,6 +141,13 @@ import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
+import { buildBoardDeck, type BoardDeckTeam } from '@/editorial/present/buildBoardDeck'
+import { rankRosterStrength, type RosterPlayer } from '@/editorial/points/rosterStrength'
+import {
+  projectSeason,
+  weeklyScoreSpread,
+  type ScheduledGame,
+} from '@/editorial/points/projectedSeason'
 import {
   buildDraftBaseline,
   projectionsUrl,
@@ -262,6 +269,139 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
+/**
+ * Assemble the preseason board.
+ *
+ * Three fetches the league contract does not carry: current rosters
+ * (the contract has teams but not who is ON them), the season
+ * schedule, and last season's scores for the variance estimate. All
+ * public, all small, and each optional — the deck degrades from
+ * "ranking plus projected records" to "ranking" to nothing rather than
+ * failing.
+ */
+async function buildBoard(args: {
+  record: { league_name?: string | null; settings?: Record<string, unknown> | null }
+  data: { leagueName: string; currentSeason: number; teams: { id: string }[] }
+  baseline?: DraftBaseline
+  rosterPositions?: string[]
+  teamName: (teamId: string) => string
+  teamVisual: (teamId: string) => BoardDeckTeam | undefined
+  leagueId: string
+  /** From the live league object. `0` means UNSET on Sleeper, not
+   *  "no playoffs", which is why this is validated rather than used. */
+  playoffWeekStart?: number
+}): Promise<PresentDeck | null> {
+  const { baseline, rosterPositions, leagueId } = args
+  if (!baseline || !rosterPositions?.length) return null
+
+  const rostersRes = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`)
+  if (!rostersRes.ok) return null
+  const rosters = (await rostersRes.json()) as {
+    roster_id: number
+    players?: string[] | null
+  }[]
+
+  // Positions come from the projections payload, which already carries
+  // them — so no second player lookup, and no name matching.
+  const players: RosterPlayer[] = []
+  for (const r of rosters) {
+    for (const playerId of r.players ?? []) {
+      players.push({
+        playerId,
+        position: baseline.positionOf(playerId) ?? '',
+        teamId: String(r.roster_id),
+      })
+    }
+  }
+  const strength = rankRosterStrength(players, baseline.pointsOf, rosterPositions)
+  if (strength.length < 4) return null
+
+  // The schedule, for projected records. Sleeper publishes every week's
+  // pairings before kickoff, so this works in preseason.
+  const endWeek = Math.max(1, Math.min(18, regularSeasonWeeksOf(args.playoffWeekStart)))
+  let schedule: ScheduledGame[] = []
+  try {
+    const weeks = await Promise.all(
+      Array.from({ length: endWeek }, (_, i) =>
+        fetch(`https://api.sleeper.app/v1/league/${leagueId}/matchups/${i + 1}`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((ms) => ({ week: i + 1, ms })),
+      ),
+    )
+    schedule = weeks.flatMap(({ week, ms }) => pairSchedule(week, ms))
+  } catch {
+    // No schedule — the deck ranks rosters and skips records.
+  }
+
+  // Variance from the league's OWN prior season where there is one.
+  let measuredSpread: number | undefined
+  const previousLeagueId = (args.record.settings as Record<string, unknown> | null)
+    ?.previous_league_id
+  if (previousLeagueId) {
+    try {
+      const prior = await Promise.all(
+        Array.from({ length: endWeek }, (_, i) =>
+          fetch(`https://api.sleeper.app/v1/league/${previousLeagueId}/matchups/${i + 1}`)
+            .then((r) => (r.ok ? r.json() : [])),
+        ),
+      )
+      measuredSpread = weeklyScoreSpread(
+        prior.flat().map((m: { points?: number }) => m?.points ?? 0),
+      )
+    } catch {
+      // Falls back to the documented default spread.
+    }
+  }
+
+  const projected = schedule.length
+    ? projectSeason(
+        strength.map((t) => ({ teamId: t.teamId, pointsPerWeek: t.pointsPerWeek })),
+        schedule,
+        measuredSpread,
+      )
+    : undefined
+
+  return buildBoardDeck({
+    leagueName: args.record.league_name || args.data.leagueName,
+    season: args.data.currentSeason,
+    strength,
+    projected,
+    measuredSpread,
+    teamName: args.teamName,
+    team: args.teamVisual,
+    formatLabel: baseline.formatLabel,
+  })
+}
+
+/** Pair one week's raw entries into scheduled games. `matchup_id` is
+ *  null for byes and unpaired teams — grouping before filtering would
+ *  invent games between teams that never met. */
+function pairSchedule(
+  week: number,
+  entries: { roster_id?: number; matchup_id?: number | null }[],
+): ScheduledGame[] {
+  const byId = new Map<number, string[]>()
+  for (const e of entries) {
+    if (e?.matchup_id == null || e.roster_id == null) continue
+    byId.set(e.matchup_id, [...(byId.get(e.matchup_id) ?? []), String(e.roster_id)])
+  }
+  const games: ScheduledGame[] = []
+  for (const pair of byId.values()) {
+    if (pair.length === 2) {
+      games.push({ week, homeTeamId: pair[0], awayTeamId: pair[1] })
+    }
+  }
+  return games
+}
+
+/** Regular-season length from the league's playoff start. `0` means
+ *  UNSET on Sleeper, not "no playoffs", so it falls back rather than
+ *  producing a negative week count. */
+function regularSeasonWeeksOf(playoffWeekStart?: number): number {
+  const pws = Number(playoffWeekStart)
+  return Number.isFinite(pws) && pws > 1 ? pws - 1 : 14
+}
+
 async function load(): Promise<void> {
   loading.value = true
   error.value = null
@@ -297,6 +437,7 @@ async function load(): Promise<void> {
     // nothing else; the factual slides stand on the pick list.
     let baseline: DraftBaseline | undefined
     let rosterPositions: string[] | undefined
+    let playoffWeekStart: number | undefined
     let consensusRank: ((playerId: string) => number | undefined) | undefined
     const picks = [...(data.draft?.picks ?? [])]
 
@@ -315,8 +456,10 @@ async function load(): Promise<void> {
           const lg = (await lgRes.json()) as {
             scoring_settings?: Record<string, unknown>
             roster_positions?: string[]
+            settings?: { playoff_week_start?: number }
           }
           rosterPositions = lg.roster_positions
+          playoffWeekStart = lg.settings?.playoff_week_start
           const scoring = scoringFor(lg.scoring_settings, lg.roster_positions)
           const res = await fetch(projectionsUrl(data.currentSeason))
           if (res.ok) {
@@ -350,27 +493,45 @@ async function load(): Promise<void> {
       }
     }
 
-    // Only the draft deck exists so far. The others land as their data
-    // does — the wire needs transactions, the board needs played weeks.
-    deck.value = buildDraftDeck({
-      leagueName: record.league_name || data.leagueName,
-      season: data.currentSeason,
-      picks,
-      teamName,
-      baseline,
-      rosterPositions,
-      consensusRank,
-      team: (teamId: string) => {
-        const t = data.teams.find((x) => x.id === teamId)
-        if (!t) return undefined
-        return {
-          name: t.name,
-          avatarUrl: t.avatarUrl,
-          avatarColor: t.avatarColor,
-          ownerInitials: t.ownerInitials,
-        }
-      },
-    })
+    const teamVisual = (teamId: string) => {
+      const t = data.teams.find((x) => x.id === teamId)
+      if (!t) return undefined
+      return {
+        name: t.name,
+        avatarUrl: t.avatarUrl,
+        avatarColor: t.avatarColor,
+        ownerInitials: t.ownerInitials,
+      }
+    }
+
+    // Which deck the URL asked for. This used to be ignored — every
+    // route built the draft deck, so /present/board silently rendered
+    // the draft. Adding a second deck is what surfaced it.
+    const deckId = typeof route.params.deckId === 'string' ? route.params.deckId : 'draft'
+
+    if (deckId === 'board') {
+      deck.value = await buildBoard({
+        record,
+        data,
+        baseline,
+        rosterPositions,
+        teamName,
+        teamVisual,
+        leagueId: id,
+        playoffWeekStart,
+      })
+    } else {
+      deck.value = buildDraftDeck({
+        leagueName: record.league_name || data.leagueName,
+        season: data.currentSeason,
+        picks,
+        teamName,
+        baseline,
+        rosterPositions,
+        consensusRank,
+        team: teamVisual,
+      })
+    }
   } catch (err) {
     error.value = (err as Error).message || 'Something went wrong.'
   } finally {
@@ -386,7 +547,10 @@ onMounted(() => {
   })
 })
 
-watch(() => route.params.leagueId, () => void load())
+// Rebuild on deckId too: the picker moves between decks without
+// changing the league, and watching only the league left the previous
+// deck on screen.
+watch(() => [route.params.leagueId, route.params.deckId], () => void load())
 </script>
 
 <style scoped>

@@ -281,12 +281,22 @@
           </li>
         </ul>
 
+        <!-- Both decks live here rather than under Power Rankings,
+             because Power Rankings is hidden until the season starts
+             and the board's preseason edition is exactly what a league
+             wants in the week BEFORE kickoff. -->
         <div v-if="routeLeagueId" class="points-draft-actions">
           <router-link
             :to="`/leagues/${routeLeagueId}/present/draft`"
             class="points-draft-link points-draft-link-primary"
           >
             Present the draft
+          </router-link>
+          <router-link
+            :to="`/leagues/${routeLeagueId}/present/board`"
+            class="points-draft-link points-draft-link-primary"
+          >
+            Present the board
           </router-link>
           <router-link
             :to="`/leagues/${routeLeagueId}/draft`"

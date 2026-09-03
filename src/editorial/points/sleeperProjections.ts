@@ -47,6 +47,11 @@ export interface DraftBaseline {
   adpOf: (playerId: string) => number | undefined
   /** Projected season points, or undefined when unprojected. */
   pointsOf: (playerId: string) => number | undefined
+  /** Roster position. Carried here because the projections payload
+   *  already includes it, which spares every caller a second lookup
+   *  against the 15MB player blob just to learn that a player is a
+   *  running back. */
+  positionOf: (playerId: string) => string | undefined
   /** Human label, e.g. "Sleeper half-PPR ADP". */
   basis: string
   /** e.g. "half-PPR" — for copy that names the format. */
@@ -124,11 +129,15 @@ export function buildDraftBaseline(
   const ptsField = pointsKey(scoring)
   const adp = new Map<string, number>()
   const points = new Map<string, number>()
+  const position = new Map<string, string>()
 
   for (const entry of raw as RawProjection[]) {
     if (!entry || typeof entry !== 'object') continue
     const id = entry.player_id
     if (typeof id !== 'string' || !id) continue
+    const pos = (entry as { player?: { position?: unknown } }).player?.position
+    if (typeof pos === 'string' && pos) position.set(id, pos.toUpperCase())
+
     const stats = entry.stats
     if (!stats || typeof stats !== 'object') continue
 
@@ -145,6 +154,7 @@ export function buildDraftBaseline(
   return {
     adpOf: (playerId) => adp.get(playerId),
     pointsOf: (playerId) => points.get(playerId),
+    positionOf: (playerId) => position.get(playerId),
     basis: `Sleeper ${label} ADP`,
     formatLabel: label,
   }
