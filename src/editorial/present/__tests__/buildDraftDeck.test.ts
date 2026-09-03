@@ -140,8 +140,6 @@ describe('steals and reaches', () => {
 
 describe('draft grades', () => {
   const picks = [...(data.draft?.picks ?? [])]
-  // Synthetic consensus: reverse draft order, so late picks look like
-  // steals and every team accumulates some divergence.
   const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
   const deck = buildDraftDeck({
     leagueName: data.leagueName,
@@ -150,55 +148,58 @@ describe('draft grades', () => {
     teamName: nameOf,
     consensusRank: (id) => order.get(id),
   })!
-  const grades = deck.slides.find(
-    (s) => s.kind === 'list' && s.eyebrow === 'Draft grades',
-  ) as { rows: { lead?: string; label: string; value?: string; sub?: string }[] } | undefined
+  const cards = deck.slides.filter(
+    (s) => s.kind === 'team-card',
+  ) as unknown as {
+    rank: number
+    fieldSize: number
+    tier?: string
+    statValue: string
+    chips?: { value: string; label: string }[]
+    notes?: string[]
+  }[]
 
-  it('grades every team it could compare', () => {
-    expect(grades).toBeDefined()
-    expect(grades!.rows.length).toBeGreaterThanOrEqual(4)
+  it('gives every graded team a slide of its own', () => {
+    expect(cards.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('counts down, so the best draft is the last card', () => {
+    // Best-first puts the one result the room waits for on screen at
+    // step one, then descends into teams nobody asked about.
+    expect(cards.map((c) => c.rank)).toEqual(
+      [...cards.map((c) => c.rank)].sort((a, b) => b - a),
+    )
+    expect(cards[cards.length - 1].rank).toBe(1)
   })
 
   it('never shows a letter without the rounds figure beside it', () => {
     // The letter is league-relative and means little alone; the rounds
-    // number is the honest quantity. "—" is the deliberate non-grade
-    // for a team with too few compared picks to rank. The letter sits
-    // in the sub-line now that the lead carries the countdown rank.
-    for (const r of grades!.rows) {
-      expect(r.lead).toMatch(/^\d{1,2}(st|nd|rd|th)$/)
-      expect(r.sub, `no letter beside ${r.lead}`).toMatch(/^([ABCD][+-]?|—) · /)
-      expect(r.value, `no rounds beside ${r.lead}`).toMatch(/^[+-]?[\d.]+\/pick$/)
+    // figure is the honest quantity.
+    for (const c of cards) {
+      if (!c.tier) continue
+      expect(c.tier).toMatch(/^[ABCD][+-]?$/)
+      const labels = (c.chips ?? []).map((ch) => ch.label).join(' ')
+      expect(labels, `no rounds beside ${c.tier}`).toContain('rounds / pick')
     }
   })
 
-  it('labels the figure as per-pick', () => {
-    // A rendering contract only — that the slide says what the number
-    // is. Whether the maths is actually per-pick, and centred on the
-    // league, is gated by gradeTeamDrafts's own tests.
-    for (const r of grades!.rows) {
-      expect(r.value, 'grade figure is not per-pick').toContain('/pick')
+  it('shows each team its own picks, not the league-wide list', () => {
+    // The point of a card per team: the room is looking at one manager
+    // and wants that manager's draft, not a leaderboard they already saw.
+    const withNotes = cards.filter((c) => (c.notes ?? []).length > 0)
+    expect(withNotes.length).toBeGreaterThan(0)
+    for (const c of withNotes) {
+      expect(c.notes!.join(' ')).toMatch(/Best value:|Went early on/)
     }
   })
 
-  it('counts down, so the winner is revealed last', () => {
-    // Rows reveal in array order. Best-first puts the one result the
-    // room is waiting for on screen at step one, then spends nine more
-    // steps descending into teams nobody asked about.
-    const nums = grades!.rows.map((r) => parseFloat(r.value ?? '0'))
-    for (let i = 1; i < nums.length; i++) expect(nums[i - 1]).toBeLessThanOrEqual(nums[i])
-  })
-
-  it('crowns the winner on its own slide, after the countdown', () => {
-    const gradeIdx = deck.slides.findIndex(
-      (s) => 'eyebrow' in s && s.eyebrow === 'Draft grades',
+  it('replaces both ten-row countdowns rather than adding to them', () => {
+    // Turning each into cards would have meant twenty team slides in
+    // one deck. Each team is presented once, carrying both grades.
+    const lists = deck.slides.filter(
+      (s) => s.kind === 'list' && 'eyebrow' in s && /grade|projected roster/i.test(s.eyebrow),
     )
-    const verdictIdx = deck.slides.findIndex(
-      (s) => 'eyebrow' in s && s.eyebrow === 'The verdict',
-    )
-    expect(verdictIdx).toBeGreaterThan(gradeIdx)
-    const last = grades!.rows[grades!.rows.length - 1]
-    const verdict = deck.slides[verdictIdx] as { headline: string }
-    expect(verdict.headline).toContain(last.label)
+    expect(lists).toHaveLength(0)
   })
 
   it('describes divergence in rounds, not slots', () => {

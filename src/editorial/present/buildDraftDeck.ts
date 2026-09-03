@@ -260,29 +260,6 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     // figure sits beside each one rather than the letter standing alone
     // as a verdict.
     const graded = gradeTeamDrafts([...div.fell, ...div.reached])
-    if (graded.length >= 4) {
-      const countdown = [...graded].reverse()
-      slides.push({
-        kind: 'list',
-        eyebrow: 'Draft grades',
-        headline: 'Who beat the board.',
-        support:
-          `Rounds gained per pick against ${basis}, next to the league ` +
-          'average. Counting up to the best draft in the room.',
-        revealOneByOne: true,
-        rows: countdown.map((g) => ({
-          // Rank leads rather than the letter: a countdown needs a
-          // position to count, and "10th" tells the room how far there
-          // is left to go in a way that "D" does not.
-          lead: `${ordinal(g.rank)}`,
-          label: input.teamName(g.teamId),
-          sub: `${g.grade} · ${g.picksCompared} picks compared`,
-          value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}/pick`,
-          ...teamVisual(input, g.teamId),
-        })),
-      })
-
-    }
 
     // THE ACTUAL GRADE. Everything above measures who beat the board.
     // This measures who has the team — a different claim, and the one
@@ -302,26 +279,114 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           )
         : []
 
-    if (strength.length >= 4) {
-      const countdown = [...strength].reverse()
-      slides.push({
-        kind: 'list',
-        eyebrow: 'Projected rosters',
-        headline: 'Who actually drafted the best team.',
-        support:
-          `Best starting lineup each team can field, on Sleeper's ${input.baseline!.formatLabel} ` +
-          'projections. Bench players score nothing, because they do not. ' +
-          'Counting up to the strongest roster in the league.',
-        revealOneByOne: true,
-        rows: countdown.map((t) => ({
-          lead: ordinal(t.rank),
-          label: input.teamName(t.teamId),
-          sub: `${t.projectedPoints.toLocaleString()} projected pts`,
-          value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}/wk`,
-          ...teamVisual(input, t.teamId),
-        })),
-      })
+    // ONE CARD PER TEAM, worst to best, carrying that team's own draft.
+    //
+    // This replaces two separate ten-row countdowns — one for value
+    // against the board, one for projected roster. Turning both into
+    // cards would have meant twenty team slides in a single deck; the
+    // room does not have that in it. Merging them means each team is
+    // presented ONCE, with both grades side by side and its own best
+    // and worst pick, which is a better slide than either list was:
+    // the two grades frequently disagree, and the disagreement is only
+    // visible when they sit on the same card.
+    //
+    // Ordered by projected roster where projections resolved, because
+    // that is the grade the deck's verdict crowns. Value against the
+    // board orders it otherwise.
+    const gradeBy = new Map(graded.map((g) => [g.teamId, g]))
+    const ranked: { teamId: string; rank: number }[] = strength.length
+      ? strength.map((t) => ({ teamId: t.teamId, rank: t.rank }))
+      : graded.map((g) => ({ teamId: g.teamId, rank: g.rank }))
+    const strengthBy = new Map(strength.map((t) => [t.teamId, t]))
 
+    // Each team's own best steal and worst reach, so a card can show
+    // the picks that team will actually be asked about.
+    const bestSteal = new Map<string, (typeof div.fell)[number]>()
+    for (const d of div.fell) {
+      if (!bestSteal.has(d.pick.teamId)) bestSteal.set(d.pick.teamId, d)
+    }
+    const worstReach = new Map<string, (typeof div.reached)[number]>()
+    for (const d of div.reached) {
+      if (!worstReach.has(d.pick.teamId)) worstReach.set(d.pick.teamId, d)
+    }
+
+    if (ranked.length >= 4) {
+      const field = ranked.length
+      for (const { teamId, rank } of [...ranked].reverse()) {
+        const g = gradeBy.get(teamId)
+        const t = strengthBy.get(teamId)
+        const steal = bestSteal.get(teamId)
+        const reach = worstReach.get(teamId)
+        const notes: string[] = []
+
+        if (steal) {
+          notes.push(
+            `Best value: ${steal.pick.playerName} at ` +
+              `${draftSlot(steal.pick.pickOverall, steal.pick.round, facts.teamCount)}, ` +
+              `${shortRounds(steal.roundsDelta)} later than ${basis} expected.`,
+          )
+        }
+        if (reach) {
+          notes.push(
+            `Went early on ${reach.pick.playerName} at ` +
+              `${draftSlot(reach.pick.pickOverall, reach.pick.round, facts.teamCount)} — ` +
+              `${shortRounds(reach.roundsDelta)} ahead of ${basis}.`,
+          )
+        }
+        // Said only when it is true, and it often is: beating the
+        // market and drafting the best roster are different things.
+        if (t && g && Math.abs(t.rank - g.rank) >= 3) {
+          notes.push(
+            t.rank < g.rank
+              ? `${ordinal(t.rank)} by roster but only ${ordinal(g.rank)} by value — ` +
+                'they paid market price and still walked out ahead.'
+              : `${ordinal(g.rank)} by value but only ${ordinal(t.rank)} by roster — ` +
+                'beating the board is not the same as winning the draft.',
+          )
+        }
+
+        slides.push({
+          kind: 'team-card',
+          eyebrow: 'Draft grades',
+          rank,
+          fieldSize: field,
+          teamName: input.teamName(teamId),
+          // The letter alone. Writing "Grade A" trips the deck's own
+          // guard against verdict language, and the eyebrow already
+          // says Draft grades — the pill does not need to repeat it.
+          tier: g?.grade && g.grade !== '—' ? g.grade : undefined,
+          statValue: t ? `${t.pointsPerWeek}` : `${g?.vsLeague ?? 0}`,
+          statLabel: t ? 'projected points per week' : 'rounds gained per pick',
+          chips: [
+            ...(t
+              ? [
+                  {
+                    value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}`,
+                    label: 'vs league avg',
+                  },
+                ]
+              : []),
+            ...(g
+              ? [
+                  {
+                    value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}`,
+                    label: 'rounds / pick vs board',
+                  },
+                  { value: `${g.picksCompared}`, label: 'picks compared' },
+                ]
+              : []),
+          ],
+          notes,
+          ...teamVisual(input, teamId),
+        })
+      }
+    }
+
+    // The projected-roster countdown that used to sit here is gone —
+    // the team cards above already carry every one of its figures, and
+    // a second ten-row pass over the same league said nothing the room
+    // had not just been shown one team at a time.
+    if (strength.length >= 4) {
       // The crown. This is what the removed "the steal" slide's visual
       // weight is worth spending on: the one claim in the deck the room
       // will actually argue about afterwards.

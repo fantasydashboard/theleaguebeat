@@ -107,6 +107,13 @@ for (const [i, s] of deck.slides.entries()) {
         `    ${(r.lead ?? '').padEnd(7)} ${r.label.padEnd(24)} ${(r.value ?? '').padStart(8)}   ${r.sub ?? ''}`,
       )
     }
+  } else if (s.kind === 'team-card') {
+    console.log(`  ${s.eyebrow.toUpperCase()}`)
+    const mv = s.movement ? `  ${s.movement.places > 0 ? '▲' : '▼'}${Math.abs(s.movement.places)}` : ''
+    console.log(`  ${s.rank} of ${s.fieldSize}  ${s.teamName}  [${s.tier ?? '—'}]${mv}`)
+    console.log(`  ${s.statValue} ${s.statLabel}`)
+    if (s.chips) console.log(`  ${s.chips.map((c) => `${c.value} ${c.label}`).join('  ·  ')}`)
+    for (const n of s.notes ?? []) console.log(`   – ${n}`)
   } else {
     console.log(`  ${s.headline}`)
     if (s.sub) console.log(`  ${s.sub}`)
