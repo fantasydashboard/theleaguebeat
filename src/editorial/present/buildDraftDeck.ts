@@ -27,6 +27,7 @@ import {
 import {
   findDraftDivergences,
   describeDivergence,
+  gradeTeamDrafts,
   type ValuedPick,
 } from '../points/draftValue'
 import type { PresentDeck, PresentSlide } from './types'
@@ -54,6 +55,13 @@ export interface DraftDeckInput {
   consensusRank?: (playerId: string) => number | undefined
 }
 
+/** Compact round figure for a list row: "3.5 rds", "1 rd". The
+ *  direction is already carried by which slide the row is on. */
+function shortRounds(roundsDelta: number): string {
+  const n = Math.round(Math.abs(roundsDelta) * 2) / 2
+  return n === 1 ? '1 rd' : `${n} rds`
+}
+
 /** Slide-row visual fields for a team, or nothing when the caller gave
  *  us no way to resolve one. */
 function teamVisual(input: DraftDeckInput, teamId: string) {
@@ -67,45 +75,12 @@ function teamVisual(input: DraftDeckInput, teamId: string) {
   }
 }
 
-/**
- * Where a pick sat WITHIN ITS OWN POSITION — "the fifth running back
- * off the board".
- *
- * This is deliberately the only draft-order judgement the deck makes.
- * The obvious alternative is to grade picks against Sleeper's
- * `search_rank`, and it does not survive contact with real data: it
- * correlates with draft order at only 0.79, carries 45 duplicate values
- * across 140 picks, and is blind to positional scarcity — so in a
- * one-quarterback league it flags Mahomes, Purdy, Nix and Dart as the
- * four biggest "steals" purely because quarterbacks always fall. A
- * league would spot that as nonsense immediately.
- *
- * Position-relative order avoids cross-position comparison entirely, so
- * it is true whatever the league's settings are. Real value grades need
- * real projections, which is UFD's model, not a number scraped from a
- * search index.
- */
-function positionOrder(
-  picks: CategoryLeagueDataDraftPick[],
-): Map<number, { position: string; nth: number }> {
-  const seen = new Map<string, number>()
-  const out = new Map<number, { position: string; nth: number }>()
-  for (const p of [...picks].sort((a, b) => a.pickOverall - b.pickOverall)) {
-    if (!p.position) continue
-    const nth = (seen.get(p.position) ?? 0) + 1
-    seen.set(p.position, nth)
-    out.set(p.pickOverall, { position: p.position, nth })
-  }
-  return out
-}
-
 /** Returns null when the league has no draft — the caller then omits
  *  this deck from the picker rather than offering an empty one. */
 export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
   const facts = buildDraftStoryFacts(input.picks)
   if (!facts) return null
 
-  const posOrder = positionOrder(input.picks)
   const slides: PresentSlide[] = []
 
   slides.push({
@@ -130,17 +105,6 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     })
   }
 
-  if (facts.firstPick) {
-    slides.push({
-      kind: 'statement',
-      eyebrow: 'Pick 1.1',
-      headline: `${input.teamName(facts.firstPick.draftedByTeamId)} took ${facts.firstPick.playerName}.`,
-      support: facts.firstPick.position
-        ? `${facts.firstPick.position}${facts.firstPick.mlbTeam ? `, ${facts.firstPick.mlbTeam}` : ''}. The board started here.`
-        : undefined,
-    })
-  }
-
   // Where each position first went. Reveals one at a time, because the
   // interesting part is the GAP between them — a quarterback going at 41
   // in one league and 22 in another is the whole conversation.
@@ -156,21 +120,6 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         sub: input.teamName(f.teamId),
         value: `#${f.pickOverall}`,
         ...teamVisual(input, f.teamId),
-      })),
-    })
-  }
-
-  // Runs — the moments the room reacted to itself rather than its board.
-  if (facts.runs.length > 0) {
-    slides.push({
-      kind: 'list',
-      eyebrow: 'The runs',
-      headline: 'When the room moved together.',
-      revealOneByOne: true,
-      rows: facts.runs.slice(0, 5).map((r) => ({
-        lead: `${r.fromPick}–${r.toPick}`,
-        label: `${numberWord(r.count)} ${positionWord(r.position, r.count)}`,
-        value: `${r.count}×`,
       })),
     })
   }
@@ -197,7 +146,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       position: p.position,
       teamId: p.draftedByTeamId,
     }))
-    const div = findDraftDivergences(valued, input.consensusRank)
+    const div = findDraftDivergences(valued, input.consensusRank, facts.teamCount)
 
     if (div.fell.length > 0) {
       const top = div.fell[0]
@@ -217,7 +166,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
             lead: `#${d.pick.pickOverall}`,
             label: d.pick.playerName,
             sub: input.teamName(d.pick.teamId),
-            value: `${d.delta} late`,
+            value: shortRounds(d.roundsDelta),
             ...teamVisual(input, d.pick.teamId),
           })),
         })
@@ -234,36 +183,31 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           lead: `#${d.pick.pickOverall}`,
           label: d.pick.playerName,
           sub: input.teamName(d.pick.teamId),
-          value: `${Math.abs(d.delta)} early`,
+          value: shortRounds(d.roundsDelta),
           ...teamVisual(input, d.pick.teamId),
         })),
       })
     }
-  }
 
-  // Round one, pick by pick — the slide a room actually wants walked
-  // through. Each row carries where the player sat within his own
-  // position, which is the only order judgement this deck makes.
-  const roundOne = [...input.picks]
-    .filter((p) => p.round === 1)
-    .sort((a, b) => a.pickOverall - b.pickOverall)
-  if (roundOne.length >= 4) {
-    slides.push({
-      kind: 'list',
-      eyebrow: 'Round one',
-      headline: 'How the first round went.',
-      revealOneByOne: true,
-      rows: roundOne.map((p) => {
-        const po = posOrder.get(p.pickOverall)
-        return {
-          lead: `${p.pickOverall}`,
-          label: p.playerName,
-          sub: input.teamName(p.draftedByTeamId),
-          value: po ? `${po.position}${po.nth}` : p.position,
-          ...teamVisual(input, p.draftedByTeamId),
-        }
-      }),
-    })
+    // Every team, graded. Letters are LEAGUE-RELATIVE — see
+    // gradeTeamDrafts — so the rounds figure sits beside each one
+    // rather than the letter standing alone as a verdict.
+    const graded = gradeTeamDrafts([...div.fell, ...div.reached])
+    if (graded.length >= 4) {
+      slides.push({
+        kind: 'list',
+        eyebrow: 'Draft grades',
+        headline: 'Graded on a curve, against consensus.',
+        revealOneByOne: true,
+        rows: graded.map((g) => ({
+          lead: g.grade,
+          label: input.teamName(g.teamId),
+          sub: `${g.picksCompared} picks compared`,
+          value: `${g.roundsGained > 0 ? '+' : ''}${g.roundsGained} rds`,
+          ...teamVisual(input, g.teamId),
+        })),
+      })
+    }
   }
 
   slides.push({

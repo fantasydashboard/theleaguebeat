@@ -97,29 +97,7 @@ describe('logos and position-relative order', () => {
     }
   })
 
-  it('labels round-one picks by position order, not by a value grade', () => {
-    const round1 = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === 'Round one')
-    expect(round1).toBeDefined()
-    const values = (round1 as { rows: { value?: string }[] }).rows.map((r) => r.value ?? '')
-    // "RB1", "WR2" — position plus its order. Never "steal"/"reach"/a
-    // grade, which would need a projection model we do not have.
-    for (const v of values) expect(v).toMatch(/^[A-Z]{1,3}\d+$/)
-    expect(values.join(' ')).not.toMatch(/steal|reach|bust|grade|[A-F][+-]?$/i)
-  })
 
-  it('numbers each position from one, in draft order', () => {
-    const round1 = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === 'Round one')!
-    const rows = (round1 as { rows: { value?: string }[] }).rows
-    const seen = new Map<string, number>()
-    for (const r of rows) {
-      const m = /^([A-Z]{1,3})(\d+)$/.exec(r.value ?? '')
-      if (!m) continue
-      const expected = (seen.get(m[1]) ?? 0) + 1
-      expect(Number(m[2]), `${m[1]} out of order`).toBe(expected)
-      seen.set(m[1], expected)
-    }
-    expect(seen.size).toBeGreaterThan(0)
-  })
 })
 
 describe('steals and reaches', () => {
@@ -157,5 +135,47 @@ describe('steals and reaches', () => {
     for (const banned of ['best pick', 'worst pick', 'bust', 'grade a', 'a+ draft']) {
       expect(text, `deck claimed: ${banned}`).not.toContain(banned)
     }
+  })
+})
+
+describe('draft grades', () => {
+  const picks = [...(data.draft?.picks ?? [])]
+  // Synthetic consensus: reverse draft order, so late picks look like
+  // steals and every team accumulates some divergence.
+  const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
+  const deck = buildDraftDeck({
+    leagueName: data.leagueName,
+    season: data.currentSeason,
+    picks,
+    teamName: nameOf,
+    consensusRank: (id) => order.get(id),
+  })!
+  const grades = deck.slides.find(
+    (s) => s.kind === 'list' && s.eyebrow === 'Draft grades',
+  ) as { rows: { lead?: string; label: string; value?: string }[] } | undefined
+
+  it('grades every team it could compare', () => {
+    expect(grades).toBeDefined()
+    expect(grades!.rows.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('never shows a letter without the rounds figure beside it', () => {
+    // The letter is league-relative and means little alone; the rounds
+    // number is the honest quantity.
+    for (const r of grades!.rows) {
+      expect(r.lead).toMatch(/^[ABCD][+-]?$/)
+      expect(r.value, `no rounds beside ${r.lead}`).toMatch(/^[+-]?[\d.]+ rds$/)
+    }
+  })
+
+  it('orders best-to-worst', () => {
+    const nums = grades!.rows.map((r) => parseFloat((r.value ?? '0').replace(' rds', '')))
+    for (let i = 1; i < nums.length; i++) expect(nums[i - 1]).toBeGreaterThanOrEqual(nums[i])
+  })
+
+  it('describes divergence in rounds, not slots', () => {
+    const text = JSON.stringify(deck)
+    expect(text).toMatch(/rounds? (early|late)|1 rd/)
+    expect(text, 'still using raw slot counts').not.toMatch(/\d+ spots? (earlier|later)/)
   })
 })

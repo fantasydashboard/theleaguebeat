@@ -48,9 +48,35 @@ export interface Divergence {
   consensusAtPosition: number
   /** Where this league actually took him among that position, 1-based. */
   actualAtPosition: number
-  /** actual − consensus. Positive means he went later than consensus
-   *  had him (fell); negative means earlier (reach). */
+  /** actual − consensus, in position slots. Positive means he went
+   *  later than consensus had him (fell); negative means earlier. */
   delta: number
+  /**
+   * The overall pick where consensus would have had him — the slot the
+   * Nth player at his position ACTUALLY went in this draft. Derived
+   * from real picks rather than an external ADP, so it stays inside the
+   * position and inside this league's own board.
+   */
+  expectedPickOverall: number
+  /** actualPick − expectedPick, expressed in rounds. Positive is late.
+   *  Rounds read far better than raw slots: "a round and a half late"
+   *  is a thing people say; "13 slots" is not. */
+  roundsDelta: number
+}
+
+/** Per-team draft value, aggregated across every pick we could compare. */
+export interface TeamDraftValue {
+  teamId: string
+  /** Total rounds of value gained against consensus. Positive is good:
+   *  the team got players later than consensus said they should. */
+  roundsGained: number
+  /** How many of the team's picks could be compared at all. */
+  picksCompared: number
+  /** Rank within the league, 1 = most value gained. */
+  rank: number
+  /** League-RELATIVE letter. See `gradeTeamDrafts` for what it does and
+   *  does not mean. */
+  grade: string
 }
 
 export interface DraftDivergences {
@@ -70,6 +96,9 @@ export interface DraftDivergences {
 export function findDraftDivergences(
   picks: ValuedPick[],
   rankOf: (playerId: string) => number | undefined,
+  /** Teams in the league — how many picks make a round. Without it,
+   *  round figures cannot be computed and come back as 0. */
+  teamCount = 0,
 ): DraftDivergences {
   const byPosition = new Map<string, ValuedPick[]>()
   for (const p of picks) {
@@ -106,7 +135,17 @@ export function findDraftDivergences(
       const actualAtPosition = actualIndex.get(p.playerId)!
       const delta = actualAtPosition - consensusAtPosition
       if (Math.abs(delta) < MIN_DIVERGENCE) return
-      all.push({ pick: p, consensusAtPosition, actualAtPosition, delta })
+      const expectedPickOverall = byPick[consensusAtPosition - 1].pickOverall
+      const roundsDelta =
+        teamCount > 0 ? (p.pickOverall - expectedPickOverall) / teamCount : 0
+      all.push({
+        pick: p,
+        consensusAtPosition,
+        actualAtPosition,
+        delta,
+        expectedPickOverall,
+        roundsDelta,
+      })
     })
   }
 
@@ -117,14 +156,88 @@ export function findDraftDivergences(
   }
 }
 
-/** "the 9th running back off the board, 5 spots later than consensus" */
+/** Rounds to the nearest half, which is the granularity people actually
+ *  speak in: "a round early", "a round and a half late". */
+export function roundsLabel(roundsDelta: number): string {
+  const rounded = Math.round(Math.abs(roundsDelta) * 2) / 2
+  const direction = roundsDelta > 0 ? 'late' : 'early'
+  if (rounded < 0.5) return 'about where consensus had him'
+  const n = rounded === 1 ? 'a round' : `${rounded} rounds`
+  return `${n} ${direction}`
+}
+
+/** "the 9th running back off the board, a round and a half late" */
 export function describeDivergence(d: Divergence, positionPlural: string): string {
-  const spots = Math.abs(d.delta)
-  const direction = d.delta > 0 ? 'later' : 'earlier'
   return (
     `${ordinal(d.actualAtPosition)} ${positionPlural} off the board, ` +
-    `${spots} ${spots === 1 ? 'spot' : 'spots'} ${direction} than consensus had him.`
+    `${roundsLabel(d.roundsDelta)}.`
   )
+}
+
+/**
+ * Team-by-team draft value.
+ *
+ * Sums each team's rounds gained against consensus. A team that took
+ * players consensus rated higher than where they went accumulates
+ * positive rounds.
+ *
+ * ON THE LETTER GRADES. They are LEAGUE-RELATIVE and nothing more —
+ * assigned by how far a team sits from its own league's mean, so
+ * somebody always lands top and somebody always lands bottom. They do
+ * not mean a draft was objectively good; consensus is frequently wrong
+ * and a team can gain rounds by taking players everyone else had
+ * correctly faded. Absolute grades need projections, which is UFD's
+ * model. The rounds figure beside each letter is the honest number, and
+ * it is why the letter is never shown without it.
+ */
+export function gradeTeamDrafts(divergences: Divergence[]): TeamDraftValue[] {
+  const byTeam = new Map<string, { rounds: number; count: number }>()
+  for (const d of divergences) {
+    const cur = byTeam.get(d.pick.teamId) ?? { rounds: 0, count: 0 }
+    // A pick that FELL to you is value gained, so the sign flips.
+    cur.rounds += d.roundsDelta
+    cur.count += 1
+    byTeam.set(d.pick.teamId, cur)
+  }
+  if (byTeam.size === 0) return []
+
+  const rows = [...byTeam.entries()].map(([teamId, v]) => ({
+    teamId,
+    roundsGained: Math.round(v.rounds * 10) / 10,
+    picksCompared: v.count,
+  }))
+
+  const spread = Math.max(...rows.map((r) => r.roundsGained)) -
+    Math.min(...rows.map((r) => r.roundsGained))
+
+  const sorted = [...rows].sort(
+    (a, b) => b.roundsGained - a.roundsGained || a.teamId.localeCompare(b.teamId),
+  )
+
+  /**
+   * Graded on a CURVE by rank, not by distance from the mean.
+   *
+   * Z-scores were the first attempt and they collapse on the shape real
+   * drafts produce: this league's ten teams split into four clearly
+   * positive and six negative, which handed out four A grades and no
+   * B+ at all. Honest arithmetic, but it reads as broken. A curve
+   * spreads the letters the way anyone expects a grade sheet to look,
+   * and it is no less truthful because the whole measure was already
+   * league-relative.
+   */
+  const letter = (rank: number): string => {
+    // A league where every draft gained the same is not a league with a
+    // best and worst draft; grading them apart would invent a spread.
+    if (spread === 0) return 'B'
+    const pct = sorted.length === 1 ? 0 : (rank - 1) / (sorted.length - 1)
+    if (pct <= 0.15) return 'A'
+    if (pct <= 0.35) return 'B+'
+    if (pct <= 0.65) return 'B'
+    if (pct <= 0.85) return 'C'
+    return 'D'
+  }
+
+  return sorted.map((r, i) => ({ ...r, rank: i + 1, grade: letter(i + 1) }))
 }
 
 function ordinal(n: number): string {
