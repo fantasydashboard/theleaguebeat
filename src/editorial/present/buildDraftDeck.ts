@@ -191,7 +191,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     const div = input.adp
       ? findAdpDivergences(
           valued,
-          input.adp.expectedPickOf,
+          input.adp.adpOf,
           facts.teamCount,
           (p) => nflTeam.get(p.playerId) ?? '',
         )

@@ -5,8 +5,8 @@
  *
  * The deck's numbers are the part a league will argue with, so they
  * need to be readable outside a browser. This resolves ADP exactly as
- * PresentView does — same format detection, same league-size scaling —
- * and prints every slide as text.
+ * PresentView does — same format detection, same rank mapping — and
+ * prints every slide as text.
  */
 import {
   adpFormatFor,
@@ -65,10 +65,10 @@ const raw = await get(
   `https://fantasyfootballcalculator.com/api/v1/adp/${format}?year=${season}`,
 )
 const parsed = parseAdpResponse(raw)
-if (parsed) adp = buildAdpLookup(parsed, rosters.length)
+if (parsed) adp = buildAdpLookup(parsed)
 
 const covered = picks.filter(
-  (p) => adp?.expectedPickOf(p.playerName, p.position, p.mlbTeam ?? '') !== undefined,
+  (p) => adp?.adpOf(p.playerName, p.position, p.mlbTeam ?? '') !== undefined,
 ).length
 
 console.log(`\n${league.name} — ${season}`)

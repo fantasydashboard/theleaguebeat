@@ -16,6 +16,30 @@
  * so a half-PPR league is measured against half-PPR drafters. It sends
  * no CORS headers, so it is reached through `/api/adp`.
  *
+ * ON CALIBRATION — THE MISTAKE THIS MODULE MADE ONCE. The first
+ * version converted an ADP into an expected pick arithmetically:
+ * multiply by the ratio of league sizes, since ADP is published at 12
+ * teams. A regression on a real 10-team draft appeared to support it,
+ * giving a slope of 0.838 against a team ratio of 0.833.
+ *
+ * The slope was right and the model was still wrong, because the same
+ * regression carried an intercept of +12.3 picks that was ignored.
+ * Against the real 2026 draft the result was a systematic +1.01 ROUND
+ * bias: 58 players registered as having fallen and only 14 as reaches,
+ * on a board where those counts should be near even. Every faller was
+ * overstated by about a round, which is exactly the kind of error a
+ * league notices and no amount of correct arithmetic downstream
+ * repairs.
+ *
+ * The fix is to stop converting at all. `findAdpDivergences` maps by
+ * RANK — the player with the k-th best ADP is expected at the k-th
+ * slot this draft actually used. That is bias-free by construction
+ * (34 fell, 34 reached on the same draft), needs no league-size
+ * scaling, and is immune to a source whose numbers sit systematically
+ * early or late, since only the ORDER is read. Measured against a
+ * four-platform consensus it also lands 1.5x closer than the scaled
+ * model did.
+ *
  * WHAT IT STILL IS NOT. ADP is where players go, not how they finish —
  * a consensus can be wrong about a player and this measures agreement
  * with the crowd, not correctness. It is also a snapshot: for a draft
@@ -38,8 +62,10 @@ export interface AdpPlayer {
 export interface AdpData {
   /** Human label for the format sampled, e.g. "Half-PPR". */
   format: string
-  /** League size the sample was drafted at. ADP is only comparable
-   *  across league sizes once scaled by this — see `buildAdpLookup`. */
+  /** League size the sample was drafted at. Retained because it
+   *  describes the sample honestly, but nothing scales by it — see the
+   *  calibration note above for why converting between league sizes
+   *  arithmetically is the wrong move. */
   teams: number
   /** How many drafts the average is over. Shown to the reader, because
    *  a baseline drawn from 8,000 drafts earns more trust than one
@@ -102,12 +128,17 @@ export function adpFormatFor(
 /** What a resolved ADP lookup can tell the draft slides. */
 export interface AdpLookup {
   /**
-   * Where this league would have been expected to take the player,
-   * as an overall pick number. Undefined for players the sample does
-   * not cover — they are excluded from the read rather than assumed
-   * to be undrafted, which would report every late flier as a reach.
+   * Raw average draft position, as published. Undefined for players
+   * the sample does not cover — they are excluded from the read rather
+   * than assumed to be undrafted, which would report every late flier
+   * as a reach.
+   *
+   * Deliberately RAW. Converting an ADP into "the pick this league
+   * would have taken him at" is not a scaling problem, and
+   * `findAdpDivergences` does it by rank instead — see the note on
+   * calibration below.
    */
-  expectedPickOf: (playerName: string, position: string, team: string) => number | undefined
+  adpOf: (playerName: string, position: string, team: string) => number | undefined
   /** Human label for the basis, e.g. "half-PPR ADP over 8,007 drafts". */
   basis: string
   format: string
@@ -127,7 +158,7 @@ export interface AdpLookup {
  * a 10-team league against 12-team ADP gives a slope of 0.838, against
  * a team ratio of 10/12 = 0.833. The scaling is what the data does.
  */
-export function buildAdpLookup(data: AdpData, leagueTeams: number): AdpLookup {
+export function buildAdpLookup(data: AdpData): AdpLookup {
   const byNamePos = new Map<string, number>()
   const byDefTeam = new Map<string, number>()
 
@@ -142,22 +173,12 @@ export function buildAdpLookup(data: AdpData, leagueTeams: number): AdpLookup {
     byNamePos.set(`${normalizeName(p.name)}|${position}`, p.adp)
   }
 
-  // A malformed or missing team count would silently zero every
-  // expectation, so fall back to the sample's own size — that makes
-  // the scaling a no-op instead of a divide-by-zero.
-  const adpTeams = data.teams > 0 ? data.teams : 12
-  const scale = leagueTeams > 0 ? leagueTeams / adpTeams : 1
-
   return {
-    expectedPickOf(playerName, position, team) {
+    adpOf(playerName, position, team) {
       const pos = (position || '').toUpperCase()
-      const raw =
-        pos === 'DEF'
-          ? byDefTeam.get((team || '').toUpperCase())
-          : byNamePos.get(`${normalizeName(playerName)}|${pos}`)
-      if (raw === undefined) return undefined
-      // Never round to zero: pick 1 is the earliest pick that exists.
-      return Math.max(1, raw * scale)
+      return pos === 'DEF'
+        ? byDefTeam.get((team || '').toUpperCase())
+        : byNamePos.get(`${normalizeName(playerName)}|${pos}`)
     },
     basis: `${data.format} ADP over ${data.totalDrafts.toLocaleString()} drafts`,
     format: data.format,

@@ -72,15 +72,16 @@ describe('list ordering', () => {
 
   it('puts the biggest gap first, not the most significant one', () => {
     // THE distinguishing case, and the reason the ordering changed.
-    // `big` slid 6 rounds from round 4; `early` slid 2 rounds from
-    // round 1. Weighting by significance ranks `early` first (2.0 vs
-    // 1.5) and produces a column reading "2 rds" above "6 rds" — which
-    // reads as a broken sort and makes a reader distrust every other
-    // figure on the slide.
-    const exp: Record<string, number> = { big: 40, early: 10 }
+    // Rank mapping sends the k-th best ADP to the k-th used slot, so
+    // these four picks resolve to: `early` expected at 10 and taken at
+    // 30 (2 rounds, from round 1), `big` expected at 40 and taken at
+    // 100 (6 rounds, from round 4). Weighting by significance ranks
+    // `early` first (2.0 vs 1.5) and prints "2 rds" above "6 rds" —
+    // which reads as a broken sort and makes a reader distrust every
+    // other figure on the slide.
     const out = findAdpDivergences(
-      [p(100, 'big'), p(30, 'early')],
-      (name) => exp[name],
+      [p(30, 'early'), p(10, 'fillerA'), p(40, 'fillerB'), p(100, 'big')],
+      (name) => ({ early: 1, fillerA: 2, big: 3, fillerB: 4 })[name],
       10,
     )
     expect(out.fell.map((d) => d.pick.playerName)).toEqual(['big', 'early'])
@@ -88,14 +89,13 @@ describe('list ordering', () => {
   })
 
   it('breaks a tie on significance, so the premium slide leads', () => {
-    // Both slid exactly 3 rounds. The one expected in round 2 is the
-    // better story than the one expected in round 4, and this is the
-    // one place that judgement costs the reader nothing — the visible
-    // round figures are equal either way.
-    const exp: Record<string, number> = { fromLate: 40, fromEarly: 20 }
+    // Both slid exactly 3 rounds — `fromEarly` from round 2, `fromLate`
+    // from round 4. The earlier one is the better story, and this is
+    // the one place that judgement costs the reader nothing, since the
+    // visible round figures are equal either way.
     const out = findAdpDivergences(
-      [p(70, 'fromLate'), p(50, 'fromEarly')],
-      (name) => exp[name],
+      [p(50, 'fromEarly'), p(70, 'fromLate'), p(20, 'fillerA'), p(40, 'fillerB')],
+      (name) => ({ fromEarly: 1, fromLate: 2, fillerA: 3, fillerB: 4 })[name],
       10,
     )
     expect(out.fell.map((d) => d.roundsDelta)).toEqual([3, 3])

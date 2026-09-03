@@ -306,7 +306,7 @@ async function load(): Promise<void> {
         )
         if (res.ok) {
           const parsed = parseAdpResponse(await res.json())
-          if (parsed) adp = buildAdpLookup(parsed, data.teams.length)
+          if (parsed) adp = buildAdpLookup(parsed)
         }
       } catch {
         // Falls through to search_rank below.

@@ -227,41 +227,71 @@ export function findDraftDivergences(
 const MIN_ROUNDS_OFF_ADP = 1
 
 /**
- * Divergences measured against real ADP.
+ * Divergences measured against real ADP, mapped by RANK.
  *
- * This is the preferred path, and it is simpler than the
- * within-position workaround above for one reason: ADP already
- * encodes positional scarcity. Quarterbacks "fall" in a one-QB league
- * because drafters actually let them fall, so ADP has them falling
- * too — no cancelling trick required. Where `findDraftDivergences` has
- * to compare a player only against others at his position,
- * this compares him against the board.
+ * The player with the k-th best ADP is expected at the k-th slot this
+ * draft actually used. No arithmetic converts an ADP into a pick
+ * number, and that is the point.
  *
- * Position ORDER is still computed, because "the ninth running back
- * off the board" is how people describe a draft. It is descriptive
- * here rather than load-bearing.
+ * WHY NOT JUST SCALE THE ADP. Because it was tried and it was
+ * measurably wrong. ADP is published at 12 teams, so scaling by the
+ * ratio of league sizes looks principled, and a regression on a real
+ * draft even returns the expected slope. But that regression also
+ * carries a large intercept, and ignoring it produced a systematic
+ * +1.01 round bias on the real 2026 draft — 58 fallers against 14
+ * reaches, when a draft board is close to symmetric by construction.
+ * Every faller read a round worse than the truth.
  *
- * @param expectedPickOf resolves a pick to the overall pick number ADP
- *                       expected, already scaled to this league's size.
- *                       Undefined excludes the pick — a player outside
- *                       the sample is unmeasured, not a reach.
+ * Rank mapping cannot have that bias: the slots are this draft's own,
+ * so the deltas sum to zero. It also stops caring whether the ADP
+ * source runs early or late in absolute terms, since only the ORDER
+ * is read — which matters when the source is one site's mock drafts
+ * and the reader is comparing against a four-platform consensus.
+ *
+ * ADP already encodes positional scarcity, so unlike
+ * `findDraftDivergences` this compares across the whole board rather
+ * than within a position. Quarterbacks slide in a one-QB league
+ * because drafters actually let them slide, and ADP has them sliding.
+ * Position ORDER is still reported, because "the ninth running back
+ * off the board" is how people describe a draft — but it is
+ * descriptive here, not load-bearing.
+ *
+ * @param adpOf raw published ADP for a player; lower is earlier.
+ *              Undefined excludes the pick — a player outside the
+ *              sample is unmeasured, not a reach.
  */
 export function findAdpDivergences(
   picks: ValuedPick[],
-  expectedPickOf: (playerName: string, position: string, team: string) => number | undefined,
+  adpOf: (playerName: string, position: string, team: string) => number | undefined,
   teamCount: number,
   /** NFL team per pick, needed to identify defenses. */
   nflTeamOf: (pick: ValuedPick) => string = () => '',
 ): DraftDivergences {
-  if (teamCount <= 0) return { fell: [], reached: [], positionsCompared: [] }
+  const empty = { fell: [], reached: [], positionsCompared: [] }
+  if (teamCount <= 0) return empty
 
-  const covered: { pick: ValuedPick; expected: number }[] = []
+  const covered: { pick: ValuedPick; adp: number; expected: number }[] = []
   for (const p of picks) {
     if (!p.playerName || !p.position) continue
-    const expected = expectedPickOf(p.playerName, p.position, nflTeamOf(p))
-    if (expected === undefined) continue
-    covered.push({ pick: p, expected })
+    const adp = adpOf(p.playerName, p.position, nflTeamOf(p))
+    if (adp === undefined) continue
+    covered.push({ pick: p, adp, expected: 0 })
   }
+  if (covered.length === 0) return empty
+
+  // The slots this draft actually used, in order. Using the real slots
+  // rather than 1..N keeps the gaps where uncovered picks sat, so an
+  // expectation always names a pick that existed.
+  const slots = covered.map((c) => c.pick.pickOverall).sort((a, b) => a - b)
+
+  // Consensus order. Ties broken by actual pick so a rerun of the same
+  // draft cannot produce different steals.
+  const byAdp = [...covered].sort(
+    (a, b) => a.adp - b.adp || a.pick.pickOverall - b.pick.pickOverall,
+  )
+  byAdp.forEach((c, i) => {
+    c.expected = slots[i]
+  })
 
   // Position ordering, over the covered picks only, so the two figures
   // in the copy describe the same set of players.
@@ -271,28 +301,28 @@ export function findAdpDivergences(
     list.push(c)
     byPosition.set(c.pick.position, list)
   }
-  const actualAt = new Map<string, number>()
-  const expectedAt = new Map<string, number>()
+  const actualAt = new Map<typeof covered[number], number>()
+  const expectedAt = new Map<typeof covered[number], number>()
   for (const [, list] of byPosition) {
     ;[...list]
       .sort((a, b) => a.pick.pickOverall - b.pick.pickOverall)
-      .forEach((c, i) => actualAt.set(c.pick.playerId, i + 1))
+      .forEach((c, i) => actualAt.set(c, i + 1))
     ;[...list]
-      .sort((a, b) => a.expected - b.expected || a.pick.pickOverall - b.pick.pickOverall)
-      .forEach((c, i) => expectedAt.set(c.pick.playerId, i + 1))
+      .sort((a, b) => a.adp - b.adp || a.pick.pickOverall - b.pick.pickOverall)
+      .forEach((c, i) => expectedAt.set(c, i + 1))
   }
 
   const all: Divergence[] = []
-  for (const { pick, expected } of covered) {
-    const roundsDelta = (pick.pickOverall - expected) / teamCount
+  for (const c of covered) {
+    const roundsDelta = (c.pick.pickOverall - c.expected) / teamCount
     if (Math.abs(roundsDelta) < MIN_ROUNDS_OFF_ADP) continue
-    const expectedRound = Math.max(1, Math.ceil(expected / teamCount))
+    const expectedRound = Math.max(1, Math.ceil(c.expected / teamCount))
     all.push({
-      pick,
-      consensusAtPosition: expectedAt.get(pick.playerId) ?? 0,
-      actualAtPosition: actualAt.get(pick.playerId) ?? 0,
+      pick: c.pick,
+      consensusAtPosition: expectedAt.get(c) ?? 0,
+      actualAtPosition: actualAt.get(c) ?? 0,
       delta: roundsDelta > 0 ? 1 : -1,
-      expectedPickOverall: Math.round(expected),
+      expectedPickOverall: c.expected,
       roundsDelta,
       significance: Math.abs(roundsDelta) / expectedRound,
     })

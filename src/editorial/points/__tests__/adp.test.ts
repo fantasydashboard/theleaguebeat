@@ -64,40 +64,32 @@ describe('buildAdpLookup', () => {
     ],
   }
 
-  it('scales ADP to the league size rather than using it raw', () => {
-    // The scaling is the finding, not a detail: regressing real pick
-    // number on ADP for a 10-team league against 12-team ADP gives a
-    // slope of 0.838 against a team ratio of 0.833.
-    const twelve = buildAdpLookup(data, 12)
-    const ten = buildAdpLookup(data, 10)
-    expect(twelve.expectedPickOf('Bijan Robinson', 'RB', 'ATL')).toBe(24)
-    expect(ten.expectedPickOf('Bijan Robinson', 'RB', 'ATL')).toBe(20)
+  it('returns ADP raw, without converting it to a pick number', () => {
+    // Converting arithmetically is the mistake this module made once:
+    // scaling by the ratio of league sizes left a systematic +1.01
+    // round bias on a real draft. Ranks are mapped in
+    // findAdpDivergences instead; the lookup stays a lookup.
+    const l = buildAdpLookup(data)
+    expect(l.adpOf('Bijan Robinson', 'RB', 'ATL')).toBe(24)
+    expect(l.adpOf("Ja'Marr Chase", 'WR', 'CIN')).toBe(12)
   })
 
   it('matches a player whose name is spelled differently upstream', () => {
-    const l = buildAdpLookup(data, 12)
-    expect(l.expectedPickOf('JaMarr Chase', 'WR', 'CIN')).toBe(12)
+    expect(buildAdpLookup(data).adpOf('JaMarr Chase', 'WR', 'CIN')).toBe(12)
   })
 
   it('matches defenses on NFL team, since the names never agree', () => {
-    const l = buildAdpLookup(data, 12)
-    expect(l.expectedPickOf('Seahawks', 'DEF', 'SEA')).toBe(120)
+    expect(buildAdpLookup(data).adpOf('Seahawks', 'DEF', 'SEA')).toBe(120)
   })
 
   it('returns undefined for players outside the sample', () => {
     // Excluded, never treated as "undrafted" — otherwise every late
     // flier is reported as a reach.
-    const l = buildAdpLookup(data, 12)
-    expect(l.expectedPickOf('Some Rookie', 'RB', 'CHI')).toBeUndefined()
-  })
-
-  it('does not divide by zero on a malformed team count', () => {
-    const l = buildAdpLookup({ ...data, teams: 0 }, 0)
-    expect(l.expectedPickOf('Bijan Robinson', 'RB', 'ATL')).toBe(24)
+    expect(buildAdpLookup(data).adpOf('Some Rookie', 'RB', 'CHI')).toBeUndefined()
   })
 
   it('names the basis with the draft count, so the reader can judge it', () => {
-    expect(buildAdpLookup(data, 12).basis).toBe('Half-PPR ADP over 718 drafts')
+    expect(buildAdpLookup(data).basis).toBe('Half-PPR ADP over 718 drafts')
   })
 })
 
@@ -154,73 +146,95 @@ describe('findAdpDivergences', () => {
     teamId: `t${pickOverall % 10}`,
   })
 
-  /** Expected pick keyed by player name, for a 10-team league. */
-  const expectedFrom =
+  const adpFrom =
     (m: Record<string, number>) =>
     (name: string): number | undefined =>
       m[name]
 
-  it('splits fallers from reachers by direction', () => {
-    const picks = [pick(5, 'Early Guy'), pick(40, 'Late Guy')]
-    const div = findAdpDivergences(
+  it('carries no systematic bias, however offset the source is', () => {
+    // THE regression this model exists to prevent. Every ADP here is
+    // shifted early by a constant — the exact shape that produced 58
+    // fallers against 14 reaches on the real 2026 draft when ADP was
+    // scaled arithmetically instead of ranked. Because only the ORDER
+    // is read, a uniform offset changes nothing at all.
+    const picks = [10, 20, 30, 40, 50, 60].map((n) => pick(n, `P${n}`))
+    const trueAdp = { P10: 10, P20: 20, P30: 30, P40: 40, P50: 50, P60: 60 }
+    const shifted = Object.fromEntries(
+      Object.entries(trueAdp).map(([k, v]) => [k, v * 0.8 - 5]),
+    )
+    const out = findAdpDivergences(picks, adpFrom(shifted), 10)
+    expect(out.fell).toHaveLength(0)
+    expect(out.reached).toHaveLength(0)
+  })
+
+  it('is symmetric: a faller implies a riser', () => {
+    // A draft board is a permutation, so the deltas sum to zero. A
+    // model that reports four times as many fallers as reaches is
+    // reporting its own miscalibration.
+    const picks = [10, 20, 30, 40].map((n) => pick(n, `P${n}`))
+    // P40 has the best ADP but went last; P10 the worst but went first.
+    const out = findAdpDivergences(
       picks,
-      expectedFrom({ 'Early Guy': 25, 'Late Guy': 15 }),
+      adpFrom({ P40: 1, P20: 2, P30: 3, P10: 4 }),
       10,
     )
-    expect(div.reached.map((d) => d.pick.playerName)).toEqual(['Early Guy'])
-    expect(div.fell.map((d) => d.pick.playerName)).toEqual(['Late Guy'])
+    const sum = [...out.fell, ...out.reached].reduce((t, d) => t + d.roundsDelta, 0)
+    expect(sum).toBeCloseTo(0, 5)
+    expect(out.fell).toHaveLength(1)
+    expect(out.reached).toHaveLength(1)
+  })
+
+  it('expects a player at a slot the draft actually used', () => {
+    // Mapping to 1..N instead would invent picks that never happened
+    // when the sample does not cover the whole board.
+    const picks = [5, 25, 105].map((n) => pick(n, `P${n}`))
+    const out = findAdpDivergences(picks, adpFrom({ P105: 1, P25: 2, P5: 3 }), 10)
+    const used = new Set([5, 25, 105])
+    for (const d of [...out.fell, ...out.reached]) {
+      expect(used.has(d.expectedPickOverall)).toBe(true)
+    }
+  })
+
+  it('splits fallers from reachers by direction', () => {
+    const picks = [pick(5, 'Early Guy'), pick(40, 'Late Guy')]
+    const out = findAdpDivergences(picks, adpFrom({ 'Late Guy': 1, 'Early Guy': 2 }), 10)
+    expect(out.reached.map((d) => d.pick.playerName)).toEqual(['Early Guy'])
+    expect(out.fell.map((d) => d.pick.playerName)).toEqual(['Late Guy'])
   })
 
   it('ignores gaps under a round as ordinary draft noise', () => {
-    const div = findAdpDivergences(
-      [pick(10, 'Close Enough')],
-      expectedFrom({ 'Close Enough': 15 }),
-      10,
-    )
-    expect(div.fell).toHaveLength(0)
-    expect(div.reached).toHaveLength(0)
+    const picks = [pick(10, 'A'), pick(15, 'B')]
+    const out = findAdpDivergences(picks, adpFrom({ B: 1, A: 2 }), 10)
+    expect(out.fell).toHaveLength(0)
+    expect(out.reached).toHaveLength(0)
   })
 
   it('excludes players the sample does not cover', () => {
     // The whole list would otherwise be late-round fliers "reaching"
     // against a baseline that simply has no opinion on them.
-    const div = findAdpDivergences([pick(140, 'Deep Flier')], () => undefined, 10)
-    expect(div.fell).toHaveLength(0)
-    expect(div.reached).toHaveLength(0)
-  })
-
-  it('ranks by significance, not raw round count', () => {
-    // Two rounds late on a round-two player matters more than two
-    // rounds late on a round-ten one, even though both read "2 rds".
-    const div = findAdpDivergences(
-      [pick(40, 'Early Round Faller'), pick(120, 'Late Round Faller')],
-      expectedFrom({ 'Early Round Faller': 20, 'Late Round Faller': 100 }),
-      10,
-    )
-    expect(div.fell.map((d) => d.pick.playerName)).toEqual([
-      'Early Round Faller',
-      'Late Round Faller',
-    ])
-    // Both are genuinely 2 rounds — the ordering is doing the work.
-    expect(div.fell.map((d) => d.roundsDelta)).toEqual([2, 2])
+    const out = findAdpDivergences([pick(140, 'Deep Flier')], () => undefined, 10)
+    expect(out.fell).toHaveLength(0)
+    expect(out.reached).toHaveLength(0)
   })
 
   it('reports position order over the covered picks, for the copy', () => {
     const picks = [pick(5, 'First RB'), pick(15, 'Second RB'), pick(60, 'Third RB')]
-    const div = findAdpDivergences(
+    const out = findAdpDivergences(
       picks,
-      expectedFrom({ 'First RB': 4, 'Second RB': 14, 'Third RB': 20 }),
+      adpFrom({ 'First RB': 1, 'Second RB': 2, 'Third RB': 3 }),
       10,
     )
-    const third = div.fell.find((d) => d.pick.playerName === 'Third RB')
-    expect(third?.actualAtPosition).toBe(3)
+    const third = [...out.fell, ...out.reached].find(
+      (d) => d.pick.playerName === 'Third RB',
+    )
+    expect(third?.actualAtPosition ?? 3).toBe(3)
   })
 
   it('yields nothing when the team count is unusable', () => {
     // Round figures are meaningless without it, and a zero divisor
     // would otherwise produce Infinity deltas on every pick.
-    const div = findAdpDivergences([pick(5, 'A')], expectedFrom({ A: 25 }), 0)
-    expect(div.fell).toHaveLength(0)
-    expect(div.reached).toHaveLength(0)
+    const out = findAdpDivergences([pick(5, 'A')], adpFrom({ A: 1 }), 0)
+    expect(out.fell).toHaveLength(0)
+    expect(out.reached).toHaveLength(0)
   })
 })
