@@ -256,24 +256,22 @@ const MIN_ROUNDS_OFF_ADP = 1
  * off the board" is how people describe a draft — but it is
  * descriptive here, not load-bearing.
  *
- * @param adpOf raw published ADP for a player; lower is earlier.
- *              Undefined excludes the pick — a player outside the
- *              sample is unmeasured, not a reach.
+ * @param adpOf raw published ADP for a pick; lower is earlier.
+ *              Undefined excludes the pick — an unranked player is
+ *              unmeasured, not a reach.
  */
 export function findAdpDivergences(
   picks: ValuedPick[],
-  adpOf: (playerName: string, position: string, team: string) => number | undefined,
+  adpOf: (pick: ValuedPick) => number | undefined,
   teamCount: number,
-  /** NFL team per pick, needed to identify defenses. */
-  nflTeamOf: (pick: ValuedPick) => string = () => '',
 ): DraftDivergences {
   const empty = { fell: [], reached: [], positionsCompared: [] }
   if (teamCount <= 0) return empty
 
   const covered: { pick: ValuedPick; adp: number; expected: number }[] = []
   for (const p of picks) {
-    if (!p.playerName || !p.position) continue
-    const adp = adpOf(p.playerName, p.position, nflTeamOf(p))
+    if (!p.position) continue
+    const adp = adpOf(p)
     if (adp === undefined) continue
     covered.push({ pick: p, adp, expected: 0 })
   }

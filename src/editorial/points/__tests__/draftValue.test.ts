@@ -81,7 +81,7 @@ describe('list ordering', () => {
     // other figure on the slide.
     const out = findAdpDivergences(
       [p(30, 'early'), p(10, 'fillerA'), p(40, 'fillerB'), p(100, 'big')],
-      (name) => ({ early: 1, fillerA: 2, big: 3, fillerB: 4 })[name],
+      (pk) => ({ early: 1, fillerA: 2, big: 3, fillerB: 4 })[pk.playerName],
       10,
     )
     expect(out.fell.map((d) => d.pick.playerName)).toEqual(['big', 'early'])
@@ -95,7 +95,7 @@ describe('list ordering', () => {
     // visible round figures are equal either way.
     const out = findAdpDivergences(
       [p(50, 'fromEarly'), p(70, 'fromLate'), p(20, 'fillerA'), p(40, 'fillerB')],
-      (name) => ({ fromEarly: 1, fromLate: 2, fillerA: 3, fillerB: 4 })[name],
+      (pk) => ({ fromEarly: 1, fromLate: 2, fillerA: 3, fillerB: 4 })[pk.playerName],
       10,
     )
     expect(out.fell.map((d) => d.roundsDelta)).toEqual([3, 3])

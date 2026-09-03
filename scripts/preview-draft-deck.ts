@@ -5,15 +5,15 @@
  *
  * The deck's numbers are the part a league will argue with, so they
  * need to be readable outside a browser. This resolves ADP exactly as
- * PresentView does — same format detection, same rank mapping — and
+ * PresentView does — same scoring detection, same rank mapping — and
  * prints every slide as text.
  */
 import {
-  adpFormatFor,
-  buildAdpLookup,
-  parseAdpResponse,
-  type AdpLookup,
-} from '../src/editorial/points/adp'
+  buildDraftBaseline,
+  projectionsUrl,
+  scoringFor,
+  type DraftBaseline,
+} from '../src/editorial/points/sleeperProjections'
 import { buildDraftDeck } from '../src/editorial/present/buildDraftDeck'
 import type { CategoryLeagueDataDraftPick } from '../src/editorial/types'
 
@@ -58,31 +58,28 @@ for (const r of rosters) {
   )
 }
 
-const format = adpFormatFor(league.scoring_settings, league.roster_positions)
+const scoring = scoringFor(league.scoring_settings, league.roster_positions)
 const season = Number(league.season)
-let adp: AdpLookup | undefined
-const raw = await get(
-  `https://fantasyfootballcalculator.com/api/v1/adp/${format}?year=${season}`,
-)
-const parsed = parseAdpResponse(raw)
-if (parsed) adp = buildAdpLookup(parsed)
+const baseline =
+  buildDraftBaseline(await get(projectionsUrl(season)), scoring) ?? undefined
 
-const covered = picks.filter(
-  (p) => adp?.adpOf(p.playerName, p.position, p.mlbTeam ?? '') !== undefined,
-).length
+const covered = picks.filter((p) => baseline?.adpOf(p.playerId) !== undefined).length
+const projected = picks.filter((p) => baseline?.pointsOf(p.playerId) !== undefined).length
 
 console.log(`\n${league.name} — ${season}`)
 console.log(`${rosters.length} teams · ${picks.length} picks`)
-console.log(`ADP format detected: ${format}`)
-console.log(`Basis: ${adp?.basis ?? 'NONE — would fall back to search_rank'}`)
-console.log(`Coverage: ${covered}/${picks.length} picks (${((covered / picks.length) * 100).toFixed(1)}%)\n`)
+console.log(`Scoring detected: ${scoring}`)
+console.log(`Basis: ${baseline?.basis ?? 'NONE — would fall back to search_rank'}`)
+console.log(`ADP coverage:        ${covered}/${picks.length} (${((covered / picks.length) * 100).toFixed(1)}%)`)
+console.log(`Projection coverage: ${projected}/${picks.length} (${((projected / picks.length) * 100).toFixed(1)}%)\n`)
 
 const deck = buildDraftDeck({
   leagueName: league.name,
   season,
   picks,
   teamName: (id) => ownerName.get(id) ?? `Team ${id}`,
-  adp,
+  baseline,
+  rosterPositions: league.roster_positions,
 })
 
 if (!deck) {

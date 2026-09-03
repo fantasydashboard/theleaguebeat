@@ -136,11 +136,11 @@ import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
 import {
-  adpFormatFor,
-  buildAdpLookup,
-  parseAdpResponse,
-  type AdpLookup,
-} from '@/editorial/points/adp'
+  buildDraftBaseline,
+  projectionsUrl,
+  scoringFor,
+  type DraftBaseline,
+} from '@/editorial/points/sleeperProjections'
 import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
 
 const route = useRoute()
@@ -262,51 +262,44 @@ async function load(): Promise<void> {
     const teamName = (teamId: string) =>
       data.teams.find((t) => t.id === teamId)?.name ?? `Team ${teamId}`
 
-    // The baseline for the steal/reach read.
+    // The baseline for the value read AND the projected-roster grade.
     //
-    // Real ADP first: it is measured against this league's own scoring
-    // format, and on a real 140-pick draft it tracks actual draft order
-    // at r = 0.91 where Sleeper's `search_rank` manages 0.54. The picks
-    // already carry player name, position and NFL team, so matching
-    // needs no player blob at all — which is what lets this path skip
-    // the ~15MB download the fallback requires.
+    // Sleeper's own ADP and season projections, both on the
+    // projections endpoint. Matched on player_id, so there is no name
+    // matching anywhere: 100% coverage on a real 140-pick draft where
+    // the third-party source this replaced managed 98.6% and needed a
+    // normalizer plus a special case for defenses. It is also the ADP
+    // of the platform this league drafted on.
     //
-    // Everything here is best-effort. A failure costs the value slides
-    // and nothing else; the factual slides stand on the pick list.
-    let adp: AdpLookup | undefined
+    // Best-effort. A failure costs the value and roster slides and
+    // nothing else; the factual slides stand on the pick list.
+    let baseline: DraftBaseline | undefined
+    let rosterPositions: string[] | undefined
     let consensusRank: ((playerId: string) => number | undefined) | undefined
     const picks = [...(data.draft?.picks ?? [])]
 
-    // Football only — the ADP source is NFL. A baseball league falls
-    // straight through to the `search_rank` path below.
     if (picks.length > 0 && record.platform === 'sleeper' && record.sport === 'football') {
       try {
-        // Scoring settings decide WHICH ADP table applies — a half-PPR
-        // league graded against PPR ADP misvalues every receiver, and
-        // superflex moves quarterbacks so far that nothing else matters.
+        // Scoring settings decide WHICH series applies — a half-PPR
+        // league read against PPR ADP misvalues every receiver, and
+        // superflex moves quarterbacks further than either.
         //
         // Fetched rather than read from `leagues.settings`, which only
         // persists `previous_league_id`. Backfilling that column would
         // still leave every league connected before today without it;
         // this is ~2KB, public and unauthenticated, and always current.
-        let scoring: Record<string, unknown> | undefined
-        let rosterPositions: string[] | undefined
         const lgRes = await fetch(`https://api.sleeper.app/v1/league/${id}`)
         if (lgRes.ok) {
           const lg = (await lgRes.json()) as {
             scoring_settings?: Record<string, unknown>
             roster_positions?: string[]
           }
-          scoring = lg.scoring_settings
           rosterPositions = lg.roster_positions
-        }
-        const format = adpFormatFor(scoring, rosterPositions)
-        const res = await fetch(
-          `/api/adp?format=${format}&year=${data.currentSeason}`,
-        )
-        if (res.ok) {
-          const parsed = parseAdpResponse(await res.json())
-          if (parsed) adp = buildAdpLookup(parsed)
+          const scoring = scoringFor(lg.scoring_settings, lg.roster_positions)
+          const res = await fetch(projectionsUrl(data.currentSeason))
+          if (res.ok) {
+            baseline = buildDraftBaseline(await res.json(), scoring) ?? undefined
+          }
         }
       } catch {
         // Falls through to search_rank below.
@@ -317,7 +310,7 @@ async function load(): Promise<void> {
     // player blob (~15MB), far past the localStorage quota the service
     // cache uses — so fetch it directly, keep the handful of ranks this
     // draft needs, and let the rest be garbage collected.
-    if (!adp && picks.length > 0 && record.platform === 'sleeper') {
+    if (!baseline && picks.length > 0 && record.platform === 'sleeper') {
       try {
         const res = await fetch('https://api.sleeper.app/v1/players/nfl')
         if (res.ok) {
@@ -342,7 +335,8 @@ async function load(): Promise<void> {
       season: data.currentSeason,
       picks,
       teamName,
-      adp,
+      baseline,
+      rosterPositions,
       consensusRank,
       team: (teamId: string) => {
         const t = data.teams.find((x) => x.id === teamId)

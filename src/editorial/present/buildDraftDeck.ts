@@ -33,7 +33,8 @@ import {
   ordinal,
   type ValuedPick,
 } from '../points/draftValue'
-import type { AdpLookup } from '../points/adp'
+import type { DraftBaseline } from '../points/sleeperProjections'
+import { rankRosterStrength, type RosterPlayer } from '../points/rosterStrength'
 import type { PresentDeck, PresentSlide } from './types'
 
 /** What the deck needs to draw a team. Resolved by the caller, which
@@ -54,11 +55,19 @@ export interface DraftDeckInput {
   /** Optional richer lookup, for logos. Falls back to `teamName`. */
   team?: (teamId: string) => DeckTeam | undefined
   /**
-   * Real ADP, when it could be resolved. This is the PREFERRED
-   * baseline — see `points/adp.ts` for why it beats the fallback by a
-   * wide, measured margin.
+   * Sleeper's own ADP and projections, when they resolved. The
+   * PREFERRED baseline — see `points/sleeperProjections.ts` for the
+   * measured margin over the fallback.
    */
-  adp?: AdpLookup
+  baseline?: DraftBaseline
+  /** The league's roster slots, e.g. ['QB','RB','RB',...,'BN'].
+   *  Without them no starting lineup can be built, so the projected
+   *  roster slides are omitted rather than guessed at. */
+  rosterPositions?: readonly string[]
+  /** How many weeks the projection totals span. Leave unset unless a
+   *  source publishes something other than a full NFL season — it is
+   *  NOT the league's fantasy schedule length. */
+  projectionWeeks?: number
   /** Consensus rank for a player, lower being better. The FALLBACK
    *  baseline, used only when ADP could not be fetched. With neither,
    *  the deck omits the steal and reach slides rather than guessing. */
@@ -174,7 +183,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
   // The copy names whichever was used, because the reader is being
   // asked to accept a judgement about their own draft and is entitled
   // to know what it rests on.
-  if (input.adp || input.consensusRank) {
+  if (input.baseline || input.consensusRank) {
     const valued: ValuedPick[] = input.picks.map((p) => ({
       pickOverall: p.pickOverall,
       round: p.round,
@@ -183,27 +192,21 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       position: p.position,
       teamId: p.draftedByTeamId,
     }))
-    // `mlbTeam` is the platform team abbreviation whatever the sport —
-    // the field predates football and is the NFL team here. Needed to
-    // resolve defenses, which no source names the same way twice.
-    const nflTeam = new Map(input.picks.map((p) => [p.playerId, p.mlbTeam ?? '']))
-
-    const div = input.adp
+    const div = input.baseline
       ? findAdpDivergences(
           valued,
-          input.adp.adpOf,
+          (p) => input.baseline!.adpOf(p.playerId),
           facts.teamCount,
-          (p) => nflTeam.get(p.playerId) ?? '',
         )
       : findDraftDivergences(valued, input.consensusRank!, facts.teamCount)
 
     // Named for the reader, so the basis of every figure on the next
     // four slides is stated rather than assumed.
-    const basis = input.adp
-      ? `${input.adp.format} ADP`
+    const basis = input.baseline
+      ? input.baseline.basis
       : "Sleeper's player ranking"
-    const basisSupport = input.adp
-      ? `Against ${input.adp.basis}, biggest gap first.`
+    const basisSupport = input.baseline
+      ? `Against ${input.baseline.basis}, biggest gap first.`
       : "Against Sleeper's player ranking — the only ordering it publishes, " +
         'and a proxy for ADP rather than ADP itself. Biggest gap first.'
 
@@ -279,18 +282,86 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         })),
       })
 
+    }
+
+    // THE ACTUAL GRADE. Everything above measures who beat the board.
+    // This measures who has the team — a different claim, and the one
+    // a league argues about. It needs projections, which is why it
+    // could not exist until Sleeper's were found.
+    const strength =
+      input.baseline && input.rosterPositions?.length
+        ? rankRosterStrength(
+            input.picks.map<RosterPlayer>((p) => ({
+              playerId: p.playerId,
+              position: p.position,
+              teamId: p.draftedByTeamId,
+            })),
+            input.baseline.pointsOf,
+            input.rosterPositions,
+            input.projectionWeeks,
+          )
+        : []
+
+    if (strength.length >= 4) {
+      const countdown = [...strength].reverse()
+      slides.push({
+        kind: 'list',
+        eyebrow: 'Projected rosters',
+        headline: 'Who actually drafted the best team.',
+        support:
+          `Best starting lineup each team can field, on Sleeper's ${input.baseline!.formatLabel} ` +
+          'projections. Bench players score nothing, because they do not. ' +
+          'Counting up to the strongest roster in the league.',
+        revealOneByOne: true,
+        rows: countdown.map((t) => ({
+          lead: ordinal(t.rank),
+          label: input.teamName(t.teamId),
+          sub: `${t.projectedPoints.toLocaleString()} projected pts`,
+          value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}/wk`,
+          ...teamVisual(input, t.teamId),
+        })),
+      })
+
       // The crown. This is what the removed "the steal" slide's visual
       // weight is worth spending on: the one claim in the deck the room
       // will actually argue about afterwards.
+      const best = strength[0]
+      const worst = strength[strength.length - 1]
+      const gap = Math.round((best.pointsPerWeek - worst.pointsPerWeek) * 10) / 10
+      const beatBoard = graded.length >= 4 ? graded[0] : undefined
+      slides.push({
+        kind: 'statement',
+        eyebrow: 'The verdict',
+        headline: `${input.teamName(best.teamId)} drafted the best team.`,
+        support:
+          `${best.pointsPerWeek} projected points a week — ${gap} more than ` +
+          `${input.teamName(worst.teamId)} at the bottom of the room. ` +
+          // The contrast is the story whenever the two grades disagree,
+          // and they usually do: beating the market and owning the best
+          // roster are different achievements.
+          (beatBoard && beatBoard.teamId !== best.teamId
+            ? `${input.teamName(beatBoard.teamId)} beat the board by more, and still did not draft this team. `
+            : '') +
+          'Projections are a forecast, not a result. The season decides.',
+        chips: [
+          { value: ordinal(best.rank), label: 'projected' },
+          { value: `${best.pointsPerWeek}`, label: 'pts / week' },
+          { value: `+${best.vsLeaguePerWeek}`, label: 'vs league' },
+        ],
+      })
+    } else if (graded.length >= 4) {
+      // No projections resolved — fall back to crowning the value
+      // winner, which is a weaker claim and says so.
       const winner = graded[0]
       slides.push({
         kind: 'statement',
         eyebrow: 'The verdict',
-        headline: `${input.teamName(winner.teamId)} won the draft.`,
+        headline: `${input.teamName(winner.teamId)} beat the board.`,
         support:
-          `Best value in the room against ${basis} — ${winner.vsLeague > 0 ? '+' : ''}` +
-          `${winner.vsLeague} rounds per pick better than the league average. ` +
-          'Whether that becomes a season is what the next four months decide.',
+          `${winner.vsLeague > 0 ? '+' : ''}${winner.vsLeague} rounds per pick ` +
+          `better than the league average against ${basis}. That is value ` +
+          'against the market, which is not the same as the best roster — ' +
+          'saying which would need projections.',
       })
     }
   }
