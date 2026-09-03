@@ -241,7 +241,23 @@ export interface AdapterOptions {
   /** Supabase `leagues.id` UUID — enables daily-snapshot delta
    *  detection. Skipped when omitted. */
   leagueRowId?: string
+  /**
+   * Which ESPN game to fetch.
+   *
+   * ESPN's API is sport-segmented — `flb` for baseball, `ffl` for
+   * football — so this is not cosmetic: asking the wrong segment for a
+   * league id returns nothing at all. It was hardcoded to baseball,
+   * which meant an ESPN football league could not load its data, its
+   * decks, or its page.
+   *
+   * Defaults to baseball so every existing caller keeps its behaviour
+   * unchanged; callers that know better pass the league row's sport.
+   */
+  sport?: EspnSport
 }
+
+/** The two ESPN games this adapter can currently serve. */
+export type EspnSport = 'baseball' | 'football'
 
 export async function espnLeagueToCategoryData(
   leagueId: string,
@@ -259,7 +275,7 @@ export async function espnLeagueToCategoryData(
   // 1. League meta — use current season for the season-active path.
   //    ESPN keeps the same leagueId across seasons; we walk backward
   //    a year if the current season isn't accessible yet.
-  const sport = 'baseball' as const
+  const sport: EspnSport = opts?.sport ?? 'baseball'
   const currentSeason = espnService.getCurrentSeason(sport)
 
   let league: EspnLeague | null = null
@@ -379,7 +395,7 @@ export async function espnLeagueToCategoryData(
     // final W/L/T + rank (champion = rank 1), so it's format-agnostic.
     // ESPN has no manager-legacy builder (its category path has none
     // either), so Record Watch is simply absent for ESPN points.
-    const seasonHistory = await buildSeasonHistory(leagueId, season).catch(() => [])
+    const seasonHistory = await buildSeasonHistory(leagueId, season, sport).catch(() => [])
 
     const pointsGames: H2HGame[] = []
     for (const weekMatchups of allPointsWeeks.values()) {
@@ -419,6 +435,21 @@ export async function espnLeagueToCategoryData(
       playerNights: pointsPlayerNights,
     }
     return out
+  }
+
+  // Everything below this point is BASEBALL category logic — per-stat
+  // category wins, MLB rosters, daily scoring periods. A football
+  // league reaching it would produce category standings for a sport
+  // that has no categories, which is worse than an error because it
+  // looks like data. ESPN football is points-scored by definition, so
+  // anything not caught by the points branch above is a shape this
+  // adapter does not model.
+  if (sport === 'football') {
+    throw new Error(
+      `ESPN football league ${leagueId} has scoring type ` +
+        `${league.scoringType ?? 'unknown'}, which this adapter does not ` +
+        'support. Only head-to-head points football is modelled.',
+    )
   }
 
   // 3. All matchups for the season (per-week map).
@@ -523,7 +554,7 @@ export async function espnLeagueToCategoryData(
   const h2hMatrix = buildH2HMatrix(teams, matchupsByWeek)
 
   // 15. Draft (optional).
-  const draft = await buildDraft(leagueId, season)
+  const draft = await buildDraft(leagueId, season, sport)
 
   // 16. League transactions (trades, FAAB winners, waiver claims).
   //     Failure is non-fatal — when ESPN's transactions endpoint
@@ -1380,9 +1411,9 @@ const MAX_HISTORY_DEPTH = 5
 async function buildSeasonHistory(
   leagueId: string,
   currentSeason: number,
+  sport: EspnSport = 'baseball',
 ): Promise<CategoryLeagueDataSeasonHistory[]> {
   const out: CategoryLeagueDataSeasonHistory[] = []
-  const sport = 'baseball' as const
 
   for (let i = 1; i <= MAX_HISTORY_DEPTH; i++) {
     const year = currentSeason - i
@@ -1567,10 +1598,11 @@ function buildH2HMatrix(
 async function buildDraft(
   leagueId: string,
   season: number,
+  sport: EspnSport = 'baseball',
 ): Promise<CategoryLeagueDataDraft | undefined> {
   try {
     const picks = await withCache(cacheKey(leagueId, 'draft', season), () =>
-      espnService.getDraftWithPlayers('baseball', leagueId, season),
+      espnService.getDraftWithPlayers(sport, leagueId, season),
     )
     if (!picks || picks.length === 0) return undefined
     const out: CategoryLeagueDataDraftPick[] = picks.map((p) => ({

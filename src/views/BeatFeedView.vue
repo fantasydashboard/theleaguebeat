@@ -237,6 +237,7 @@ import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { hydrateYahooDailyRosters } from '@/services/dailyRosterHydrator'
 import { hydrateEspnDailyRosters } from '@/services/espnDailyRosterHydrator'
 import type { CategoryLeagueData, LeagueDataH2HPoints } from '@/editorial/types'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
@@ -430,6 +431,9 @@ async function loadBeat() {
     const opts = {
       userIdentity: collectUserIdentity(),
       leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const data =
       platform === 'espn'

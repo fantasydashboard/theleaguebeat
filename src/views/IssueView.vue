@@ -741,6 +741,7 @@ import {
   renderPointsMatchupsPage,
   type RenderedPointsMatchupsCopy,
 } from '@/editorial/render-matchups-points'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
@@ -2042,6 +2043,9 @@ async function loadIssue() {
     const opts = {
       userIdentity: collectUserIdentity(),
       leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const adapted =
       platform === 'espn'

@@ -122,6 +122,7 @@ import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import type { CategoryLeagueData } from '@/editorial/types'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
@@ -254,6 +255,9 @@ async function loadChronicles() {
     const opts = {
       userIdentity: collectUserIdentity(),
       leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const adapted =
       platform === 'espn'

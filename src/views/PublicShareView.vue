@@ -393,7 +393,11 @@ async function loadIssue() {
     if (row.platform === 'sleeper') {
       data = await sleeperLeagueToCategoryData(row.platform_league_id, {})
     } else if (row.platform === 'espn') {
-      data = await espnLeagueToCategoryData(row.platform_league_id, {})
+      // This view already holds the league row, so the sport comes
+      // straight off it — no store lookup needed here.
+      data = await espnLeagueToCategoryData(row.platform_league_id, {
+        sport: row.sport === 'football' ? 'football' : 'baseball',
+      })
     } else if (row.platform === 'yahoo') {
       data = await yahooLeagueToCategoryData(row.platform_league_id, {})
     } else {

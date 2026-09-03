@@ -162,6 +162,7 @@ import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import type { LeagueData } from '@/editorial/types'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { usePlatformsStore } from '@/stores/platforms'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
@@ -271,6 +272,9 @@ async function loadColumn() {
     const opts = {
       userIdentity: collectUserIdentity(),
       leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const data =
       platform === 'espn'

@@ -725,6 +725,7 @@ import type {
 import { computePointsPowerScores } from '@/editorial/points/powerScore'
 import { sportOf, hasPlayedGames } from '@/editorial/leagueCore'
 import { usePlatformsStore } from '@/stores/platforms'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { useIssueStore } from '@/stores/issueState'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
@@ -908,6 +909,9 @@ async function loadRankings() {
       userIdentity: collectUserIdentity(),
       leagueRowId,
       priorSeasonKeys: priorSeasonKeys.value,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const data =
       platform === 'espn'

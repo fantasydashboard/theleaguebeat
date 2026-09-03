@@ -580,6 +580,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import {
   teams,
@@ -1327,7 +1328,13 @@ async function loadLiveData() {
       typeof route.params.leagueId === 'string'
         ? route.params.leagueId
         : undefined
-    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
+    const opts = {
+      userIdentity: collectUserIdentity(),
+      leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
+    }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)

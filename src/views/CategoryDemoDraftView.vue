@@ -789,6 +789,7 @@ import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import type { CategoryLeagueData } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
@@ -896,7 +897,13 @@ async function loadDraft() {
     // See CategoryDemoHomeView for why we pass identity explicitly.
     const leagueRowId =
       typeof route.params.leagueId === 'string' ? route.params.leagueId : undefined
-    const opts = { userIdentity: collectUserIdentity(), leagueRowId }
+    const opts = {
+      userIdentity: collectUserIdentity(),
+      leagueRowId,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
+    }
     const data =
       platform === 'espn'
         ? await espnLeagueToCategoryData(id, opts)

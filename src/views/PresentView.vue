@@ -191,6 +191,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
@@ -557,7 +558,9 @@ async function load(): Promise<void> {
     const id = record.platform_league_id
     const data =
       record.platform === 'espn'
-        ? await espnLeagueToCategoryData(id)
+        ? await espnLeagueToCategoryData(id, {
+            sport: espnSportFor(uuid, leaguesStore.leagues),
+          })
         : record.platform === 'yahoo'
           ? await yahooLeagueToCategoryData(id)
           : await sleeperLeagueToCategoryData(id)

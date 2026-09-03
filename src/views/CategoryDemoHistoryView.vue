@@ -304,6 +304,7 @@ import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { LEGACY_FORMULA_LABEL, computeLegacyScore } from '@/editorial/legacy'
 import type { CategoryLeagueData, CategoryLeagueDataTeam } from '@/editorial/types'
 import { usePlatformsStore } from '@/stores/platforms'
+import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
@@ -544,6 +545,9 @@ async function loadChronicles() {
       userIdentity: collectUserIdentity(),
       leagueRowId,
       priorSeasonKeys: priorSeasonKeys.value,
+      // ESPN's API is sport-segmented; without this a football league
+      // is fetched from the baseball endpoint and returns nothing.
+      sport: espnSportFor(leagueRowId, leaguesStore.leagues),
     }
     const data =
       platform === 'espn'
