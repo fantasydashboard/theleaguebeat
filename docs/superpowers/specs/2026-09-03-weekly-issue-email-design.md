@@ -3,7 +3,14 @@
 **Status:** spec, not built. Written 2026-09-03.
 
 **Goal:** every Tuesday morning, everyone who asked for a league's Issue
-gets an email that makes them want to open it.
+gets told it is ready.
+
+**Revised 2026-09-03**, same day, after a better idea: send an ALERT,
+not a rendered teaser. The first draft had the cron building each Issue
+server-side so the email could carry the week's headline, which forced
+the whole feature to be Sleeper-only. Sending an alert instead drops
+that constraint and roughly halves the build — see "Why an alert beats
+a teaser" below.
 
 ---
 
@@ -54,7 +61,7 @@ product was supposed to produce in the first place.
 Commissioner posts /i/:slug to the league chat
         │
         ▼
-/i/:slug  ──►  "Get this every Tuesday"  ──►  confirm email
+/i/:slug  ──►  "Tell me when the next one is out"  ──►  confirm email
         │
         ▼
 issue_subscribers  (email, league_id, confirmed_at, unsubscribed_at)
@@ -62,11 +69,47 @@ issue_subscribers  (email, league_id, confirmed_at, unsubscribed_at)
         ▼
 Tue 09:00 ET — Vercel Cron  ──►  /api/cron/weekly-issue
         │
+        ├─ read the NFL week from Sleeper's public state endpoint
+        ├─ skip unless the regular season is running
         ├─ for each league with ≥1 confirmed subscriber
-        ├─ skip unless the week actually closed
-        ├─ build the Issue server-side, upsert league_issues
-        └─ send teaser via provider ──► issue_email_log
+        └─ send "Week N is ready" ──► issue_email_log
 ```
+
+### Why an alert beats a teaser
+
+The first draft had the cron render each Issue so the email could open
+with the week's headline. Better email, and it cost the entire feature
+its reach: ESPN's auth is browser-cookie-bound, a cron has no cookies,
+so only Sleeper leagues could ever have been built server-side.
+
+An alert does not need the content. It needs to know a week closed —
+and that is a CALENDAR fact, not a league fact. Sleeper's
+`/v1/state/nfl` is public and unauthenticated, and the NFL week is the
+same week whether a league lives on ESPN, Yahoo or Sleeper. The
+recipient clicks through and their own browser renders the Issue with
+their own cookies, which is exactly how the app already works.
+
+So the cron never touches league data, never authenticates as anyone,
+and works for every platform. It also cannot produce a broken or empty
+Issue, because it does not produce an Issue at all.
+
+**The trade-off is real and worth stating.** "Week 3 is ready" is far
+easier to ignore than "Mighty Mallards took the top spot", and thin
+alerts train people to skip the sender. Two mitigations, in order of
+preference:
+
+1. Subject lines carry the league's own name and the week. A message
+   from a league someone is in is not a newsletter.
+2. Sleeper leagues CAN be enriched later — the projections and
+   standings are all public — so the headline can be added for the
+   platform that allows it without gating the feature on it. That is a
+   later phase, not a prerequisite.
+
+One caveat found while checking: ESPN keys off `currentMatchupPeriod`
+rather than the NFL week, and a custom schedule could drift from it.
+That does not matter here. The email says a new Issue is ready and
+links to the league; the page resolves whatever the current Issue
+actually is.
 
 ### Recipients: subscribe from the share link
 
@@ -84,23 +127,27 @@ Existing signed-in users are seeded as confirmed subscribers to their
 own leagues: they have an account and a relationship, and the consent
 is real.
 
-### Scope: Sleeper only, and this is not phasing
+### Scope: every platform
 
-ESPN's auth is browser-cookie-bound. A cron has no cookies, so an ESPN
-Issue **cannot** be built server-side — not "not yet". Yahoo may be
-reachable through the existing `yahoo-refresh` edge function, but its
-tokens are per-user and that is its own project.
+Because the cron reads a calendar rather than a league, ESPN, Yahoo and
+Sleeper are all eligible from day one. This is the single biggest
+consequence of sending an alert instead of a teaser, and it is why the
+change is worth making before anything is built rather than after.
 
-A cron that quietly produced nothing for ESPN leagues would look like a
-bug forever. Better: those leagues are ineligible, the subscribe form
-says so, and nobody is offered a thing that cannot arrive.
+Baseball is out of scope for now for a different reason: category
+leagues define their own scoring periods, and there is no free public
+calendar equivalent to the NFL week. A football-only first release is
+also the right one by timing — kickoff is days away.
 
-### Content: teaser, not the issue
+### Content: an alert, not the issue
 
-Subject, headline, the OG image, one link. Full-issue HTML email is a
-hostile format — no grid, no web fonts, and a decade of client quirks —
-and would take twice the work to produce a worse read than the page
-that already exists. The email's job is to get someone to the page.
+League name, week number, one link. No standings, no headline, no
+rendered content.
+
+Full-issue HTML email would be a hostile format even if the data were
+available — no grid, no web fonts, a decade of client quirks — and
+would take twice the work to produce a worse read than the page that
+already exists. The email's job is to get someone to the page.
 
 ---
 
@@ -165,13 +212,17 @@ email.
 
 **Guards, in order:**
 
-1. `season_type === 'regular'` — no offseason sends.
-2. The week has **closed** — never inferred from "everyone has scored",
-   because Sleeper points accumulate live. Use the state endpoint's
-   week boundary.
-3. The Issue has content. A league with no completed matchups gets
-   nothing; an empty issue is worse than silence.
-4. `issue_email_log` has no row for `(subscriber, year, week)`.
+1. `season_type === 'regular'` from the public state endpoint — no
+   offseason sends.
+2. The NFL week has advanced since the last send for that league. The
+   log's unique key enforces this; the check is belt and braces.
+3. `issue_email_log` has no row for `(subscriber, year, week)`.
+
+The first draft also guarded on "the Issue has content", which an alert
+does not need and could not cheaply check anyway: knowing whether an
+ESPN league has data would require the auth the cron does not have.
+During the NFL regular season a new week always exists, which is the
+guarantee that makes this safe to drop.
 
 **Auth:** Vercel injects `CRON_SECRET`; the route rejects anything
 without it. Otherwise the endpoint is a public "email everyone" button.
@@ -203,13 +254,16 @@ without it. Otherwise the endpoint is a public "email everyone" button.
 
 ## Phasing
 
-1. **Subscribe loop.** Table, API route, form on `/i/:slug`,
-   double opt-in, unsubscribe. Testable with no cron and no provider,
-   and it is the long pole — nothing else matters without a list.
+1. **Subscribe loop.** Table, API route, form on `/i/:slug`, double
+   opt-in, unsubscribe. Testable with no cron and no provider, and it
+   is the long pole — nothing else matters without a list.
 2. **Provider + one manual send.** Prove deliverability by hand, the
    way UFD does today, before automating it.
 3. **Cron.** Wire the schedule once a hand-send is known to arrive.
-4. **Yahoo**, if the refresh path holds.
+4. **Enrich the Sleeper alert** with the week's headline, since that
+   data is public and buildable server-side. Optional, and deliberately
+   last: it is the part that tempted the first draft into being
+   Sleeper-only.
 
 ---
 
@@ -227,3 +281,6 @@ without it. Otherwise the endpoint is a public "email everyone" button.
 - **Provider.** Nothing is chosen. UFD names none — its "Copy HTML"
   flow means a human pastes into whatever client they like — so this is
   a genuinely open decision, not an inherited one.
+- **Does a bare alert earn its send?** If open rates are poor, the
+  answer is the phase-4 enrichment rather than more frequent sending.
+  Worth measuring before assuming either way.
