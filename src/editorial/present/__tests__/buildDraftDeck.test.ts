@@ -122,8 +122,13 @@ describe('steals and reaches', () => {
     // each position is the one that "fell" furthest.
     const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
     const deck = buildDraftDeck({ ...base, consensusRank: (id) => order.get(id) })!
-    const eyebrows = deck.slides.map((s) => ('eyebrow' in s ? s.eyebrow : ''))
-    expect(eyebrows).toContain('Fell furthest')
+    // The value read lives on the team cards now — the league-wide
+    // fell/reached lists were the same picks in the order that serves
+    // them worst, ten steps before the room saw whose picks they were.
+    const cards = deck.slides.filter((s) => s.kind === 'team-card')
+    expect(cards.length).toBeGreaterThanOrEqual(4)
+    const notes = cards.flatMap((c) => (c as { notes?: string[] }).notes ?? []).join(' ')
+    expect(notes).toMatch(/Best value:|Went early on/)
   })
 
   it('never claims a pick was good, only where it went', () => {
@@ -219,13 +224,14 @@ describe('draft slots and ordering', () => {
 
   it('labels picks as round-and-slot, not overall number', () => {
     // "#120" tells nobody anything; "12.10" is how a board is read.
-    // The grades slide is excluded: its leads are countdown ranks.
-    const leads = deck.slides
-      .filter((s) => s.kind === 'list' && s.eyebrow !== 'Draft grades')
-      .flatMap((s) => (s as { rows: { lead?: string }[] }).rows.map((r) => r.lead ?? ''))
-      .filter((l) => /^\d/.test(l))
-    expect(leads.length).toBeGreaterThan(0)
-    for (const l of leads) expect(l).toMatch(/^\d{1,2}\.\d{2}$/)
+    const text = JSON.stringify(deck)
+    // At least one real slot somewhere in the deck...
+    expect(text).toMatch(/\d{1,2}\.\d{2}/)
+    // ...and never a raw overall pick reference.
+    expect(text, 'raw pick number in the deck').not.toMatch(/#\d{2,3}\b/)
+    // A slot is "14.02"; a raw pick is "139". The lookahead is what
+    // separates them — without it this rejected the correct format.
+    expect(text, 'raw pick number in the deck').not.toMatch(/\bat \d{2,3}(?!\.\d\d)/)
   })
 
   it('shows where each player was expected, not just how far he moved', () => {

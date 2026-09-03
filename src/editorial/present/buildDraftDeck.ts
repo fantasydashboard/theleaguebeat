@@ -83,21 +83,6 @@ function draftSlot(pickOverall: number, round: number, teamCount: number): strin
   return `${round}.${String(inRound).padStart(2, '0')}`
 }
 
-/** Where the baseline had him, in the same round-and-slot form.
- *  Carries the fact the round figure alone cannot: "7 rds late" says
- *  how far he slid, "expected 7.10" says from where. A quarterback
- *  sliding from round seven and a receiver sliding from round two are
- *  different stories, and the reader can only tell them apart with
- *  both numbers on the row. */
-function expectedSlot(
-  d: { expectedPickOverall: number },
-  teamCount: number,
-): string {
-  if (teamCount <= 0) return `#${d.expectedPickOverall}`
-  const round = Math.max(1, Math.ceil(d.expectedPickOverall / teamCount))
-  return draftSlot(d.expectedPickOverall, round, teamCount)
-}
-
 /** Compact round figure for a list row: "3.5 rds", "1 rd". The
  *  direction is already carried by which slide the row is on. */
 function shortRounds(roundsDelta: number): string {
@@ -205,60 +190,17 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     const basis = input.baseline
       ? input.baseline.basis
       : "Sleeper's player ranking"
-    const basisSupport = input.baseline
-      ? `Against ${input.baseline.basis}, biggest gap first.`
-      : "Against Sleeper's player ranking — the only ordering it publishes, " +
-        'and a proxy for ADP rather than ADP itself. Biggest gap first.'
 
     // No separate "the steal" statement. It named the same player this
     // list leads with, one slide earlier — spending the deck's biggest
     // visual moment on a repeat, and telling the room the answer before
     // the reveal that was supposed to deliver it.
-    if (div.fell.length > 0) {
-      slides.push({
-        kind: 'list',
-        eyebrow: 'Fell furthest',
-        headline: 'Who lasted longer than they should have.',
-        support: basisSupport,
-        revealOneByOne: true,
-        rows: div.fell.slice(0, 5).map((d) => ({
-          lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
-          label: d.pick.playerName,
-          sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
-          value: shortRounds(d.roundsDelta),
-          ...teamVisual(input, d.pick.teamId),
-        })),
-      })
-    }
+    // The league-wide fell-furthest and went-early lists used to sit
+    // here. They are gone: every pick they named now appears on its
+    // own team's card, where the room is already looking at that
+    // manager, and ten steps of leaderboard before the cards was the
+    // same information in the order that serves it worst.
 
-    if (div.reached.length > 0) {
-      slides.push({
-        kind: 'list',
-        eyebrow: 'Went early',
-        headline: 'Picks the room did not see coming.',
-        support: basisSupport,
-        revealOneByOne: true,
-        rows: div.reached.slice(0, 5).map((d) => ({
-          lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
-          label: d.pick.playerName,
-          sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
-          value: shortRounds(d.roundsDelta),
-          ...teamVisual(input, d.pick.teamId),
-        })),
-      })
-    }
-
-    // Every team, graded — as a COUNTDOWN. The list runs worst to best
-    // so the winner is revealed last.
-    //
-    // Ordering it best-first put the answer on screen at step one and
-    // then spent nine more steps descending into teams nobody was
-    // waiting for. A grade sheet is the one slide with a result the
-    // whole room wants, and a result is worth building to.
-    //
-    // Letters are LEAGUE-RELATIVE — see gradeTeamDrafts — so the rounds
-    // figure sits beside each one rather than the letter standing alone
-    // as a verdict.
     const graded = gradeTeamDrafts([...div.fell, ...div.reached])
 
     // THE ACTUAL GRADE. Everything above measures who beat the board.
