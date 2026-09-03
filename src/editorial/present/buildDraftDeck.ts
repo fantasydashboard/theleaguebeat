@@ -29,8 +29,8 @@ import {
 import {
   findDraftDivergences,
   findAdpDivergences,
-  describeDivergence,
   gradeTeamDrafts,
+  ordinal,
   type ValuedPick,
 } from '../points/draftValue'
 import type { AdpLookup } from '../points/adp'
@@ -207,30 +207,25 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       : "Against Sleeper's player ranking — the only ordering it publishes, " +
         'and a proxy for ADP rather than ADP itself. Biggest gap first.'
 
+    // No separate "the steal" statement. It named the same player this
+    // list leads with, one slide earlier — spending the deck's biggest
+    // visual moment on a repeat, and telling the room the answer before
+    // the reveal that was supposed to deliver it.
     if (div.fell.length > 0) {
-      const top = div.fell[0]
       slides.push({
-        kind: 'statement',
-        eyebrow: 'The steal',
-        headline: `${input.teamName(top.pick.teamId)} got ${top.pick.playerName} at ${top.pick.pickOverall}.`,
-        support: describeDivergence(top, positionWord(top.pick.position, 1), basis),
+        kind: 'list',
+        eyebrow: 'Fell furthest',
+        headline: 'Who lasted longer than they should have.',
+        support: basisSupport,
+        revealOneByOne: true,
+        rows: div.fell.slice(0, 5).map((d) => ({
+          lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
+          label: d.pick.playerName,
+          sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
+          value: shortRounds(d.roundsDelta),
+          ...teamVisual(input, d.pick.teamId),
+        })),
       })
-      if (div.fell.length > 1) {
-        slides.push({
-          kind: 'list',
-          eyebrow: 'Fell furthest',
-          headline: 'Who lasted longer than they should have.',
-          support: basisSupport,
-          revealOneByOne: true,
-          rows: div.fell.slice(0, 5).map((d) => ({
-            lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
-            label: d.pick.playerName,
-            sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
-            value: shortRounds(d.roundsDelta),
-            ...teamVisual(input, d.pick.teamId),
-          })),
-        })
-      }
     }
 
     if (div.reached.length > 0) {
@@ -250,26 +245,52 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       })
     }
 
-    // Every team, graded. Letters are LEAGUE-RELATIVE — see
-    // gradeTeamDrafts — so the rounds figure sits beside each one
-    // rather than the letter standing alone as a verdict.
+    // Every team, graded — as a COUNTDOWN. The list runs worst to best
+    // so the winner is revealed last.
+    //
+    // Ordering it best-first put the answer on screen at step one and
+    // then spent nine more steps descending into teams nobody was
+    // waiting for. A grade sheet is the one slide with a result the
+    // whole room wants, and a result is worth building to.
+    //
+    // Letters are LEAGUE-RELATIVE — see gradeTeamDrafts — so the rounds
+    // figure sits beside each one rather than the letter standing alone
+    // as a verdict.
     const graded = gradeTeamDrafts([...div.fell, ...div.reached])
     if (graded.length >= 4) {
+      const countdown = [...graded].reverse()
       slides.push({
         kind: 'list',
         eyebrow: 'Draft grades',
-        headline: `Graded on a curve, against ${basis}.`,
+        headline: 'Who beat the board.',
         support:
           `Rounds gained per pick against ${basis}, next to the league ` +
-          'average. Letters are relative to this league.',
+          'average. Counting up to the best draft in the room.',
         revealOneByOne: true,
-        rows: graded.map((g) => ({
-          lead: g.grade,
+        rows: countdown.map((g) => ({
+          // Rank leads rather than the letter: a countdown needs a
+          // position to count, and "10th" tells the room how far there
+          // is left to go in a way that "D" does not.
+          lead: `${ordinal(g.rank)}`,
           label: input.teamName(g.teamId),
-          sub: `${g.picksCompared} picks compared`,
+          sub: `${g.grade} · ${g.picksCompared} picks compared`,
           value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}/pick`,
           ...teamVisual(input, g.teamId),
         })),
+      })
+
+      // The crown. This is what the removed "the steal" slide's visual
+      // weight is worth spending on: the one claim in the deck the room
+      // will actually argue about afterwards.
+      const winner = graded[0]
+      slides.push({
+        kind: 'statement',
+        eyebrow: 'The verdict',
+        headline: `${input.teamName(winner.teamId)} won the draft.`,
+        support:
+          `Best value in the room against ${basis} — ${winner.vsLeague > 0 ? '+' : ''}` +
+          `${winner.vsLeague} rounds per pick better than the league average. ` +
+          'Whether that becomes a season is what the next four months decide.',
       })
     }
   }

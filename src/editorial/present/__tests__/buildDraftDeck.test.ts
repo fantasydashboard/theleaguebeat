@@ -123,7 +123,7 @@ describe('steals and reaches', () => {
     const order = new Map(picks.map((p, i) => [p.playerId, picks.length - i]))
     const deck = buildDraftDeck({ ...base, consensusRank: (id) => order.get(id) })!
     const eyebrows = deck.slides.map((s) => ('eyebrow' in s ? s.eyebrow : ''))
-    expect(eyebrows).toContain('The steal')
+    expect(eyebrows).toContain('Fell furthest')
   })
 
   it('never claims a pick was good, only where it went', () => {
@@ -152,7 +152,7 @@ describe('draft grades', () => {
   })!
   const grades = deck.slides.find(
     (s) => s.kind === 'list' && s.eyebrow === 'Draft grades',
-  ) as { rows: { lead?: string; label: string; value?: string }[] } | undefined
+  ) as { rows: { lead?: string; label: string; value?: string; sub?: string }[] } | undefined
 
   it('grades every team it could compare', () => {
     expect(grades).toBeDefined()
@@ -162,9 +162,11 @@ describe('draft grades', () => {
   it('never shows a letter without the rounds figure beside it', () => {
     // The letter is league-relative and means little alone; the rounds
     // number is the honest quantity. "—" is the deliberate non-grade
-    // for a team with too few compared picks to rank.
+    // for a team with too few compared picks to rank. The letter sits
+    // in the sub-line now that the lead carries the countdown rank.
     for (const r of grades!.rows) {
-      expect(r.lead).toMatch(/^([ABCD][+-]?|—)$/)
+      expect(r.lead).toMatch(/^\d{1,2}(st|nd|rd|th)$/)
+      expect(r.sub, `no letter beside ${r.lead}`).toMatch(/^([ABCD][+-]?|—) · /)
       expect(r.value, `no rounds beside ${r.lead}`).toMatch(/^[+-]?[\d.]+\/pick$/)
     }
   })
@@ -178,14 +180,30 @@ describe('draft grades', () => {
     }
   })
 
-  it('orders best-to-worst', () => {
+  it('counts down, so the winner is revealed last', () => {
+    // Rows reveal in array order. Best-first puts the one result the
+    // room is waiting for on screen at step one, then spends nine more
+    // steps descending into teams nobody asked about.
     const nums = grades!.rows.map((r) => parseFloat(r.value ?? '0'))
-    for (let i = 1; i < nums.length; i++) expect(nums[i - 1]).toBeGreaterThanOrEqual(nums[i])
+    for (let i = 1; i < nums.length; i++) expect(nums[i - 1]).toBeLessThanOrEqual(nums[i])
+  })
+
+  it('crowns the winner on its own slide, after the countdown', () => {
+    const gradeIdx = deck.slides.findIndex(
+      (s) => 'eyebrow' in s && s.eyebrow === 'Draft grades',
+    )
+    const verdictIdx = deck.slides.findIndex(
+      (s) => 'eyebrow' in s && s.eyebrow === 'The verdict',
+    )
+    expect(verdictIdx).toBeGreaterThan(gradeIdx)
+    const last = grades!.rows[grades!.rows.length - 1]
+    const verdict = deck.slides[verdictIdx] as { headline: string }
+    expect(verdict.headline).toContain(last.label)
   })
 
   it('describes divergence in rounds, not slots', () => {
     const text = JSON.stringify(deck)
-    expect(text).toMatch(/rounds? (early|late)|1 rd/)
+    expect(text).toMatch(/\d+(\.\d)? rds?\b/)
     expect(text, 'still using raw slot counts').not.toMatch(/\d+ spots? (earlier|later)/)
   })
 })
@@ -200,20 +218,20 @@ describe('draft slots and ordering', () => {
 
   it('labels picks as round-and-slot, not overall number', () => {
     // "#120" tells nobody anything; "12.10" is how a board is read.
+    // The grades slide is excluded: its leads are countdown ranks.
     const leads = deck.slides
-      .filter((s) => s.kind === 'list')
+      .filter((s) => s.kind === 'list' && s.eyebrow !== 'Draft grades')
       .flatMap((s) => (s as { rows: { lead?: string }[] }).rows.map((r) => r.lead ?? ''))
       .filter((l) => /^\d/.test(l))
     expect(leads.length).toBeGreaterThan(0)
     for (const l of leads) expect(l).toMatch(/^\d{1,2}\.\d{2}$/)
   })
 
-  it('orders the value lists by significance, not by raw rounds', () => {
-    // Deliberate: ranking on raw rounds pushes every list into the
-    // double-digit rounds, where gaps are wide and the players are
-    // replaceable. The displayed figure stays the honest round count,
-    // so the column is intentionally NOT monotonic — which is why each
-    // row also shows where consensus expected him.
+  it('shows where each player was expected, not just how far he moved', () => {
+    // "7 rds late" says how far he slid; "expected 9.04" says from
+    // where. A quarterback sliding from round nine and a receiver
+    // sliding from round two are different stories, and the row needs
+    // both numbers for the room to tell them apart.
     for (const eyebrow of ['Fell furthest', 'Went early']) {
       const slide = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === eyebrow)
       if (!slide) continue

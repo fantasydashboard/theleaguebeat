@@ -335,36 +335,6 @@ export function findAdpDivergences(
   }
 }
 
-/** Rounds to the nearest half, which is the granularity people actually
- *  speak in: "a round early", "a round and a half late". */
-export function roundsLabel(roundsDelta: number): string {
-  const rounded = Math.round(Math.abs(roundsDelta) * 2) / 2
-  const direction = roundsDelta > 0 ? 'late' : 'early'
-  if (rounded < 0.5) return 'about where consensus had him'
-  const n = rounded === 1 ? 'a round' : `${rounded} rounds`
-  return `${n} ${direction}`
-}
-
-/**
- * "the 9th running back off the board, a round and a half late on
- * half-PPR ADP"
- *
- * The basis is a parameter rather than a constant because the two
- * measurement paths are not equally strong, and the copy must not
- * imply they are. Real ADP is named as ADP; the `search_rank` fallback
- * names itself as a Sleeper ranking.
- */
-export function describeDivergence(
-  d: Divergence,
-  positionPlural: string,
-  basis: string,
-): string {
-  return (
-    `${ordinal(d.actualAtPosition)} ${positionPlural} off the board, ` +
-    `${roundsLabel(d.roundsDelta)} on ${basis}.`
-  )
-}
-
 /** Below this many compared picks, a team's average is one or two
  *  picks wide and a single outlier decides its grade. Such teams are
  *  listed with their figure but no letter. */
@@ -472,7 +442,7 @@ export function gradeTeamDrafts(divergences: Divergence[]): TeamDraftValue[] {
   })
 }
 
-function ordinal(n: number): string {
+export function ordinal(n: number): string {
   const rem100 = n % 100
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`
   switch (n % 10) {
