@@ -64,6 +64,21 @@ function draftSlot(pickOverall: number, round: number, teamCount: number): strin
   return `${round}.${String(inRound).padStart(2, '0')}`
 }
 
+/** Where consensus had him, in the same round-and-slot form. Showing
+ *  it is what makes the ordering legible: the lists rank by how much a
+ *  gap MATTERS rather than how wide it is, so a column of round figures
+ *  is deliberately not monotonic. Seeing "went 3.10, expected 2.06"
+ *  next to "went 11.01, expected 7.01" explains the order at a glance
+ *  instead of looking like a sorting bug. */
+function expectedSlot(
+  d: { expectedPickOverall: number },
+  teamCount: number,
+): string {
+  if (teamCount <= 0) return `#${d.expectedPickOverall}`
+  const round = Math.max(1, Math.ceil(d.expectedPickOverall / teamCount))
+  return draftSlot(d.expectedPickOverall, round, teamCount)
+}
+
 /** Compact round figure for a list row: "3.5 rds", "1 rd". The
  *  direction is already carried by which slide the row is on. */
 function shortRounds(roundsDelta: number): string {
@@ -171,12 +186,14 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           kind: 'list',
           eyebrow: 'Fell furthest',
           headline: 'Who lasted longer than they should have.',
-        support: 'How much later they went than the consensus order at their position.',
+        support:
+          'Ordered by how much the gap matters, not how wide it is — a gap on ' +
+          'an early pick outweighs the same gap late.',
           revealOneByOne: true,
           rows: div.fell.slice(0, 5).map((d) => ({
             lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
             label: d.pick.playerName,
-            sub: input.teamName(d.pick.teamId),
+            sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
             value: shortRounds(d.roundsDelta),
             ...teamVisual(input, d.pick.teamId),
           })),
@@ -194,7 +211,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         rows: div.reached.slice(0, 5).map((d) => ({
           lead: draftSlot(d.pick.pickOverall, d.pick.round, facts.teamCount),
           label: d.pick.playerName,
-          sub: input.teamName(d.pick.teamId),
+          sub: `${input.teamName(d.pick.teamId)} · expected ${expectedSlot(d, facts.teamCount)}`,
           value: shortRounds(d.roundsDelta),
           ...teamVisual(input, d.pick.teamId),
         })),

@@ -62,6 +62,21 @@ export interface Divergence {
    *  Rounds read far better than raw slots: "a round and a half late"
    *  is a thing people say; "13 slots" is not. */
   roundsDelta: number
+  /**
+   * How much this divergence MATTERS, as distinct from how large it is.
+   *
+   * Ranking on raw rounds skews the lists late, because the same
+   * position-slot gap spans more picks near the bottom of a board where
+   * one position runs deep. That is arithmetically true and
+   * editorially wrong: three rounds on a player consensus wanted in
+   * round three is a different event from three rounds on one it wanted
+   * in round eleven, even though both read "3 rds".
+   *
+   * So divide the gap by the round consensus expected him in. It is a
+   * stated heuristic, not a hidden model — deliberately so, since a
+   * real value curve is a projection problem and that is UFD's.
+   */
+  significance: number
 }
 
 /** Per-team draft value, aggregated across every pick we could compare. */
@@ -138,6 +153,9 @@ export function findDraftDivergences(
       const expectedPickOverall = byPick[consensusAtPosition - 1].pickOverall
       const roundsDelta =
         teamCount > 0 ? (p.pickOverall - expectedPickOverall) / teamCount : 0
+      const expectedRound =
+        teamCount > 0 ? Math.max(1, Math.ceil(expectedPickOverall / teamCount)) : 1
+      const significance = Math.abs(roundsDelta) / expectedRound
       all.push({
         pick: p,
         consensusAtPosition,
@@ -145,22 +163,22 @@ export function findDraftDivergences(
         delta,
         expectedPickOverall,
         roundsDelta,
+        significance,
       })
     })
   }
 
-  // Sorted by ROUNDS, which is what the slides display. Sorting by
-  // position slots instead put a four-round gap below a three-and-a-half
-  // one, because slots and rounds do not rank the same way: a slot gap
-  // late in a run of one position spans fewer picks than the same gap
-  // in a thin one.
+  // Ordered by SIGNIFICANCE, not raw rounds. Rounds alone push every
+  // list into the double-digit rounds, where gaps are wide and the
+  // players are replaceable — the lists end up technically correct and
+  // uninteresting. The displayed figure stays the honest round count;
+  // only the ordering is weighted.
+  const bySignificance = (a: Divergence, b: Divergence) =>
+    b.significance - a.significance || Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta)
+
   return {
-    fell: all
-      .filter((d) => d.delta > 0)
-      .sort((a, b) => b.roundsDelta - a.roundsDelta || b.delta - a.delta),
-    reached: all
-      .filter((d) => d.delta < 0)
-      .sort((a, b) => a.roundsDelta - b.roundsDelta || a.delta - b.delta),
+    fell: all.filter((d) => d.delta > 0).sort(bySignificance),
+    reached: all.filter((d) => d.delta < 0).sort(bySignificance),
     positionsCompared: positionsCompared.sort(),
   }
 }

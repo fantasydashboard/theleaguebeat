@@ -198,16 +198,18 @@ describe('draft slots and ordering', () => {
     for (const l of leads) expect(l).toMatch(/^\d{1,2}\.\d{2}$/)
   })
 
-  it('orders the value lists by the rounds figure it displays', () => {
-    // Sorting by position slots put a 4-round gap below a 3.5 one.
+  it('orders the value lists by significance, not by raw rounds', () => {
+    // Deliberate: ranking on raw rounds pushes every list into the
+    // double-digit rounds, where gaps are wide and the players are
+    // replaceable. The displayed figure stays the honest round count,
+    // so the column is intentionally NOT monotonic — which is why each
+    // row also shows where consensus expected him.
     for (const eyebrow of ['Fell furthest', 'Went early']) {
       const slide = deck.slides.find((s) => s.kind === 'list' && s.eyebrow === eyebrow)
       if (!slide) continue
-      const nums = (slide as { rows: { value?: string }[] }).rows.map((r) =>
-        parseFloat((r.value ?? '0').replace(/[^\d.]/g, '')),
-      )
-      for (let i = 1; i < nums.length; i++) {
-        expect(nums[i - 1], `${eyebrow} out of order`).toBeGreaterThanOrEqual(nums[i])
+      const rows = (slide as { rows: { sub?: string }[] }).rows
+      for (const r of rows) {
+        expect(r.sub, 'no expected slot to explain the order').toMatch(/expected \d{1,2}\.\d{2}/)
       }
     }
   })
