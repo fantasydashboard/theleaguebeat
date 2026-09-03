@@ -202,6 +202,9 @@ import {
   startingSlots,
   type RosterPlayer,
 } from '@/editorial/points/rosterStrength'
+import { computePointsPowerScores } from '@/editorial/points/powerScore'
+import { hasPlayedGames } from '@/editorial/leagueCore'
+import type { LeagueDataH2HPoints } from '@/editorial/types'
 import {
   projectSeason,
   weeklyScoreSpread,
@@ -375,7 +378,40 @@ async function buildBoard(args: {
     }
   }
   const strength = rankRosterStrength(players, baseline.pointsOf, rosterPositions)
-  if (strength.length < 4) return null
+
+  // Once there are results, they beat the forecast. The board is the
+  // same deck either way — it changes its evidence, not its claim —
+  // and a projection-based ranking in week six would just be a stale
+  // forecast wearing a power ranking's clothes.
+  const pointsData = args.data as unknown as LeagueDataH2HPoints
+  const power = hasPlayedGames(pointsData) ? computePointsPowerScores(pointsData) : []
+  const records = (pointsData.standings ?? []).map((st) => ({
+    teamId: st.teamId,
+    wins: st.catWins,
+    losses: st.catLosses,
+    ties: st.catTies,
+  }))
+
+  // Last week's power ranking, for movement. Recomputed from the same
+  // scores with the latest week withheld rather than stored — a
+  // snapshot table would have to exist before the first week it could
+  // describe, and this needs no migration to be correct today.
+  let previousPowerRank: ((teamId: string) => number | undefined) | undefined
+  if (power.length >= 4 && (pointsData.weeklyScores?.length ?? 0) > 0) {
+    const latest = Math.max(...pointsData.weeklyScores!.map((w) => w.week))
+    const priorScores = pointsData.weeklyScores!.filter((w) => w.week < latest)
+    if (priorScores.length > 0) {
+      const prior = computePointsPowerScores({
+        ...pointsData,
+        weeklyScores: priorScores,
+      })
+      const ranked = [...prior].sort((a, b) => b.score - a.score)
+      const byTeam = new Map(ranked.map((r, i) => [r.teamId, i + 1]))
+      previousPowerRank = (teamId) => byTeam.get(teamId)
+    }
+  }
+
+  if (power.length < 4 && strength.length < 4) return null
 
   // The schedule, for projected records. Sleeper publishes every week's
   // pairings before kickoff, so this works in preseason.
@@ -446,6 +482,9 @@ async function buildBoard(args: {
     strength,
     projected,
     measuredSpread,
+    power,
+    records,
+    previousPowerRank,
     teamName: args.teamName,
     team: args.teamVisual,
     formatLabel: baseline.formatLabel,

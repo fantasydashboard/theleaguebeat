@@ -34,6 +34,8 @@
 import type { PresentDeck, PresentSlide } from './types'
 import { ordinal } from '../points/draftValue'
 import { tierFor, type TeamStrength } from '../points/rosterStrength'
+import type { PointsPowerRow } from '../points/powerScore'
+import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
 import {
   scheduleWeight,
   type ProjectedSeasonRow,
@@ -62,6 +64,17 @@ export interface BoardDeckInput {
   measuredSpread?: number
   teamName: (teamId: string) => string
   team?: (teamId: string) => BoardDeckTeam | undefined
+  /**
+   * Real results, once there are any. When present the deck ranks on
+   * these instead of projections — the same deck, better evidence.
+   * A projection is what you say before the games; ignoring the games
+   * afterwards is just a stale forecast.
+   */
+  power?: PointsPowerRow[]
+  /** Actual standings, for the record ranking the luck read needs. */
+  records?: { teamId: string; wins: number; losses: number; ties: number; pointsFor?: number }[]
+  /** Power ranking as of last week, for movement. */
+  previousPowerRank?: (teamId: string) => number | undefined
   /** Scoring format label for the basis line, e.g. "half-PPR". */
   formatLabel?: string
   /** Player display name, for the "best starter" line. */
@@ -102,13 +115,35 @@ function recordLabel(row: ProjectedSeasonRow): string {
  * this deck from the picker rather than offering an empty one.
  */
 export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
-  if (input.strength.length < 4) return null
+  // In season the deck runs on results; before it, on projections.
+  // Either is a valid board — an empty one is not.
+  const power = input.power ?? []
+  const inSeason = power.length >= 4
+  if (!inSeason && input.strength.length < 4) return null
 
   const slides: PresentSlide[] = []
   const format = input.formatLabel ? `${input.formatLabel} ` : ''
   const projectedBy = new Map(
     (input.projected ?? []).map((r) => [r.teamId, r]),
   )
+  const weeksPlayed = power[0]?.weeksPlayed ?? 0
+  const luckBy = new Map(
+    readLuck(
+      power.map((p) => {
+        const rec = input.records?.find((r) => r.teamId === p.teamId)
+        return {
+          teamId: p.teamId,
+          power: p.score,
+          wins: rec?.wins ?? 0,
+          losses: rec?.losses ?? 0,
+          ties: rec?.ties ?? 0,
+          pointsFor: p.pointsPerWeek * p.weeksPlayed,
+        }
+      }),
+      weeksPlayed,
+    ).map((l) => [l.teamId, l]),
+  )
+  const recordBy = new Map((input.records ?? []).map((r) => [r.teamId, r]))
 
   slides.push({
     kind: 'cold-open',
@@ -116,7 +151,11 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
     subtitle: 'Power rankings',
     // The basis stated once, up front, rather than repeated on ten
     // cards. Every number after this is projected points per week.
-    meta: `${input.season} · preseason · ${format}projections`,
+    // Says which evidence it is running on. A board that claims
+    // "preseason" in week six would be lying about its own basis.
+    meta: inSeason
+      ? `${input.season} · week ${weeksPlayed} · all-play power`
+      : `${input.season} · preseason · ${format}projections`,
   })
 
   // One slide per team, worst to best.
@@ -125,13 +164,77 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
   // every team two seconds and the room no reason to react to any of
   // them; a card each turns a ranking into ten moments, and the moment
   // is the whole reason to present rather than send a link.
-  const countdown = [...input.strength].reverse()
-  const field = input.strength.length
-  for (const t of countdown) {
-    const p = projectedBy.get(t.teamId)
-    const priorRank = input.draftRank?.(t.teamId)
-    const notes: string[] = []
+  const countdown = inSeason
+    ? [...power].sort((a, b) => a.score - b.score) // worst first
+    : [...input.strength].reverse()
+  const field = countdown.length
 
+  for (const [i, entry] of countdown.entries()) {
+    const teamId = entry.teamId
+    const rank = field - i
+    const notes: string[] = []
+    const p = projectedBy.get(teamId)
+
+    if (inSeason) {
+      const row = entry as PointsPowerRow
+      const rec = recordBy.get(teamId)
+      const luck = luckBy.get(teamId)
+      const prior = input.previousPowerRank?.(teamId)
+
+      const luckLine = luck ? describeLuck(luck, input.teamName(teamId)) : null
+      if (luckLine) notes.push(luckLine)
+      else if (weeksPlayed < MIN_WEEKS_FOR_LUCK) {
+        // Said once, on the cards, rather than letting a reader assume
+        // the absence of a verdict means the team is unremarkable.
+        notes.push(
+          `Too early for a luck read — that needs ${MIN_WEEKS_FOR_LUCK} weeks, ` +
+            `and this is week ${weeksPlayed}.`,
+        )
+      }
+      notes.push(
+        `All-play ${row.allPlayWins}-${row.allPlayLosses}` +
+          `${row.allPlayTies > 0 ? `-${row.allPlayTies}` : ''}: the record they ` +
+          'would hold having played everyone, every week.',
+      )
+
+      slides.push({
+        kind: 'team-card',
+        eyebrow: 'Power rankings',
+        rank,
+        fieldSize: field,
+        teamName: input.teamName(teamId),
+        tier: tierFor(rank, field),
+        // The figure that sorts, as everywhere else in these decks.
+        statValue: `${row.score}`,
+        statLabel: 'power score',
+        movement:
+          prior !== undefined && prior !== rank
+            ? { places: prior - rank, label: 'since last week' }
+            : undefined,
+        chips: [
+          ...(rec
+            ? [
+                {
+                  value: `${rec.wins}-${rec.losses}${rec.ties > 0 ? `-${rec.ties}` : ''}`,
+                  label: 'record',
+                },
+              ]
+            : []),
+          {
+            value: `${row.allPlayWins}-${row.allPlayLosses}`,
+            label: 'all-play',
+          },
+          { value: `${Math.round(row.pointsPerWeek * 10) / 10}`, label: 'pts / week' },
+        ],
+        notes,
+        ...teamVisual(input, teamId),
+      })
+      continue
+    }
+
+    // Preseason: projections, and the draft-night comparison.
+    const t = entry as TeamStrength
+    const priorRank = input.draftRank?.(teamId)
     const edgeName = t.edgePlayerId ? input.playerName?.(t.edgePlayerId) : undefined
     if (edgeName && t.edgePlayerVsLeague !== undefined && t.edgePlayerVsLeague > 0) {
       notes.push(
@@ -139,9 +242,6 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
           `the average starting ${t.edgePlayerPosition} in this league.`,
       )
     }
-    // A hole is a starting slot with nobody eligible for it. The
-    // projection counts it as zero, so saying so explains a low number
-    // rather than leaving the team looking merely bad.
     if (input.startingSlotCount && t.slotsFilled < input.startingSlotCount) {
       const holes = input.startingSlotCount - t.slotsFilled
       notes.push(
@@ -168,7 +268,7 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
       eyebrow: 'Power rankings',
       rank: t.rank,
       fieldSize: field,
-      teamName: input.teamName(t.teamId),
+      teamName: input.teamName(teamId),
       tier: tierFor(t.rank, field),
       statValue: `${t.pointsPerWeek}`,
       statLabel: 'projected points per week',
@@ -176,62 +276,79 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
         priorRank !== undefined && priorRank !== t.rank
           ? { places: priorRank - t.rank, label: 'since draft night' }
           : undefined,
-      // Projected record and opponent average are deliberately NOT
-      // here. Across a real 10-team league they span 6.1-7.9 to
-      // 7.9-6.1 and 105.2 to 106.7 — a spread so narrow that ten cards
-      // showed effectively the same two numbers, which teaches a room
-      // nothing and costs the card its best space. Positional strength
-      // varies by an order of magnitude more, and is what a manager can
-      // actually act on.
       chips: [
         {
           value: `${t.vsLeaguePerWeek > 0 ? '+' : ''}${t.vsLeaguePerWeek}`,
           label: 'vs league avg',
         },
         ...(t.bestPosition && t.bestPosition.vsLeague > 0
-          ? [
-              {
-                value: `+${t.bestPosition.vsLeague}`,
-                label: `/wk at ${t.bestPosition.position}`,
-              },
-            ]
+          ? [{ value: `+${t.bestPosition.vsLeague}`, label: `/wk at ${t.bestPosition.position}` }]
           : []),
         ...(t.worstPosition && t.worstPosition.vsLeague < 0
-          ? [
-              {
-                value: `${t.worstPosition.vsLeague}`,
-                label: `/wk at ${t.worstPosition.position}`,
-              },
-            ]
+          ? [{ value: `${t.worstPosition.vsLeague}`, label: `/wk at ${t.worstPosition.position}` }]
           : []),
       ],
       notes,
-      ...teamVisual(input, t.teamId),
+      ...teamVisual(input, teamId),
     })
   }
 
-  // The crown.
-  const best = input.strength[0]
-  const worst = input.strength[input.strength.length - 1]
-  const gap = Math.round((best.pointsPerWeek - worst.pointsPerWeek) * 10) / 10
-  const bestProjected = projectedBy.get(best.teamId)
-  slides.push({
-    kind: 'statement',
-    eyebrow: 'The verdict',
-    headline: `${input.teamName(best.teamId)} enter week 1 on top.`,
-    support:
-      `${best.pointsPerWeek} projected points a week, ${gap} more than ` +
-      `${input.teamName(worst.teamId)} at the bottom of the board. ` +
-      'Projections are a forecast, not a result — this is where the ' +
-      'season starts an argument, not where it settles one.',
-    chips: [
-      { value: `${best.pointsPerWeek}`, label: 'pts / week' },
-      { value: `+${best.vsLeaguePerWeek}`, label: 'vs league' },
-      ...(bestProjected
-        ? [{ value: recordLabel(bestProjected), label: 'projected' }]
-        : []),
-    ],
-  })
+  // The crown, on whichever evidence the deck is running. In season
+  // it must not reach into `strength` at all — that array is empty
+  // once results exist, and the preseason verdict would crash on it.
+  if (inSeason) {
+    const top = [...power].sort((a, b) => b.score - a.score)[0]
+    const topLuck = luckBy.get(top.teamId)
+    const luckiest = [...luckBy.values()]
+      .filter((l) => l.verdict === 'riding-luck')
+      .sort((a, b) => b.delta - a.delta)[0]
+    const topRecord = recordBy.get(top.teamId)
+    slides.push({
+      kind: 'statement',
+      eyebrow: 'The verdict',
+      headline: `${input.teamName(top.teamId)} are the best team in the league.`,
+      support:
+        `All-play ${top.allPlayWins}-${top.allPlayLosses} through ` +
+        `${weeksPlayed} week${weeksPlayed === 1 ? '' : 's'} — the record they ` +
+        'would hold having played everyone, every week, which is what a ' +
+        'points league is actually measured on. ' +
+        (luckiest && luckiest.teamId !== top.teamId
+          ? `${input.teamName(luckiest.teamId)} sit higher in the standings than ` +
+            'they have earned, and schedules even out.'
+          : topLuck?.verdict === 'better-than-record'
+            ? 'Their record does not show it yet. It will.'
+            : 'The standings agree.'),
+      chips: [
+        { value: `${top.score}`, label: 'power score' },
+        ...(topRecord
+          ? [{ value: `${topRecord.wins}-${topRecord.losses}`, label: 'record' }]
+          : []),
+        { value: `${top.allPlayWins}-${top.allPlayLosses}`, label: 'all-play' },
+      ],
+    })
+  } else {
+    const best = input.strength[0]
+    const worst = input.strength[input.strength.length - 1]
+    const gap = Math.round((best.pointsPerWeek - worst.pointsPerWeek) * 10) / 10
+    const bestProjected = projectedBy.get(best.teamId)
+    slides.push({
+      kind: 'statement',
+      eyebrow: 'The verdict',
+      headline: `${input.teamName(best.teamId)} enter week 1 on top.`,
+      support:
+        `${best.pointsPerWeek} projected points a week, ${gap} more than ` +
+        `${input.teamName(worst.teamId)} at the bottom of the board. ` +
+        'Projections are a forecast, not a result — this is where the ' +
+        'season starts an argument, not where it settles one.',
+      chips: [
+        { value: `${best.pointsPerWeek}`, label: 'pts / week' },
+        { value: `+${best.vsLeaguePerWeek}`, label: 'vs league' },
+        ...(bestProjected
+          ? [{ value: recordLabel(bestProjected), label: 'projected' }]
+          : []),
+      ],
+    })
+  }
 
   // The kicker: does the schedule change any of it?
   //
@@ -239,7 +356,7 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
   // has been told something real — every complaint about the schedule
   // this season is now on record as having been wrong in advance. A
   // league where it moves people has been told something better.
-  if (input.projected && input.projected.length >= 4) {
+  if (!inSeason && input.projected && input.projected.length >= 4) {
     const weight = scheduleWeight(input.projected)
     const helped = [...input.projected]
       .filter((r) => r.scheduleSwing > 0)
@@ -277,8 +394,8 @@ export function buildBoardDeck(input: BoardDeckInput): PresentDeck | null {
 
   slides.push({
     kind: 'sign-off',
-    headline: 'The board is set.',
-    sub: 'It only counts once they play.',
+    headline: inSeason ? 'That is the board.' : 'The board is set.',
+    sub: inSeason ? 'It changes again on Sunday.' : 'It only counts once they play.',
   })
 
   return { id: 'board', title: 'Power rankings', slides }
