@@ -305,6 +305,13 @@ async function buildYahooLeagueData(
     // board deck was Sleeper-only purely because this was missing.
     const weeklyScores = buildWeeklyScoresFromMatchups(allPointsWeeks)
 
+    // The wire. Non-fatal — undefined on failure, and every other
+    // slide renders unchanged.
+    const pointsTransactions = await buildYahooTransactions(
+      leagueKey,
+      currentWeek,
+    ).catch(() => undefined)
+
     // Chronicles: champions + all-time manager legacy. The category
     // builders are format-agnostic (champion = final rank 1; legacy sums
     // standings W/L/T, which is the matchup record for points).
@@ -364,6 +371,7 @@ async function buildYahooLeagueData(
       standings,
       seasonRankHistory,
       weeklyScores,
+      transactions: pointsTransactions,
       seasonHistory,
       managerLegacy,
       h2hRecords,

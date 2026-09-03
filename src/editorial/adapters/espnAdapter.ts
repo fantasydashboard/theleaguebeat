@@ -367,6 +367,10 @@ export async function espnLeagueToCategoryData(
 
     const { standings, seasonRankHistory } = buildPointsStandings(teamsOutMinimal, allPointsWeeks)
 
+    // The wire. Non-fatal by construction — a failure returns
+    // undefined and every other slide renders unchanged.
+    const pointsTransactions = await buildTransactions(leagueId, season, league, sport)
+
     // Per-team weekly scores, which is what all-play power needs. The
     // board deck was Sleeper-only purely because this was missing.
     const weeklyScores = buildWeeklyScoresFromMatchups(allPointsWeeks)
@@ -409,6 +413,7 @@ export async function espnLeagueToCategoryData(
       standings,
       seasonRankHistory,
       weeklyScores,
+      transactions: pointsTransactions,
       seasonHistory,
       h2hRecords,
       playerNights: pointsPlayerNights,
@@ -524,7 +529,7 @@ export async function espnLeagueToCategoryData(
   //     Failure is non-fatal — when ESPN's transactions endpoint
   //     errors or returns nothing, transaction detectors quietly
   //     skip and the rest of the page renders unchanged.
-  const transactions = await buildTransactions(leagueId, season, league)
+  const transactions = await buildTransactions(leagueId, season, league, sport)
 
   // 17. Yesterday's player nights — match rostered players by
   //     normalized name against MLB Stats API box scores. ESPN
@@ -1607,11 +1612,16 @@ async function buildTransactions(
   leagueId: string,
   season: number,
   league: EspnLeague,
+  // Was hardcoded to 'baseball', which asked ESPN for a baseball
+  // league at a football league's id and got nothing back. Harmless
+  // while only the category path called this; wrong the moment
+  // football does.
+  sport: 'baseball' | 'football' = 'baseball',
 ): Promise<LeagueTransaction[] | undefined> {
   try {
     const raw = await withCache(
       cacheKey(leagueId, 'transactions', season),
-      () => espnService.getTransactions('baseball', leagueId, season),
+      () => espnService.getTransactions(sport, leagueId, season),
     )
     if (!raw || raw.length === 0) return undefined
 

@@ -1790,6 +1790,11 @@ export function sleeperPoints(intPart?: number, hundredths?: number): number {
  *  week number as a string (Sleeper's own `/matchups/{week}` calls
  *  are one week at a time; this is how the results get assembled). */
 export interface SleeperPointsRaw {
+  /** Already-normalized transactions. Passed IN rather than fetched
+   *  here, because this builder is pure by contract — see the note
+   *  above `buildSleeperPointsData`. The async wrapper does the I/O. */
+  transactions?: LeagueTransaction[]
+
   league: SleeperLeague
   rosters: SleeperRoster[]
   users: SleeperUser[]
@@ -2377,6 +2382,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     seasonRankHistory,
     weeklyScores,
     draft,
+    transactions: raw.transactions,
     seasonHistory,
   }
 }
@@ -2424,7 +2430,16 @@ export async function sleeperLeagueToPointsData(
 
   const history = await fetchSleeperHistory(league)
 
+  // The wire. Non-fatal: the builder treats undefined as "no
+  // transactions exposed" and every other slide renders unchanged.
+  const transactions = await buildSleeperTransactions(
+    leagueId,
+    Number(league.settings?.leg) || 1,
+    league.sport,
+  ).catch(() => undefined)
+
   return buildSleeperPointsData({
+    transactions,
     league,
     rosters,
     users,

@@ -620,6 +620,13 @@ export interface LeagueDataH2HPoints {
    *  adapters that cannot build it degrade to record-only power. */
   weeklyScores?: PointsWeeklyScore[]
 
+  /** Normalized league transactions — trades, adds, drops, FAAB and
+   *  waiver claims. Same universal shape the category contract uses,
+   *  so the detectors and any deck built on it read one model rather
+   *  than branching on format. Undefined when a platform's endpoint
+   *  failed or exposed nothing; consumers degrade rather than error. */
+  transactions?: import('./transactions/types').LeagueTransaction[]
+
   /** Draft data — undefined for leagues with no draft exposed. Same
    *  shape the category Draft page consumes, so the page renders one
    *  contract rather than branching on format. */
