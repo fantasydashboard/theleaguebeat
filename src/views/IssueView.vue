@@ -130,6 +130,63 @@
         </div>
       </section>
 
+      <!-- ─── THE ASSEMBLED ISSUE ──────────────────────────────────
+           Sections from `buildPreseasonIssue`, which present mode
+           renders from the SAME object. Loaded lazily: the projections
+           behind it are ~3MB, fine on a deck route somebody chose to
+           open and not fine blocking the page everyone lands on. Until
+           it arrives the legacy sections below carry the page. -->
+      <template v-if="preseasonIssue">
+        <section
+          v-for="sec in preseasonIssue.sections"
+          :key="sec.id"
+          :id="`issue-${sec.id}`"
+          class="section"
+        >
+          <header class="section-head">
+            <p class="section-eyebrow">{{ sec.eyebrow }}</p>
+            <h2 class="section-headline">{{ sec.headline }}</h2>
+            <p v-if="sec.support" class="section-lede">{{ sec.support }}</p>
+          </header>
+
+          <ul v-if="sec.chips?.length" class="cover-stats" role="list">
+            <li v-for="c in sec.chips" :key="c.label" class="cover-stat">
+              <span class="cover-stat-num">{{ c.value }}</span>
+              <span class="cover-stat-label">{{ c.label }}</span>
+            </li>
+          </ul>
+
+          <ol v-if="sec.cards?.length" class="standings" role="list">
+            <li v-for="card in sec.cards" :key="card.teamId" class="standings-row">
+              <span class="standings-rank">{{ card.rank }}</span>
+              <span
+                class="standings-avatar"
+                :style="{ background: card.logoColor ? `linear-gradient(135deg, ${card.logoColor})` : undefined }"
+              >
+                <img v-if="card.logoUrl" :src="card.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ card.logoInitials }}</span>
+              </span>
+              <span class="standings-name">
+                {{ card.teamName }}
+                <small v-if="card.notes?.length" style="display:block;opacity:.62;font-weight:400">
+                  {{ card.notes[0] }}
+                </small>
+              </span>
+              <span class="standings-record">{{ card.statValue }}</span>
+            </li>
+          </ol>
+
+          <ol v-else-if="sec.rows?.length" class="standings" role="list">
+            <li v-for="(row, i) in sec.rows" :key="`${row.label}-${i}`" class="standings-row">
+              <span class="standings-name">{{ row.label }}
+                <small v-if="row.sub" style="display:block;opacity:.62;font-weight:400">{{ row.sub }}</small>
+              </span>
+              <span v-if="row.value" class="standings-record">{{ row.value }}</span>
+            </li>
+          </ol>
+        </section>
+      </template>
+
       <!-- Table of contents — only once there are real sections to list. -->
       <nav v-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
         <p class="issue-toc-label">In this issue</p>
@@ -754,6 +811,8 @@ import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { hasPlayedGames } from '@/editorial/leagueCore'
+import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
+import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
@@ -1376,6 +1435,42 @@ const showDraftSection = computed(() => {
  * has happened. Rendering both put the identical headline on the page
  * twice, once as the lead and once as section 03.
  */
+/**
+ * The assembled preseason issue. Null until the projections land, and
+ * null forever if they never do — the page renders without it either
+ * way. Present mode builds its deck from this same object.
+ */
+const preseasonIssue = ref<Issue | null>(null)
+
+watch(
+  [livePointsData, strictLeagueRecord],
+  async ([data, record]) => {
+    preseasonIssue.value = null
+    if (!data || !record || pointsSeasonStarted.value) return
+    const picks = [...(data.draft?.picks ?? [])]
+    if (picks.length === 0) return
+    preseasonIssue.value = await loadPreseasonIssue({
+      leagueName: record.league_name || data.leagueName,
+      season: data.currentSeason,
+      platform: record.platform,
+      platformLeagueId: record.platform_league_id,
+      picks,
+      transactions: (data as { transactions?: never[] }).transactions,
+      teamName: (id) => lookupTeam(id).name,
+      team: (id) => {
+        const t = lookupTeam(id)
+        return {
+          name: t.name,
+          avatarUrl: t.avatarUrl,
+          avatarColor: t.avatarColor,
+          ownerInitials: t.ownerInitials,
+        }
+      },
+    })
+  },
+  { immediate: true },
+)
+
 const showPointsDraft = computed(
   () =>
     !!livePointsData.value &&
