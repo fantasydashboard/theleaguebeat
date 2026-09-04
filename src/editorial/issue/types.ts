@@ -64,6 +64,28 @@ export interface IssueCard {
  * pure statement. A section carrying two kinds is a section that has
  * not decided what it is.
  */
+/**
+ * A section's artwork.
+ *
+ * Sized DOWN from the cover on purpose: the cover earns a half-screen
+ * portrait, and a page where every section shouts at that volume is a
+ * page with no hierarchy. These are identity marks — they tell you
+ * whose story this is at a glance — not illustrations.
+ */
+export interface IssueVisual {
+  /** One team's mark, or two set against each other. */
+  teamIds: string[]
+  /** Optional player face, for a section about a person. */
+  playerHeadshotUrl?: string
+  /** Resolved at build time so the renderer stays dumb. */
+  logos: {
+    teamId: string
+    url?: string
+    color?: string
+    initials?: string
+  }[]
+}
+
 export interface IssueSection {
   /** Stable id — render keys, deep links, and the present-mode route. */
   id: string
@@ -71,6 +93,10 @@ export interface IssueSection {
   eyebrow: string
   headline: string
   support?: string
+  /** Artwork beside the headline. Omitted when a section has no
+   *  subject worth picturing — the schedule is about everybody, so it
+   *  gets none rather than an arbitrary crest. */
+  visual?: IssueVisual
   chips?: { value: string; label: string }[]
   rows?: IssueRow[]
   cards?: IssueCard[]

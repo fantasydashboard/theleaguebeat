@@ -54,6 +54,22 @@ export interface PreseasonIssueInput {
   formatLabel?: string
 }
 
+/** Section artwork for one or two teams. */
+function artFor(input: PreseasonIssueInput, teamIds: string[]) {
+  return {
+    teamIds,
+    logos: teamIds.map((teamId) => {
+      const t = input.team?.(teamId)
+      return {
+        teamId,
+        url: t?.avatarUrl,
+        color: t?.avatarColor,
+        initials: t?.ownerInitials,
+      }
+    }),
+  }
+}
+
 function visual(input: PreseasonIssueInput, teamId: string) {
   const t = input.team?.(teamId)
   if (!t) return {}
@@ -91,6 +107,7 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
       `${gap} more than ${input.teamName(worst.teamId)} at the bottom of the room. ` +
       'A projection is a forecast, not a result. This is where the season ' +
       'starts an argument, not where it settles one.',
+    visual: artFor(input, [best.teamId]),
     chips: [
       { value: `${best.pointsPerWeek}`, label: 'projected pts / week' },
       { value: `+${best.vsLeaguePerWeek}`, label: 'vs league average' },
@@ -113,6 +130,9 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
           input.strength.findIndex((t) => t.teamId === bestDraft.teamId) + 1,
         )} on projection. Beating the market and owning the best roster are ` +
         'different achievements, and this room split them.',
+      // Two marks set against each other — the section IS the
+      // disagreement between them.
+      visual: artFor(input, [bestDraft.teamId, best.teamId]),
       priority: 20,
     })
   }
@@ -126,17 +146,25 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
     const p = projectedBy.get(t.teamId)
     const prior = input.draftRank?.(t.teamId)
 
-    if (t.worstPosition && t.worstPosition.vsLeague < 0) {
-      notes.push(
-        `Gets ${Math.abs(t.worstPosition.vsLeague)} points a week less from ` +
-          `${t.worstPosition.position} than the league does.`,
-      )
-    }
-    if (t.bestPosition && t.bestPosition.vsLeague > 0) {
-      notes.push(
-        `${t.bestPosition.vsLeague} points a week ahead of the league at ` +
-          `${t.bestPosition.position}.`,
-      )
+    // Which line leads depends on where the team sits. Introducing the
+    // projected league winner with "gets 8.4 fewer points from
+    // receiver" reads as a correction rather than a verdict; the top of
+    // the board is defined by what it is good at, the bottom by what it
+    // is not. Ten identical "gets X less from Y" lines in a row also
+    // read as a form letter, and alternating the framing breaks that.
+    const leadWithStrength = t.rank <= Math.ceil(field / 2)
+    const strengthLine =
+      t.bestPosition && t.bestPosition.vsLeague > 0
+        ? `${t.bestPosition.vsLeague} points a week clear of the league at ${t.bestPosition.position}.`
+        : null
+    const weaknessLine =
+      t.worstPosition && t.worstPosition.vsLeague < 0
+        ? `Thinnest at ${t.worstPosition.position} — ${Math.abs(t.worstPosition.vsLeague)} points a week behind the league.`
+        : null
+    for (const line of leadWithStrength
+      ? [strengthLine, weaknessLine]
+      : [weaknessLine, strengthLine]) {
+      if (line) notes.push(line)
     }
     if (p && p.scheduleSwing !== 0) {
       notes.push(
@@ -233,6 +261,7 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
         'The board has not stopped changing since draft night. ' +
         (w.usesFaab && w.faabSpent ? `$${w.faabSpent} spent so far. ` : '') +
         'Waivers run properly once the games do.',
+      visual: artFor(input, [...new Set(w.adds.slice(0, 3).map((a) => a.teamId))]),
       rows: w.adds.slice(0, 5).map((a) => ({
         label: a.playerName,
         sub: input.teamName(a.teamId),

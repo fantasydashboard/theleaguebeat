@@ -143,11 +143,28 @@
           :id="`issue-${sec.id}`"
           class="section"
         >
-          <header class="section-head">
-            <p class="section-eyebrow">{{ sec.eyebrow }}</p>
-            <h2 class="section-headline">{{ sec.headline }}</h2>
-            <p v-if="sec.support" class="section-lede">{{ sec.support }}</p>
-          </header>
+          <div class="issue-sec-top">
+            <!-- Identity marks, deliberately a fraction of the cover
+                 portrait. A page where every section shouts at cover
+                 volume is a page with no hierarchy. -->
+            <div v-if="sec.visual?.logos.length" class="issue-sec-art">
+              <span
+                v-for="(l, i) in sec.visual.logos"
+                :key="l.teamId"
+                class="issue-sec-logo"
+                :class="{ 'is-second': i > 0 }"
+                :style="{ background: l.color ? `linear-gradient(135deg, ${l.color})` : undefined }"
+              >
+                <img v-if="l.url" :src="l.url" class="avatar-image" alt="" />
+                <span v-else>{{ l.initials }}</span>
+              </span>
+            </div>
+            <header class="section-head issue-sec-copy">
+              <p class="section-eyebrow">{{ sec.eyebrow }}</p>
+              <h2 class="section-headline">{{ sec.headline }}</h2>
+              <p v-if="sec.support" class="section-lede">{{ sec.support }}</p>
+            </header>
+          </div>
 
           <ul v-if="sec.chips?.length" class="cover-stats" role="list">
             <li v-for="c in sec.chips" :key="c.label" class="cover-stat">
@@ -176,12 +193,25 @@
             </li>
           </ol>
 
-          <ol v-else-if="sec.rows?.length" class="standings" role="list">
-            <li v-for="(row, i) in sec.rows" :key="`${row.label}-${i}`" class="standings-row">
-              <span class="standings-name">{{ row.label }}
-                <small v-if="row.sub" style="display:block;opacity:.62;font-weight:400">{{ row.sub }}</small>
+          <!-- Its own row class. Reusing `standings` here truncated
+               every name to "Mic…" and clipped owners to "The Ama" —
+               that grid is built for a rank, a crest and a record, not
+               for a player, a team and a bid. -->
+          <ol v-else-if="sec.rows?.length" class="issue-wire" role="list">
+            <li v-for="(row, i) in sec.rows" :key="`${row.label}-${i}`" class="issue-wire-row">
+              <span
+                v-if="row.logoUrl || row.logoColor"
+                class="issue-wire-logo"
+                :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
+              >
+                <img v-if="row.logoUrl" :src="row.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ row.logoInitials }}</span>
               </span>
-              <span v-if="row.value" class="standings-record">{{ row.value }}</span>
+              <span class="issue-wire-copy">
+                <span class="issue-wire-name">{{ row.label }}</span>
+                <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
+              </span>
+              <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
             </li>
           </ol>
         </section>
@@ -193,6 +223,7 @@
         <ol class="issue-toc-list" role="list">
           <li><a href="#points-section-power">01 — Power Rankings</a></li>
           <li><a href="#section-matchups">02 — Matchups</a></li>
+          <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Matchups</a></li>
           <li v-if="showPointsDraft"><a href="#points-section-draft">03 — The draft</a></li>
           <li v-if="pointsQuickReads.length">
             <a href="#points-section-departments">{{ showPointsDraft ? '04' : '03' }} — Departments</a>
@@ -268,8 +299,16 @@
         </aside>
       </section>
 
-      <!-- ─── 02 — MATCHUPS ──────────────────────────────────────── -->
-      <section id="section-matchups" class="section" aria-labelledby="points-matchups-heading">
+      <!-- ─── 02 — MATCHUPS ────────────────────────────────────────
+           Hidden before kickoff. Five cards reading 0.0 – 0.0 with
+           "Kickoff hasn't happened yet" underneath each is not a story;
+           it is the absence of one, printed five times. -->
+      <section
+        v-if="pointsSeasonStarted"
+        id="section-matchups"
+        class="section"
+        aria-labelledby="points-matchups-heading"
+      >
         <header class="section-head">
           <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
           <h2 class="section-headline" id="points-matchups-heading">
@@ -3515,4 +3554,42 @@ function collectUserIdentity() {
   color: var(--ink-3);
   line-height: 1.4;
 }
+
+/* ── ISSUE SECTION ART ──────────────────────────────────────────────
+   A fraction of the cover portrait on purpose: identity marks that say
+   whose story this is, not illustrations competing with the lead. */
+.issue-sec-top { display: flex; align-items: flex-start; gap: 22px; }
+.issue-sec-copy { flex: 1; min-width: 0; }
+.issue-sec-art { display: flex; flex: none; padding-top: 4px; }
+.issue-sec-logo {
+  width: 78px; height: 78px; border-radius: 18px;
+  display: grid; place-items: center; overflow: hidden;
+  font-weight: 800; font-size: 1.1rem; flex: none;
+}
+/* A second mark overlaps the first — the two teams are set against
+   each other, which is what those sections are about. */
+.issue-sec-logo.is-second { margin-left: -22px; box-shadow: -6px 0 0 0 oklch(0.06 0.01 90); }
+@media (max-width: 700px) {
+  .issue-sec-top { flex-direction: column; gap: 14px; }
+  .issue-sec-logo { width: 58px; height: 58px; border-radius: 14px; }
+}
+
+/* ── WIRE ROWS ──────────────────────────────────────────────────────
+   Its own grid. The standings row is built for a rank, a crest and a
+   record; forcing a player + team + bid through it truncated every
+   name to three characters. */
+.issue-wire { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.issue-wire-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px; border-radius: 12px;
+  background: oklch(0.09 0.012 90); border: 1px solid oklch(0.18 0.015 90);
+}
+.issue-wire-logo {
+  width: 34px; height: 34px; border-radius: 9px; flex: none;
+  display: grid; place-items: center; overflow: hidden; font-size: 0.7rem; font-weight: 700;
+}
+.issue-wire-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.issue-wire-name { font-weight: 700; }
+.issue-wire-sub { font-size: 0.78rem; color: oklch(0.62 0.01 90); }
+.issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
 </style>
