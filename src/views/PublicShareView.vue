@@ -76,6 +76,12 @@
            The composition emits hero + supporting stories in priority
            order; we render via the existing components. -->
       <template v-else-if="issueData">
+        <!-- Cover stories need games. Before kickoff the composition
+             has nothing real to lead with and falls back to a
+             placeholder team — which shipped "Team unknown is the team
+             carrying this week" to a public link. Standings below still
+             render, because a league's shape is true before kickoff
+             even when its week is not. -->
         <section
           v-for="section in dynamicIssueSections"
           :key="`${section.type}:${section.story?.signature ?? 'anchor'}`"
@@ -123,7 +129,7 @@
               Standings
             </p>
             <h2 id="share-standings-h" class="share-section-headline">
-              Through week {{ issueData.currentWeek }}.
+              {{ seasonStarted ? `Through week ${issueData.currentWeek}.` : 'Before a snap.' }}
             </h2>
           </header>
 
@@ -207,6 +213,7 @@ import { detectAll } from '@/editorial/detection'
 import { selectStoriesForIssue } from '@/editorial/selection'
 import { composeIssue, type IssueSection } from '@/editorial/composition'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
+import { hasPlayedGames } from '@/editorial/leagueCore'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
@@ -329,8 +336,28 @@ const issueSections = computed<IssueSection[]>(() => {
   return composeIssue(stories, context)
 })
 
-const dynamicIssueSections = computed(() =>
-  issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type)),
+/**
+ * Sections worth rendering publicly.
+ *
+ * Two filters, and the second matters more than it looks. Before a
+ * single game is played the composition still emits a cover story, and
+ * that story has no real team behind it — the hero components fall
+ * back to a placeholder literally named "Team unknown". That shipped
+ * to a public share link as "Team unknown is the team carrying this
+ * week", which is the worst possible sentence to hand a stranger.
+ *
+ * Standings survive the filter: a league's shape is true before
+ * kickoff even when its week is not.
+ */
+const dynamicIssueSections = computed(() => {
+  const sections = issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type))
+  return seasonStarted.value ? sections : []
+})
+
+/** Whether any game has been played. The share page had no such guard,
+ *  which is how a 0-0-0 preseason league got a "this week" cover. */
+const seasonStarted = computed(
+  () => !!liveData.value && hasPlayedGames(liveData.value),
 )
 
 const issueData = computed(() => liveData.value)

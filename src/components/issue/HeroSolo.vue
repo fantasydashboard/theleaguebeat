@@ -251,7 +251,13 @@ const headline = computed(() => {
 })
 
 function headlineFor(type: string, name: string, ctx: Record<string, unknown>): string {
-  const safeName = name || 'This team'
+  // `hasTeam` already knows the team did not resolve; this makes the
+  // COPY know it too. The placeholder is literally named "Team
+  // unknown", so every `${safeName}` sentence below became "Team
+  // unknown is the team carrying this week" — which reached a public
+  // share link. Falling back to a team-less phrasing means an
+  // unresolved story reads as vague rather than as broken.
+  const safeName = name && name !== 'Team unknown' ? name : 'This league'
   const spotsClimbed = typeof ctx.spotsClimbed === 'number' ? ctx.spotsClimbed : null
   const weeksAtTop  = typeof ctx.weeks === 'number' ? ctx.weeks : (typeof ctx.weeksAtTop === 'number' ? ctx.weeksAtTop : null)
   const streakLength = typeof ctx.streakLength === 'number' ? ctx.streakLength : (typeof ctx.brokenStreakLength === 'number' ? ctx.brokenStreakLength : null)
@@ -400,7 +406,9 @@ function bodyFor(type: string, name: string, ctx: Record<string, unknown>): stri
     case 'spoiler-mode':
       return 'An eliminated team is taking points from a contender. Stakes shift.'
     default:
-      return `${safeName} is the team carrying this week.`
+      return safeName === 'This league'
+        ? 'The week that was.'
+        : `${safeName} is the team carrying this week.`
   }
 }
 
