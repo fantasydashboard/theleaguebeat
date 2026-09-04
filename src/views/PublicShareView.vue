@@ -120,6 +120,51 @@
           />
         </section>
 
+        <!-- POINTS COVERAGE — the draft, and this week's games.
+             The composition above only emits CATEGORY story types
+             (hero-faceoff, matchup-of-week, streak-watch...), so a
+             football league produced no sections at all and the share
+             page rendered a league name over empty standings. The
+             logged-in Issue has had this content the whole time; the
+             public link simply never rendered it. -->
+        <section v-if="shareDraftHeadline" class="share-standings" aria-labelledby="share-draft-h">
+          <header class="share-section-head">
+            <p class="share-eyebrow">
+              <span class="share-eyebrow-bar" aria-hidden="true"></span>
+              The draft
+            </p>
+            <h2 id="share-draft-h" class="share-section-headline">{{ shareDraftHeadline }}</h2>
+          </header>
+          <ul v-if="shareDraftFacts.length" class="share-draft-facts" role="list">
+            <li v-for="f in shareDraftFacts" :key="f.label" class="share-draft-fact">
+              <span class="share-draft-fact-value">{{ f.value }}</span>
+              <span class="share-draft-fact-label">{{ f.label }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- THIS WEEK'S GAMES. Before kickoff these are fixtures, not
+             results, and the copy says so rather than printing 0.0 as
+             though it were a score. -->
+        <section v-if="shareMatchups.length" class="share-standings" aria-labelledby="share-games-h">
+          <header class="share-section-head">
+            <p class="share-eyebrow share-eyebrow-teal">
+              <span class="share-eyebrow-bar" aria-hidden="true"></span>
+              {{ seasonStarted ? 'This week' : 'Week one' }}
+            </p>
+            <h2 id="share-games-h" class="share-section-headline">
+              {{ shareMatchups.length }} {{ shareMatchups.length === 1 ? 'matchup' : 'matchups' }}.
+            </h2>
+          </header>
+          <ol class="share-standings-list" role="list">
+            <li v-for="m in shareMatchups" :key="m.id" class="share-standings-row">
+              <span class="share-game-side">{{ lookupTeam(m.homeTeamId).name }}</span>
+              <span class="share-game-vs">{{ seasonStarted ? `${m.homePoints} – ${m.awayPoints}` : 'vs' }}</span>
+              <span class="share-game-side share-game-side-away">{{ lookupTeam(m.awayTeamId).name }}</span>
+            </li>
+          </ol>
+        </section>
+
         <!-- COMPACT STANDINGS — anchor section, always renders so the
              reader has the at-a-glance shape of the league. -->
         <section class="share-standings" aria-labelledby="share-standings-h">
@@ -214,6 +259,8 @@ import { selectStoriesForIssue } from '@/editorial/selection'
 import { composeIssue, type IssueSection } from '@/editorial/composition'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { hasPlayedGames } from '@/editorial/leagueCore'
+import { buildDraftStoryFacts, draftLede } from '@/editorial/points/draftStory'
+import type { LeagueDataPointsMatchup } from '@/editorial/types'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
@@ -352,6 +399,40 @@ const issueSections = computed<IssueSection[]>(() => {
 const dynamicIssueSections = computed(() => {
   const sections = issueSections.value.filter((s) => NEW_SECTION_TYPES.has(s.type))
   return seasonStarted.value ? sections : []
+})
+
+/**
+ * The draft, for points leagues.
+ *
+ * Uses the same pure builders the logged-in Issue uses —
+ * `buildDraftStoryFacts` and `draftLede` — rather than a second
+ * implementation. Two copies of "what is interesting about this draft"
+ * would drift, and the public link is the version strangers see.
+ */
+const shareDraftFactsRaw = computed(() =>
+  buildDraftStoryFacts([...(liveData.value?.draft?.picks ?? [])]),
+)
+
+const shareDraftHeadline = computed(() => {
+  if (!shareDraftFactsRaw.value) return ''
+  return draftLede(shareDraftFactsRaw.value, (id) => lookupTeam(id).name) ?? ''
+})
+
+const shareDraftFacts = computed(() => {
+  const f = shareDraftFactsRaw.value
+  if (!f) return []
+  const out = [{ label: 'Picks', value: `${f.totalPicks}` }, { label: 'Rounds', value: `${f.rounds}` }]
+  const qb = f.firstAtPosition.find((x) => x.position === 'QB')
+  if (qb) out.push({ label: 'First QB', value: `#${qb.pickOverall}` })
+  return out
+})
+
+/** This week's games. Points leagues only — the category contract
+ *  carries its matchups elsewhere and the composition already covers
+ *  them for those leagues. */
+const shareMatchups = computed(() => {
+  const d = liveData.value as unknown as { currentWeekMatchups?: LeagueDataPointsMatchup[] }
+  return d?.currentWeekMatchups ?? []
 })
 
 /** Whether any game has been played. The share page had no such guard,
@@ -1018,5 +1099,28 @@ void router
   }
   .share-standings-avatar { width: 32px; height: 32px; }
   .share-cta { padding: 28px 18px; }
+}
+
+/* Draft fact chips + fixture rows — same vocabulary as the standings
+   list above so the page reads as one thing, not three. */
+.share-draft-facts {
+  list-style: none; padding: 0; margin: 4px 0 0;
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.share-draft-fact {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 16px; border-radius: 12px;
+  background: oklch(0.11 0.012 90); border: 1px solid oklch(0.2 0.015 90);
+}
+.share-draft-fact-value { font-size: 1.35rem; font-weight: 800; line-height: 1; }
+.share-draft-fact-label {
+  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: oklch(0.62 0.01 90);
+}
+.share-game-side { flex: 1; font-weight: 700; min-width: 0; }
+.share-game-side-away { text-align: right; }
+.share-game-vs {
+  font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: oklch(0.62 0.01 90); padding: 0 14px; white-space: nowrap;
 }
 </style>
