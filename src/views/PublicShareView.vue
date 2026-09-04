@@ -235,7 +235,9 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(true)
-const errorState = ref<null | 'not-found' | 'fetch-failed' | 'unsupported-platform'>(null)
+const errorState = ref<
+  null | 'not-found' | 'fetch-failed' | 'unsupported-platform' | 'server-error'
+>(null)
 const leagueRow = ref<PublicLeagueRow | null>(null)
 const liveData = shallowRef<CategoryLeagueData | null>(null)
 
@@ -253,6 +255,14 @@ const errorBody = computed(() => {
       return "We couldn't find this league. It may have been moved, or the link's stale."
     case 'unsupported-platform':
       return "We couldn't open this league publicly. Ask the commissioner to forward you a fresh issue."
+    case 'server-error':
+      // Ours, not theirs. The old copy blamed the league for a
+      // misconfigured server — which is what it said for months while
+      // /api/share returned 500 because a key was never set in
+      // production. Telling a reader their league might be private
+      // when the fault is entirely ours sends them to debug the wrong
+      // thing, and the commissioner too.
+      return "Something's wrong on our end, not with your league. We're on it — try again shortly."
     case 'fetch-failed':
     default:
       return "We couldn't load this week's issue. The league may be private, or its connection may need a refresh."
@@ -373,7 +383,8 @@ async function loadIssue() {
       return
     }
     if (!res.ok) {
-      errorState.value = 'fetch-failed'
+      // A 5xx is our fault; anything else is plausibly the league's.
+      errorState.value = res.status >= 500 ? 'server-error' : 'fetch-failed'
       loading.value = false
       return
     }
