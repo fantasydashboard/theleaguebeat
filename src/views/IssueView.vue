@@ -69,7 +69,13 @@
         </p>
         <h1 class="issue-title">
           Issue {{ livePointsData.currentWeek }}
-          <span class="issue-title-meta">· Week {{ livePointsData.currentWeek }} · {{ livePointsData.currentSeason }}</span>
+          <!-- Before kickoff the issue is not "Week 1" — week one has
+               not happened. Naming it Preseason is the honest label and
+               it also tells a reader why there are no results in it. -->
+          <span class="issue-title-meta">
+            · {{ pointsSeasonStarted ? `Week ${livePointsData.currentWeek}` : 'Preseason' }}
+            · {{ livePointsData.currentSeason }}
+          </span>
         </h1>
         <p class="issue-sub">
           This week in
@@ -210,7 +216,8 @@
         <header class="section-head">
           <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
           <h2 class="section-headline" id="points-matchups-heading">
-            {{ (livePointsData.currentWeekMatchups ?? []).length }} matchups. Week {{ livePointsData.currentWeek }}.
+            {{ (livePointsData.currentWeekMatchups ?? []).length }} matchups.
+            {{ pointsSeasonStarted ? `Week ${livePointsData.currentWeek}.` : 'Week one is the opener.' }}
           </h2>
           <p class="section-lede">{{ livePointsEditorial.subHeadline }}</p>
         </header>
@@ -1361,7 +1368,20 @@ const showDraftSection = computed(() => {
  *  "how the picks are aging" read, which needs a value model football
  *  does not have — so here it is a record of what happened, and a
  *  record stays true all season. */
-const showPointsDraft = computed(() => !!livePointsData.value && hasDraftData.value)
+/**
+ * The draft section, below the fold.
+ *
+ * Hidden when the COVER is already the draft — which it is for the
+ * whole preseason, by design, since the draft is the only thing that
+ * has happened. Rendering both put the identical headline on the page
+ * twice, once as the lead and once as section 03.
+ */
+const showPointsDraft = computed(
+  () =>
+    !!livePointsData.value &&
+    hasDraftData.value &&
+    pointsCover.value?.eyebrow !== 'The draft',
+)
 
 /**
  * Whether the power-rankings deck can actually be built.
