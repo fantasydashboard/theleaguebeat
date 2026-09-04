@@ -102,6 +102,9 @@ const props = defineProps<{
    *  week itself. The new Issue page sets this so the masthead and
    *  the page title agree. Other routes leave it false. */
   showPublishedIssue?: boolean
+  /** Whether a game has been played. Undefined keeps the previous
+   *  behaviour for every caller that does not know. */
+  seasonStarted?: boolean
 }>()
 
 const issueStore = useIssueStore()
@@ -180,6 +183,11 @@ function mostRecentMonday(now: Date): Date {
 }
 const freshnessLabel = computed<string | null>(() => {
   if (props.showPublishedIssue) {
+    // Nothing is published before the season starts. The derived
+    // "most recent Monday" was inventing a date — on a preseason issue
+    // it claimed a publication that had not happened, for a week that
+    // had not been played.
+    if (props.seasonStarted === false) return 'PRESEASON'
     const publishDate = mostRecentMonday(new Date())
     const m = PUBLISHED_MONTHS[publishDate.getMonth()]
     const d = publishDate.getDate()

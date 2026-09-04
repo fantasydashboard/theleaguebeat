@@ -229,6 +229,7 @@
       :fallback-updated="mastheadUpdatedAt"
       :league-id="routeLeagueId || undefined"
       :show-published-issue="onIssuePage"
+      :season-started="issueSeasonStarted"
     />
 
     <main class="league-main">
@@ -248,6 +249,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { issueSeasonStarted } from '@/composables/useIssueChrome'
 import { groupLeaguesBySeason, platformLogo } from '@/utils/leagueGrouping'
 import { useRoute, useRouter } from 'vue-router'
 import { useLeaguesStore } from '@/stores/leaguesNew'

@@ -78,8 +78,11 @@
           </span>
         </h1>
         <p class="issue-sub">
-          This week in
-          {{ strictLeagueRecord?.league_name ?? livePointsData.leagueName }}, chronicled as it unfolds.
+          <!-- "This week ... as it unfolds" is false before kickoff:
+               nothing is unfolding. -->
+          {{ pointsSeasonStarted
+            ? `This week in ${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, chronicled as it unfolds.`
+            : `${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, before a snap of it has been played.` }}
         </p>
       </header>
 
@@ -136,12 +139,12 @@
            behind it are ~3MB, fine on a deck route somebody chose to
            open and not fine blocking the page everyone lands on. Until
            it arrives the legacy sections below carry the page. -->
-      <template v-if="preseasonIssue">
+      <template v-if="issueBody.length">
         <section
-          v-for="sec in preseasonIssue.sections"
+          v-for="sec in issueBody"
           :key="sec.id"
           :id="`issue-${sec.id}`"
-          class="section"
+          class="section issue-sec"
         >
           <div class="issue-sec-top">
             <!-- Identity marks, deliberately a fraction of the cover
@@ -850,6 +853,7 @@ import { useIssueStore } from '@/stores/issueState'
 import { usePlatformsStore } from '@/stores/platforms'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { hasPlayedGames } from '@/editorial/leagueCore'
+import { issueSeasonStarted } from '@/composables/useIssueChrome'
 import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
 import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
@@ -939,7 +943,36 @@ const pointsCoverStory = computed(() => {
 
 /** Unified points cover: prefers the season arc (with stat chips) and
  *  falls back to the matchup of the week (with a score sub-line). */
+/**
+ * The lead section, promoted to the cover.
+ *
+ * The strongest sentence in the issue was sitting a full screen below
+ * a logo — "Mighty Mallards project to win this league" is a lead;
+ * "five running backs came off the board" is a fact. The issue already
+ * decides its own lead by priority, so the cover just takes it.
+ *
+ * Null until the issue assembles, which is why the draft cover below
+ * still exists: it carries the page for the moment before projections
+ * land, and is then replaced by something better.
+ */
+const issueLead = computed(() => preseasonIssue.value?.sections[0] ?? null)
+
+/** Everything after the lead — the lead is the cover, not a section. */
+const issueBody = computed(() => preseasonIssue.value?.sections.slice(1) ?? [])
+
 const pointsCover = computed(() => {
+  const lead = issueLead.value
+  if (lead) {
+    return {
+      eyebrow: lead.eyebrow,
+      headline: lead.headline,
+      body: lead.support ?? '',
+      statChips: lead.chips ?? [],
+      portraitTeamId: lead.visual?.teamIds[0] ?? null,
+      subContext: '',
+    }
+  }
+
   // Preseason: the draft IS the cover story.
   //
   // Before kickoff there are no results, so the matchup cover falls
@@ -1480,6 +1513,16 @@ const showDraftSection = computed(() => {
  * way. Present mode builds its deck from this same object.
  */
 const preseasonIssue = ref<Issue | null>(null)
+
+// Tell the layout's masthead whether a game has been played, so it
+// stops printing a publication date for an issue nobody published.
+watch(
+  livePointsData,
+  (d) => {
+    issueSeasonStarted.value = d ? hasPlayedGames(d) : undefined
+  },
+  { immediate: true },
+)
 
 watch(
   [livePointsData, strictLeagueRecord],
@@ -3592,4 +3635,30 @@ function collectUserIdentity() {
 .issue-wire-name { font-weight: 700; }
 .issue-wire-sub { font-size: 0.78rem; color: oklch(0.62 0.01 90); }
 .issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
+
+/* ── ISSUE SECTION DENSITY ──────────────────────────────────────────
+   The cover is the loudest thing on the page and everything after it
+   steps down. Previously every section rendered at identical weight
+   with identical padding, so five sections read as five press releases
+   and the page was a long scroll for one screen of content.
+
+   Only the assembled-issue sections are affected — the legacy blocks
+   keep their own spacing. */
+.issue-sec {
+  gap: 12px;
+  padding-block: 4px;
+}
+.issue-sec .section-headline {
+  /* Below the cover, above the body. A section headline competing with
+     the lead at the same size is what flattened the hierarchy. */
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
+}
+.issue-sec .section-lede {
+  max-width: 62ch;
+  margin-top: 2px;
+}
+.issue-sec .cover-stats { margin-top: 4px; }
+/* The field is the one section that earns its length — it is ten teams
+   and people read their own. Everything else stays compact. */
+.issue-sec .standings { margin-top: 10px; }
 </style>
