@@ -23,6 +23,7 @@
  * many, which someone notices, rather than a slide missing, which
  * nobody does.
  */
+import { isPresentable } from './types'
 import type { Issue, IssueSection } from './types'
 import type { PresentDeck, PresentSlide } from '../present/types'
 
@@ -145,9 +146,15 @@ export function deckFromIssue(
   const format = options.format ?? 'landscape'
   const id = options.id ?? options.only ?? 'issue'
 
+  // The full-issue deck carries every section, including the single
+  // statements — in sequence they are the connective tissue between
+  // the parts that have a sequence of their own.
   let presentable = issue.sections.filter((s) => s.presentable !== false)
   if (options.only) {
-    presentable = presentable.filter((s) => s.id === options.only)
+    // A standalone deck has a higher bar: it must be worth walking
+    // through. One statement full-screen is a card somebody reads in
+    // two seconds, not a presentation.
+    presentable = presentable.filter((s) => s.id === options.only && isPresentable(s))
   }
   if (presentable.length === 0) return null
 

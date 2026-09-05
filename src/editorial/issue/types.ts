@@ -112,12 +112,20 @@ export interface IssueSection {
    */
   priority: number
   /**
-   * Whether present mode should include this section.
+   * Whether this section can be presented ON ITS OWN.
    *
-   * Some content reads on a page and dies on a screen — a dense table
-   * nobody can follow from six feet away. Defaults to true; a section
-   * opts out rather than opting in, so a new section is presentable
-   * unless someone decided otherwise.
+   * Not the same as "appears in the issue deck" — every section does
+   * that. This is whether it earns its own button, and the bar is
+   * whether there is a SEQUENCE to walk through.
+   *
+   * A statement is one slide. Presenting it full-screen is a single
+   * card somebody reads in two seconds, which is not a presentation
+   * and not a clip. A section with cards or rows is ten teams or five
+   * claims, revealed one at a time, which is the whole point.
+   *
+   * So it defaults to whether the section has cards or rows — see
+   * `isPresentable`. Explicit `true` or `false` overrides that for the
+   * cases the default cannot know about.
    */
   presentable?: boolean
 }
@@ -133,6 +141,19 @@ export interface Issue {
   basis: string
   /** Ordered, priority-sorted. */
   sections: IssueSection[]
+}
+
+/**
+ * Whether a section earns its own Present button.
+ *
+ * The default is structural rather than editorial: a section with a
+ * sequence to walk through can be presented; a section that is one
+ * headline cannot. Every section still appears inside the full-issue
+ * deck — this only governs the standalone button.
+ */
+export function isPresentable(section: IssueSection): boolean {
+  if (section.presentable !== undefined) return section.presentable
+  return (section.cards?.length ?? 0) > 0 || (section.rows?.length ?? 0) > 0
 }
 
 /** Sections in reading order. */

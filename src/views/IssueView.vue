@@ -185,7 +185,7 @@
                      supplies the noun, so the label is just "Present" —
                      "Present the draft" inside a header that already
                      says The draft is the word twice. -->
-                <span v-if="sec.presentable !== false && routeLeagueId" class="issue-sec-present">
+                <span v-if="routeLeagueId && isPresentable(sec)" class="issue-sec-present">
                   <router-link
                     :to="`/leagues/${routeLeagueId}/present/${sec.id}`"
                     class="issue-present-btn"
@@ -864,6 +864,7 @@ import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { hasPlayedGames } from '@/editorial/leagueCore'
 import { issueSeasonStarted } from '@/composables/useIssueChrome'
 import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
+import { isPresentable } from '@/editorial/issue/types'
 import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'

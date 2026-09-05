@@ -166,14 +166,27 @@ describe('deckFromIssue', () => {
 
   it('presents one section alone, titled by that section', () => {
     // Every section button is this. A single-section deck is its own
-    // clip, so it is titled "The schedule", not "Week 3".
-    const deck = deckFromIssue(issue, { only: 'schedule' })!
-    expect(deck.id).toBe('schedule')
-    expect(deck.title).toBe('The schedule')
+    // clip, so it is titled "The field", not "Week 3".
+    const deck = deckFromIssue(issue, { only: 'the-field' })!
+    expect(deck.id).toBe('the-field')
+    expect(deck.title).toBe('The field')
     const eyebrows = deck.slides
       .map((s) => ('eyebrow' in s ? s.eyebrow : null))
       .filter(Boolean)
-    expect(new Set(eyebrows)).toEqual(new Set(['The schedule']))
+    expect(new Set(eyebrows)).toEqual(new Set(['The field']))
+  })
+
+  it('refuses to present a lone statement as its own deck', () => {
+    // THE bar for a standalone deck: is there a sequence to walk
+    // through? The schedule is one headline and two figures — full
+    // screen that is a card somebody reads in two seconds, which is
+    // neither a presentation nor a clip. It still appears INSIDE the
+    // full-issue deck, where it is connective tissue.
+    expect(deckFromIssue(issue, { only: 'schedule' })).toBeNull()
+    expect(deckFromIssue(issue, { only: 'favourite' })).toBeNull()
+
+    const whole = deckFromIssue(issue)!
+    expect(JSON.stringify(whole)).toContain('schedule spread')
   })
 
   it('returns null for a section that does not exist', () => {
