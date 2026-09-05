@@ -445,7 +445,25 @@
         aria-labelledby="points-draft-heading"
       >
         <header class="section-head">
-          <p class="section-eyebrow">03 — The draft</p>
+          <div class="issue-sec-bar">
+            <p class="section-eyebrow">03 — The draft</p>
+            <!-- The draft deck had no button at all: the page linked to
+                 the issue, its sections and the live deck, and nothing
+                 pointed at /present/draft. It was reachable only by
+                 typing the URL. -->
+            <span v-if="routeLeagueId" class="issue-sec-present">
+              <router-link
+                :to="`/leagues/${routeLeagueId}/present/draft`"
+                class="issue-present-btn"
+                title="Present the draft grades"
+              >▶ Present</router-link>
+              <router-link
+                :to="`/leagues/${routeLeagueId}/present/draft?format=vertical`"
+                class="issue-present-btn issue-present-btn-alt"
+                title="Present the draft grades vertically, for social"
+              >▯</router-link>
+            </span>
+          </div>
           <h2 class="section-headline" id="points-draft-heading">{{ draftHeadline }}</h2>
           <p class="section-sub">{{ draftBody }}</p>
         </header>

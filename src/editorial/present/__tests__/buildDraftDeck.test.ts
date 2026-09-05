@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildDraftDeck } from '../buildDraftDeck'
+import { findDraftDivergences, ordinal } from '@/editorial/points/draftValue'
 import { deckStepCount } from '../types'
 import { voiceViolations } from '@/editorial/football/voice'
 import { buildSleeperPointsData } from '@/editorial/adapters/sleeperAdapter'
@@ -125,10 +126,20 @@ describe('steals and reaches', () => {
     // The value read lives on the team cards now — the league-wide
     // fell/reached lists were the same picks in the order that serves
     // them worst, ten steps before the room saw whose picks they were.
-    const cards = deck.slides.filter((s) => s.kind === 'team-card')
+    const cards = deck.slides.filter((s) => s.kind === 'team-card') as unknown as {
+      highlight?: { label: string; name: string; sub?: string }
+    }[]
     expect(cards.length).toBeGreaterThanOrEqual(4)
-    const notes = cards.flatMap((c) => (c as { notes?: string[] }).notes ?? []).join(' ')
-    expect(notes).toMatch(/Best value:|Went early on/)
+    // The divergence is now the card's highlighted PICK rather than a
+    // note line — a face with a tag instead of a sentence — but it is
+    // the same claim and must still be there.
+    const highlights = cards.map((c) => c.highlight).filter(Boolean)
+    expect(highlights.length).toBeGreaterThan(0)
+    for (const h of highlights) {
+      expect(h!.label).toMatch(/^(Steal|Reach)$/)
+      expect(h!.name.trim().length).toBeGreaterThan(0)
+      expect(h!.sub).toMatch(/\d+(\.\d)? rds?\b/)
+    }
   })
 
   it('never claims a pick was good, only where it went', () => {
@@ -160,9 +171,13 @@ describe('draft grades', () => {
     fieldSize: number
     tier?: string
     teamName: string
+    grade?: string
+    slot?: string
     statValue: string
     statLabel: string
     chips?: { value: string; label: string }[]
+    players?: { name: string; sub?: string; imageUrl?: string }[]
+    highlight?: { label: string; name: string; sub?: string; imageUrl?: string }
     notes?: string[]
   }[]
 
@@ -274,11 +289,140 @@ describe('draft grades', () => {
   it('shows each team its own picks, not the league-wide list', () => {
     // The point of a card per team: the room is looking at one manager
     // and wants that manager's draft, not a leaderboard they already saw.
-    const withNotes = cards.filter((c) => (c.notes ?? []).length > 0)
-    expect(withNotes.length).toBeGreaterThan(0)
-    for (const c of withNotes) {
-      expect(c.notes!.join(' ')).toMatch(/Best value:|Went early on/)
+    const withPick = cards.filter((c) => c.highlight)
+    expect(withPick.length).toBeGreaterThan(0)
+    // Each highlighted player belongs to the team whose card it is.
+    for (const c of withPick) {
+      const owner = picks.find((p) => p.playerName === c.highlight!.name)
+      expect(owner, `${c.highlight!.name} is not a real pick`).toBeDefined()
+      expect(nameOf(owner!.draftedByTeamId)).toBe(c.teamName)
     }
+  })
+
+  it('highlights whichever pick moved furthest, steal or reach', () => {
+    // Not "the steal if there is one" — a team whose worst reach
+    // dwarfs its best value should be shown the reach, because the
+    // most extreme divergence is the one the room reacts to.
+    const roundsIn = (sub?: string) =>
+      parseFloat(/(\d+(?:\.\d)?) rds?\b/.exec(sub ?? '')?.[1] ?? '0')
+    for (const c of cards.filter((x) => x.highlight)) {
+      const div = findDraftDivergences(
+        picks.map((p) => ({
+          pickOverall: p.pickOverall, round: p.round, playerId: p.playerId,
+          playerName: p.playerName, position: p.position, teamId: p.draftedByTeamId,
+        })),
+        (id) => order.get(id),
+        new Set(picks.map((p) => p.draftedByTeamId)).size,
+      )
+      const mine = [...div.fell, ...div.reached].filter(
+        (d) => nameOf(d.pick.teamId) === c.teamName,
+      )
+      const furthest = Math.max(...mine.map((d) => Math.abs(d.roundsDelta)))
+      // Rounded to the half in the copy, so compare at that precision.
+      expect(roundsIn(c.highlight!.sub)).toBeCloseTo(
+        Math.round(furthest * 2) / 2,
+        1,
+      )
+
+      // And it is labelled the way it actually went. Calling a reach a
+      // steal is a lie about somebody's draft, and the tag is the
+      // loudest word on the card.
+      const it = mine.find((d) => Math.abs(d.roundsDelta) === furthest)!
+      const fell = div.fell.includes(it)
+      expect(c.highlight!.label).toBe(fell ? 'Steal' : 'Reach')
+      expect(c.highlight!.sub).toContain(fell ? 'later than' : 'ahead of')
+    }
+  })
+
+  it('never puts the same player on a card twice', () => {
+    // The most extreme divergence is very often a first-round pick —
+    // that is where the board is most confident, so a reach there
+    // costs most — which put the same face on one slide twice, once
+    // small in the row and once large as the highlight.
+    for (const c of cards) {
+      const names = [
+        ...(c.players ?? []).map((p) => p.name),
+        ...(c.highlight ? [c.highlight.name] : []),
+      ]
+      expect(new Set(names).size, `${c.teamName} repeats a player`).toBe(names.length)
+    }
+    // And the fixture actually exercises it: at least one team's
+    // highlighted pick is inside its own first three.
+    const wouldClash = cards.filter((c) => {
+      if (!c.highlight) return false
+      const theirs = picks
+        .filter((p) => nameOf(p.draftedByTeamId) === c.teamName)
+        .sort((x, y) => x.pickOverall - y.pickOverall)
+        .slice(0, 3)
+      return theirs.some((p) => p.playerName === c.highlight!.name)
+    })
+    expect(wouldClash.length).toBeGreaterThan(0)
+  })
+
+  it('gives every team its first three picks, in draft order', () => {
+    // First three rather than highest-projected: this is a DRAFT deck,
+    // and what a manager did with premium capital is the draft claim.
+    // Ordering by projection would put a seventh-round hit above a
+    // first-rounder on a slide about how somebody drafted.
+    for (const c of cards) {
+      expect(c.players, `${c.teamName} has no picks`).toHaveLength(3)
+      const theirs = picks
+        .filter((p) => nameOf(p.draftedByTeamId) === c.teamName)
+        .filter((p) => p.playerName !== c.highlight?.name)
+        .sort((x, y) => x.pickOverall - y.pickOverall)
+        .slice(0, 3)
+      expect(c.players!.map((p) => p.name)).toEqual(theirs.map((p) => p.playerName))
+    }
+  })
+
+  it('leads with the grade and keeps the rounds figure under it', () => {
+    // The letters are a CURVE — somebody always lands top and somebody
+    // always lands bottom — so a letter shown without the figure that
+    // earned it asserts more than the data supports.
+    const graded = cards.filter((c) => c.grade)
+    expect(graded.length).toBeGreaterThan(0)
+    for (const c of graded) {
+      expect(c.grade).toMatch(/^[ABCD][+-]?$/)
+      expect(c.statValue, `no figure under ${c.grade}`).toMatch(/^[+-]?[\d.]+$/)
+      expect(c.statLabel).toContain('rounds per pick')
+    }
+  })
+
+  it('says where each team picked from, read off their round-one pick', () => {
+    // The only slot the pick list evidences. Seat numbers, traded
+    // picks and third-round reversals all mean "seat N" and "picked
+    // Nth in round one" are not the same claim.
+    const teamCount = new Set(picks.map((p) => p.draftedByTeamId)).size
+    for (const c of cards) {
+      const first = picks
+        .filter((p) => nameOf(p.draftedByTeamId) === c.teamName && p.round === 1)
+        .sort((x, y) => x.pickOverall - y.pickOverall)[0]
+      expect(first, `${c.teamName} has no round-one pick`).toBeDefined()
+      const hole = first.pickOverall - (first.round - 1) * teamCount
+      expect(c.slot, `${c.teamName} picked ${hole}`).toBe(
+        `drafted from the ${ordinal(hole)} hole`,
+      )
+    }
+    // And the league does not all share one hole, or the assertion
+    // above would pass against a hard-coded string.
+    expect(new Set(cards.map((c) => c.slot)).size).toBeGreaterThan(1)
+  })
+
+  it('omits the slot rather than printing an impossible hole', () => {
+    // A platform reporting a round-one pick numbered past the field
+    // size would otherwise put "drafted from the 47th hole" on screen
+    // in a ten-team league.
+    const broken = picks.map((p) =>
+      p.round === 1 ? { ...p, pickOverall: p.pickOverall + 500 } : p,
+    )
+    const deck = buildDraftDeck({
+      leagueName: data.leagueName, season: data.currentSeason, picks: broken,
+      teamName: nameOf, consensusRank: (id) => order.get(id),
+    })!
+    const slots = deck.slides
+      .filter((sl) => sl.kind === 'team-card')
+      .map((sl) => (sl as { slot?: string }).slot)
+    expect(slots.every((x) => x === undefined)).toBe(true)
   })
 
   it('replaces both ten-row countdowns rather than adding to them', () => {

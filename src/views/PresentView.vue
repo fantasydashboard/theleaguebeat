@@ -117,8 +117,16 @@
         >
           <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
           <div class="team-head">
-            <span class="team-rank">{{ slide.rank }}</span>
-            <span class="team-rank-of">of {{ slide.fieldSize }}</span>
+            <!-- A grade takes the hero slot and pushes the rank down to
+                 a small line, because the letter IS the rank — showing
+                 both large is the same claim twice. Without a grade
+                 (the board deck) the rank stays the hero exactly as
+                 before. -->
+            <span v-if="slide.grade" class="team-grade">{{ slide.grade }}</span>
+            <template v-else>
+              <span class="team-rank">{{ slide.rank }}</span>
+              <span class="team-rank-of">of {{ slide.fieldSize }}</span>
+            </template>
             <span
               v-if="slide.logoUrl || slide.logoColor"
               class="team-logo"
@@ -131,6 +139,10 @@
             <span class="team-identity">
               <h2 class="team-name">{{ slide.teamName }}</h2>
               <span class="team-meta">
+                <span v-if="slide.grade" class="team-place">
+                  {{ ordinalOf(slide.rank) }} of {{ slide.fieldSize }}
+                </span>
+                <span v-if="slide.slot" class="team-slot">{{ slide.slot }}</span>
                 <span v-if="slide.tier" class="team-tier">{{ slide.tier }}</span>
                 <!-- Movement is omitted entirely when there is nothing
                      to report, never rendered as a hollow "+0". -->
@@ -146,10 +158,57 @@
             </span>
           </div>
 
+          <!-- Directly under the grade, never separated from it: the
+               letters are a curve, so one shown without the figure
+               that earned it asserts more than the data supports. -->
           <p class="team-stat">
             <span class="team-stat-value">{{ slide.statValue }}</span>
             <span class="team-stat-label">{{ slide.statLabel }}</span>
           </p>
+
+          <!-- Their first three picks. Hidden in vertical, where one
+               face reads at arm's length and four do not. -->
+          <ul v-if="slide.players?.length" class="team-players" role="list">
+            <li v-for="p in slide.players" :key="p.name" class="team-player">
+              <span class="team-player-face">
+                <img
+                  v-if="p.imageUrl && !failedImages.has(p.imageUrl)"
+                  :src="p.imageUrl"
+                  class="team-player-img"
+                  alt=""
+                  @error="onImageError(p.imageUrl)"
+                />
+                <span v-else class="team-player-initials">{{ initialsOf(p.name) }}</span>
+              </span>
+              <span class="team-player-name">{{ p.name }}</span>
+              <span v-if="p.sub" class="team-player-sub">{{ p.sub }}</span>
+            </li>
+          </ul>
+
+          <!-- The one pick they'll be asked about. -->
+          <div v-if="slide.highlight" class="team-highlight">
+            <span class="team-player-face is-large">
+              <img
+                v-if="slide.highlight.imageUrl && !failedImages.has(slide.highlight.imageUrl)"
+                :src="slide.highlight.imageUrl"
+                class="team-player-img"
+                alt=""
+                @error="onImageError(slide.highlight.imageUrl)"
+              />
+              <span v-else class="team-player-initials">
+                {{ initialsOf(slide.highlight.name) }}
+              </span>
+            </span>
+            <span class="team-highlight-copy">
+              <span class="team-highlight-tag" :data-kind="slide.highlight.label.toLowerCase()">
+                {{ slide.highlight.label }}
+              </span>
+              <span class="team-highlight-name">{{ slide.highlight.name }}</span>
+              <span v-if="slide.highlight.sub" class="team-highlight-sub">
+                {{ slide.highlight.sub }}
+              </span>
+            </span>
+          </div>
 
           <ul v-if="slide.chips?.length" class="slide-chips" role="list">
             <li v-for="c in slide.chips" :key="c.label" class="slide-chip">
@@ -226,6 +285,7 @@ import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
 import { buildDraftDeck } from '@/editorial/present/buildDraftDeck'
+import { playerHeadshotUrl } from '@/utils/playerHeadshot'
 import { buildBoardDeck, type BoardDeckTeam } from '@/editorial/present/buildBoardDeck'
 import { buildWireDeck } from '@/editorial/present/buildWireDeck'
 import {
@@ -342,6 +402,38 @@ watch(format, (next) => {
 })
 
 const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
+
+/**
+ * Headshots that 404'd, so the face falls back to initials.
+ *
+ * Sleeper's CDN has no image for every player it projects — rookies
+ * and practice-squad bodies especially — and a broken-image icon in a
+ * row of faces is worse than no faces at all. Keyed by URL rather than
+ * player so one miss does not blank a player who appears twice.
+ */
+const failedImages = ref(new Set<string>())
+function onImageError(url: string | undefined): void {
+  if (!url) return
+  // A new Set, because mutating one in place is not reactive.
+  failedImages.value = new Set(failedImages.value).add(url)
+}
+
+/** "Ja'Marr Chase" → "JC". The fallback inside a face. */
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+/** "3rd of 10" — the rank, once a grade has taken the hero slot. */
+function ordinalOf(n: number): string {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+}
 
 /**
  * Rows per column for a long list.
@@ -724,6 +816,17 @@ async function load(): Promise<void> {
     let consensusRank: ((playerId: string) => number | undefined) | undefined
     const picks = [...(data.draft?.picks ?? [])]
 
+    // WHETHER A HEADSHOT URL WILL RESOLVE.
+    //
+    // Faces come from Sleeper's CDN, which is keyed by Sleeper's own
+    // player ids. A Sleeper league has them already; ESPN and Yahoo
+    // only after the id bridge below has run and matched something.
+    // Emitting URLs without that is a grid of 404s, so the deck is
+    // told not to ask. Individual misses inside a bridged draft still
+    // happen — Sleeper has no image for every player it projects — and
+    // those fall back to initials at render.
+    let idsAreSleeper = record.platform === 'sleeper'
+
     const FOOTBALL_PLATFORMS = ['sleeper', 'espn', 'yahoo']
     if (
       picks.length > 0 &&
@@ -781,6 +884,7 @@ async function load(): Promise<void> {
             picks.length = 0
             picks.push(...result.picks)
             if (result.bridged === 0) baseline = undefined
+            else idsAreSleeper = true
           } else {
             // No bridge means every graded slide would be empty. Better
             // to fall through to the factual deck than to publish a
@@ -867,6 +971,10 @@ async function load(): Promise<void> {
       })
     } else {
       deck.value = buildDraftDeck({
+        playerImage: idsAreSleeper
+          ? (playerId) =>
+              playerHeadshotUrl({ platform: 'sleeper', sport: 'nfl', playerId })
+          : undefined,
         leagueName: record.league_name || data.leagueName,
         season: data.currentSeason,
         picks,
@@ -1148,6 +1256,83 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   font-size: 0.86rem; color: oklch(0.65 0.01 90);
   letter-spacing: 0.04em;
 }
+/* The grade, taking the space the rank held. Same gold and same
+   optical weight — it is the hero of this deck the way the rank is the
+   hero of the board. */
+.team-grade {
+  font-size: clamp(4rem, 9vw, 7rem);
+  font-weight: 800;
+  line-height: 0.82;
+  letter-spacing: -0.04em;
+  color: oklch(0.85 0.17 92);
+  flex: none;
+}
+.team-place,
+.team-slot {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: oklch(0.62 0.01 90);
+}
+.team-slot::before { content: '· '; }
+
+/* Their first three picks. */
+.team-players {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; gap: 22px; flex-wrap: wrap;
+}
+.team-player {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'face name' 'face sub';
+  align-items: center;
+  column-gap: 10px;
+  min-width: 0;
+}
+.team-player-face {
+  grid-area: face;
+  width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden; flex: none;
+  background: oklch(0.26 0.02 90);
+  border: 1px solid oklch(0.34 0.02 90);
+}
+.team-player-face.is-large { width: 76px; height: 76px; }
+.team-player-img { width: 100%; height: 100%; object-fit: cover; }
+.team-player-initials {
+  font-weight: 700; font-size: 0.9rem; color: oklch(0.72 0.01 90);
+}
+.team-player-face.is-large .team-player-initials { font-size: 1.3rem; }
+.team-player-name {
+  grid-area: name;
+  font-weight: 650; font-size: 1rem; line-height: 1.15;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.team-player-sub {
+  grid-area: sub;
+  font-size: 0.8rem; color: oklch(0.62 0.01 90);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one pick they'll be asked about. */
+.team-highlight {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px 12px 12px;
+  border-radius: 14px;
+  border: 1px solid oklch(0.3 0.02 90);
+  background: oklch(0.21 0.01 90);
+  align-self: flex-start;
+  max-width: 62ch;
+}
+.team-highlight-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.team-highlight-tag {
+  font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase;
+  font-weight: 700;
+}
+.team-highlight-tag[data-kind='steal'] { color: oklch(0.78 0.17 145); }
+.team-highlight-tag[data-kind='reach'] { color: oklch(0.72 0.19 40); }
+.team-highlight-name { font-size: 1.25rem; font-weight: 750; line-height: 1.1; }
+.team-highlight-sub { font-size: 0.86rem; color: oklch(0.66 0.01 90); }
+
 .team-notes {
   list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column; gap: 8px;
@@ -1412,6 +1597,19 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
 .present.is-vertical .spot-title { font-size: clamp(1.9rem, 4.4cqw, 3.2rem); }
 .present.is-vertical .cold-title { font-size: clamp(2.2rem, 5.4cqw, 3.8rem); }
 .present.is-vertical .team-rank { font-size: clamp(3rem, 7cqw, 5rem); }
+.present.is-vertical .team-grade { font-size: clamp(3.5rem, 9cqw, 6rem); }
+
+/* VERTICAL DROPS THE THREE-FACE ROW.
+   870x930 is nearly square, and three faces with names beneath them
+   shrink to the point where none of them reads at arm's length. The
+   highlighted pick keeps its face and gets bigger instead: one face
+   somebody can actually see beats three they cannot. */
+.present.is-vertical .team-players { display: none; }
+.present.is-vertical .team-player-face.is-large { width: 96px; height: 96px; }
+.present.is-vertical .team-highlight-name { font-size: 1.5rem; }
+/* Chips are the first thing to go if the card still runs long: they
+   are context, and the grade, the pick and the twist are the claim. */
+.present.is-vertical .slide-team .slide-chips { display: none; }
 .present.is-vertical .present-stage { container-type: inline-size; }
 
 /* One column: the box is nearly square (870x930), so the two-column

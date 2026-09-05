@@ -72,6 +72,17 @@ export interface DraftDeckInput {
    *  baseline, used only when ADP could not be fetched. With neither,
    *  the deck omits the steal and reach slides rather than guessing. */
   consensusRank?: (playerId: string) => number | undefined
+  /**
+   * Headshot for a drafted player, or null when there is none.
+   *
+   * Resolved by the CALLER rather than here, because whether an id
+   * will resolve is a question about the league, not about the deck:
+   * headshots come from Sleeper's CDN, and ESPN and Yahoo picks only
+   * carry Sleeper ids once the player-id bridge has succeeded. A deck
+   * that built the URL itself would emit a grid of 404s on every
+   * league where the bridge failed.
+   */
+  playerImage?: (playerId: string) => string | null | undefined
 }
 
 /** Draft slot in the form people actually say it: "1.01", "12.10".
@@ -88,6 +99,68 @@ function draftSlot(pickOverall: number, round: number, teamCount: number): strin
 function shortRounds(roundsDelta: number): string {
   const n = Math.round(Math.abs(roundsDelta) * 2) / 2
   return n === 1 ? '1 rd' : `${n} rds`
+}
+
+/**
+ * Where a team picked from, in the language a draft room uses.
+ *
+ * Read off their round-one pick rather than a seat number, because
+ * that is the only slot the pick list actually evidences — third-round
+ * reversals, traded picks and odd orders all mean "seat N" and "picked
+ * Nth in round one" are not the same claim.
+ *
+ * Returns null when there is no round-one pick to read, rather than
+ * guessing from a later round.
+ */
+function draftHole(
+  picks: readonly CategoryLeagueDataDraftPick[],
+  teamId: string,
+  teamCount: number,
+): string | null {
+  if (teamCount <= 0) return null
+  const first = picks
+    .filter((p) => p.draftedByTeamId === teamId && p.round === 1)
+    .sort((a, b) => a.pickOverall - b.pickOverall)[0]
+  if (!first) return null
+  const inRound = first.pickOverall - (first.round - 1) * teamCount
+  if (inRound < 1 || inRound > teamCount) return null
+  return `drafted from the ${ordinal(inRound)} hole`
+}
+
+/**
+ * A team's first three picks, as faces.
+ *
+ * The first three rather than the highest-projected: this is a DRAFT
+ * deck, and what a manager did with their premium capital is the
+ * draft claim. Highest-projected is a claim about the roster, which
+ * the board deck already owns — and ordering by it would put a
+ * seventh-round hit above a first-round pick on a slide about how
+ * somebody drafted.
+ *
+ * Three, because a full roster is fourteen names nobody reads at
+ * presentation distance.
+ *
+ * `excludePlayerId` keeps the highlighted pick out of the row. The
+ * most extreme divergence on a card is very often a FIRST-ROUND pick —
+ * that is where the board is most confident and so where a reach costs
+ * most — which put the same face on the same slide twice, once small
+ * and once large. The row simply moves on to the next pick instead.
+ */
+function topPicks(
+  input: DraftDeckInput,
+  teamId: string,
+  teamCount: number,
+  excludePlayerId?: string,
+): { name: string; sub?: string; imageUrl?: string }[] {
+  return input.picks
+    .filter((p) => p.draftedByTeamId === teamId && p.playerId !== excludePlayerId)
+    .sort((a, b) => a.pickOverall - b.pickOverall)
+    .slice(0, 3)
+    .map((p) => ({
+      name: p.playerName,
+      sub: draftSlot(p.pickOverall, p.round, teamCount),
+      imageUrl: input.playerImage?.(p.playerId) ?? undefined,
+    }))
 }
 
 /** Slide-row visual fields for a team, or nothing when the caller gave
@@ -278,20 +351,36 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
         const reach = worstReach.get(teamId)
         const notes: string[] = []
 
-        if (steal) {
-          notes.push(
-            `Best value: ${steal.pick.playerName} at ` +
-              `${draftSlot(steal.pick.pickOverall, steal.pick.round, facts.teamCount)}, ` +
-              `${shortRounds(steal.roundsDelta)} later than ${basis} expected.`,
-          )
-        }
-        if (reach) {
-          notes.push(
-            `Went early on ${reach.pick.playerName} at ` +
-              `${draftSlot(reach.pick.pickOverall, reach.pick.round, facts.teamCount)} — ` +
-              `${shortRounds(reach.roundsDelta)} ahead of ${basis}.`,
-          )
-        }
+        // THE ONE PICK THEY WILL BE ASKED ABOUT.
+        //
+        // Whichever moved furthest, not "the steal if there is one" —
+        // the most extreme divergence is the one the room reacts to,
+        // and a team whose worst reach dwarfs its best value should be
+        // shown the reach. Teams often have only one of the two, and
+        // some have neither, so this simply goes missing rather than
+        // filling the space with a lesser pick.
+        //
+        // These two facts used to be a pair of note lines naming the
+        // same players. As a face with a tag they say more in a
+        // fraction of the words, so the lines are gone.
+        const candidates = [steal, reach].filter(
+          (d): d is NonNullable<typeof d> => !!d,
+        )
+        const furthest = candidates.sort(
+          (a, b) => Math.abs(b.roundsDelta) - Math.abs(a.roundsDelta),
+        )[0]
+        const highlight = furthest
+          ? {
+              label: furthest === steal ? 'Steal' : 'Reach',
+              name: furthest.pick.playerName,
+              sub:
+                `${draftSlot(furthest.pick.pickOverall, furthest.pick.round, facts.teamCount)}, ` +
+                `${shortRounds(furthest.roundsDelta)} ` +
+                `${furthest === steal ? `later than ${basis}` : `ahead of ${basis}`}`,
+              imageUrl: input.playerImage?.(furthest.pick.playerId) ?? undefined,
+            }
+          : undefined
+
         // Said only when it is true, and it often is: beating the
         // market and drafting the best roster are different things.
         if (t && g && Math.abs(t.rank - g.rank) >= 3) {
@@ -310,16 +399,28 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
           rank,
           fieldSize: field,
           teamName: input.teamName(teamId),
-          // The letter alone. Writing "Grade A" trips the deck's own
-          // guard against verdict language, and the eyebrow already
-          // says Draft grades — the pill does not need to repeat it.
-          tier: g?.grade && g.grade !== '—' ? g.grade : undefined,
+          // THE HERO. This deck is called Draft grades, is ordered by
+          // grade, and used to render the letter smaller than its own
+          // note text while a rank numeral took the largest block on
+          // the slide. Since the letters are assigned BY rank, those
+          // were the same claim twice — so the letter takes the space
+          // and the rank drops to "3rd of 10".
+          //
+          // `statValue` below stays directly beneath it, always. The
+          // letters are a curve: somebody always lands top and
+          // somebody always lands bottom regardless of how the room
+          // drafted, so a letter without the figure that earned it
+          // asserts more than the data supports. See `gradeTeamDrafts`.
+          grade: g?.grade && g.grade !== '—' ? g.grade : undefined,
+          slot: draftHole(input.picks, teamId, facts.teamCount) ?? undefined,
           // The figure that sorts. Showing projected points here while
           // sorting on draft value is the same defect this deck already
           // fixed once in its list ordering: a big number that does not
           // explain the order reads as a broken sort.
           statValue: g ? `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}` : '—',
-          statLabel: 'rounds per pick gained on the board',
+          statLabel: 'rounds per pick against the room',
+          players: topPicks(input, teamId, facts.teamCount, furthest?.pick.playerId),
+          highlight,
           chips: [
             ...(g ? [{ value: `${g.picksCompared}`, label: 'picks compared' }] : []),
             // Roster strength stays as CONTEXT — it is what the draft

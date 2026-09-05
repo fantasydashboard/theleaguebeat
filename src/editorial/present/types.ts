@@ -91,6 +91,25 @@ export interface TeamCardSlide {
   /** Short verdict word, e.g. "Contender". Omitted when the data
    *  cannot support one rather than defaulted to something bland. */
   tier?: string
+  /**
+   * A letter grade, shown as the hero of the slide.
+   *
+   * When set, it takes the space `rank` otherwise occupies and `rank`
+   * drops to a small "3rd of 10" line — because a grade assigned BY
+   * rank makes a giant rank numeral and a grade pill the same claim
+   * twice, and the slide's largest element should be the thing the
+   * deck is named after.
+   *
+   * `statValue` must stay visible directly beneath it. The letters are
+   * league-relative — a curve, where somebody always lands top and
+   * somebody always lands bottom — so a letter shown without the
+   * figure that earned it asserts more than the data supports. See
+   * `gradeTeamDrafts`.
+   */
+  grade?: string
+  /** Where they picked from, e.g. "the 10 hole". Context for why a
+   *  draft looks the way it does. */
+  slot?: string
   /** The headline number and what it is. */
   statValue: string
   statLabel: string
@@ -100,6 +119,27 @@ export interface TeamCardSlide {
   movement?: { places: number; label: string }
   /** Supporting figures, at most three. */
   chips?: { value: string; label: string }[]
+  /**
+   * A few players, shown as faces in a row.
+   *
+   * Kept to three: a full roster is fourteen names nobody can read at
+   * presentation distance, and the point of a face is that it lands
+   * without being read.
+   *
+   * `imageUrl` is optional per player and the renderer falls back to
+   * initials — a grid of broken-image icons is worse than no faces.
+   */
+  players?: { name: string; sub?: string; imageUrl?: string }[]
+  /** The one pick this team will be asked about, given its own face
+   *  and a tag. Omitted when nothing diverged far enough to name. */
+  highlight?: {
+    /** "Steal" or "Reach" — which way it went. */
+    label: string
+    name: string
+    /** The slot and the distance, e.g. "3.04, 2.1 rounds early". */
+    sub?: string
+    imageUrl?: string
+  }
   /** One or two lines of detail: best player, thinnest slot. */
   notes?: string[]
   teamId?: string
