@@ -254,12 +254,30 @@
         </section>
       </template>
 
-      <!-- Table of contents — only once there are real sections to list. -->
-      <nav v-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
+      <!-- Table of contents.
+           Built from the assembled issue when there is one, so it
+           cannot list a section the issue dropped or miss one it
+           added. The hand-numbered list below is the fallback for the
+           moment before the issue lands. -->
+      <nav v-if="issueBody.length" class="issue-toc" aria-label="In this issue">
+        <p class="issue-toc-label">In this issue</p>
+        <ol class="issue-toc-list" role="list">
+          <li v-for="(sec, i) in issueBody" :key="sec.id">
+            <a :href="`#issue-${sec.id}`">
+              {{ String(i + 1).padStart(2, '0') }} — {{ sec.eyebrow }}
+            </a>
+          </li>
+          <li v-if="pointsSeasonStarted">
+            <a href="#section-matchups">
+              {{ String(issueBody.length + 1).padStart(2, '0') }} — Matchups
+            </a>
+          </li>
+        </ol>
+      </nav>
+      <nav v-else-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
         <p class="issue-toc-label">In this issue</p>
         <ol class="issue-toc-list" role="list">
           <li><a href="#points-section-power">01 — Power Rankings</a></li>
-          <li><a href="#section-matchups">02 — Matchups</a></li>
           <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Matchups</a></li>
           <li v-if="showPointsDraft"><a href="#points-section-draft">03 — The draft</a></li>
           <li v-if="pointsQuickReads.length">
@@ -347,7 +365,25 @@
         aria-labelledby="points-matchups-heading"
       >
         <header class="section-head">
-          <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
+          <div class="issue-sec-bar">
+            <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
+            <!-- The ONE deck built live rather than from the issue.
+                 By Monday night the issue is hours old and these
+                 numbers are minutes old, so presenting the frozen
+                 version would read out scores that have moved. -->
+            <span v-if="routeLeagueId && hasLiveDeck" class="issue-sec-present">
+              <router-link
+                :to="`/leagues/${routeLeagueId}/present/live`"
+                class="issue-present-btn"
+                title="Present what each team still needs"
+              >▶ Present</router-link>
+              <router-link
+                :to="`/leagues/${routeLeagueId}/present/live?format=vertical`"
+                class="issue-present-btn issue-present-btn-alt"
+                title="Present what each team still needs, vertically, for social"
+              >▯</router-link>
+            </span>
+          </div>
           <h2 class="section-headline" id="points-matchups-heading">
             {{ (livePointsData.currentWeekMatchups ?? []).length }} matchups.
             {{ pointsSeasonStarted ? `Week ${livePointsData.currentWeek}.` : 'Week one is the opener.' }}
@@ -863,7 +899,8 @@ import { usePlatformsStore } from '@/stores/platforms'
 import { deriveSeasonStage } from '@/editorial/detection/helpers'
 import { hasPlayedGames } from '@/editorial/leagueCore'
 import { issueSeasonStarted } from '@/composables/useIssueChrome'
-import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
+import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
+import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { isPresentable } from '@/editorial/issue/types'
 import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
@@ -965,10 +1002,28 @@ const pointsCoverStory = computed(() => {
  * still exists: it carries the page for the moment before projections
  * land, and is then replaced by something better.
  */
-const issueLead = computed(() => preseasonIssue.value?.sections[0] ?? null)
+const issueLead = computed(() => assembledIssue.value?.sections[0] ?? null)
 
-/** Everything after the lead — the lead is the cover, not a section. */
-const issueBody = computed(() => preseasonIssue.value?.sections.slice(1) ?? [])
+/**
+ * The sections rendered as blocks down the page.
+ *
+ * Usually everything after the lead, because the lead IS the cover and
+ * repeating it immediately underneath is the same sentence twice.
+ *
+ * But the cover only carries a headline, a support line and chips — so
+ * when the lead has rows or cards, dropping it takes real content off
+ * the page with it. In season the lead is the week's results, and
+ * slicing it away silently deleted the scoreboard. A repeated headline
+ * is what a magazine does anyway: the cover announces it, the page
+ * inside carries the story.
+ */
+const issueBody = computed(() => {
+  const sections = assembledIssue.value?.sections ?? []
+  const lead = sections[0]
+  if (!lead) return []
+  const leadHasContent = !!(lead.rows?.length || lead.cards?.length)
+  return leadHasContent ? sections : sections.slice(1)
+})
 
 const pointsCover = computed(() => {
   const lead = issueLead.value
@@ -1071,11 +1126,45 @@ const pointsSeasonStarted = computed(
   () => !!livePointsData.value && hasPlayedGames(livePointsData.value),
 )
 
-/** Whether the points Issue has a ladder to show. Gates the Power
- *  Rankings + Departments sections, the table of contents, and the
- *  matchups section numbering. No games played means no ladder. */
+/**
+ * Whether the live deck has anything to walk through.
+ *
+ * Uses the same builder the deck route uses rather than a second
+ * "are there games?" rule — so the button and the deck can never
+ * disagree, and nobody clicks through to an empty presentation.
+ */
+const hasLiveDeck = computed(() => {
+  const d = livePointsData.value
+  if (!d) return false
+  return (
+    buildLiveDeck({
+      leagueName: d.leagueName,
+      season: d.currentSeason,
+      week: d.currentWeek,
+      matchups: d.currentWeekMatchups ?? [],
+      teamName: (id) => lookupTeam(id).name,
+    }) !== null
+  )
+})
+
+/** Which sections the assembled issue has taken over. */
+const issueCovers = (id: string) =>
+  !!assembledIssue.value?.sections.some((s) => s.id === id)
+
+/**
+ * Whether the points Issue has a ladder to show.
+ *
+ * Stands down once the assembled issue carries its own power
+ * rankings. The legacy ladder is ordered by RECORD and the issue's is
+ * ordered by ALL-PLAY POWER — they disagree by design, and printing
+ * both on one page is the page arguing with itself about who is best.
+ * The issue's version wins because it is the one present mode shows.
+ */
 const hasPointsPR = computed(
-  () => pointsSeasonStarted.value && pointsStandingsSorted.value.length > 0,
+  () =>
+    pointsSeasonStarted.value &&
+    pointsStandingsSorted.value.length > 0 &&
+    !issueCovers('power-rankings'),
 )
 
 /** One-paragraph lede over the points ladder: leader separation and
@@ -1518,11 +1607,15 @@ const showDraftSection = computed(() => {
  * twice, once as the lead and once as section 03.
  */
 /**
- * The assembled preseason issue. Null until the projections land, and
- * null forever if they never do — the page renders without it either
- * way. Present mode builds its deck from this same object.
+ * The assembled issue — preseason before a week has finished, weekly
+ * after. `loadIssue` owns that choice so the page and present mode
+ * cannot disagree about which issue a league is due.
+ *
+ * Null until it assembles, and null forever if the preseason
+ * projections never land — the page renders without it either way.
+ * Present mode builds its deck from this same object.
  */
-const preseasonIssue = ref<Issue | null>(null)
+const assembledIssue = ref<Issue | null>(null)
 
 // Tell the layout's masthead whether a game has been played, so it
 // stops printing a publication date for an issue nobody published.
@@ -1537,17 +1630,13 @@ watch(
 watch(
   [livePointsData, strictLeagueRecord],
   async ([data, record]) => {
-    preseasonIssue.value = null
-    if (!data || !record || pointsSeasonStarted.value) return
-    const picks = [...(data.draft?.picks ?? [])]
-    if (picks.length === 0) return
-    preseasonIssue.value = await loadPreseasonIssue({
+    assembledIssue.value = null
+    if (!data || !record) return
+    assembledIssue.value = await assembleIssue({
+      data,
       leagueName: record.league_name || data.leagueName,
-      season: data.currentSeason,
       platform: record.platform,
       platformLeagueId: record.platform_league_id,
-      picks,
-      transactions: (data as { transactions?: never[] }).transactions,
       teamName: (id) => lookupTeam(id).name,
       team: (id) => {
         const t = lookupTeam(id)

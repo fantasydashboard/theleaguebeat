@@ -218,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
@@ -257,7 +257,9 @@ import {
 } from '@/editorial/points/playerIdBridge'
 import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
 import { deckFromIssue, type PresentFormat } from '@/editorial/issue/toSlides'
-import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
+import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
+import type { Issue } from '@/editorial/issue/types'
+import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 
 const route = useRoute()
 const router = useRouter()
@@ -310,6 +312,34 @@ function toggleFormat(): void {
   const next = format.value === 'vertical' ? 'landscape' : 'vertical'
   void router.replace({ query: { ...route.query, format: next } })
 }
+
+/**
+ * The issue this deck was cut from, kept so the format toggle can
+ * re-cut it.
+ *
+ * FORMAT IS NOT A STYLESHEET. Vertical explodes a list into one screen
+ * per row and drops the support text — decisions made in
+ * `deckFromIssue`, at build time. Without this the toggle flipped the
+ * container class and left the slides in landscape shape: a list
+ * stayed one crowded list, in a box built for a single name.
+ *
+ * Re-cutting from the cached issue rather than re-running `load()`
+ * keeps the toggle instant and avoids refetching a league mid-
+ * presentation.
+ */
+const builtFrom = shallowRef<{ issue: Issue; only?: string; id?: string } | null>(null)
+
+watch(format, (next) => {
+  const src = builtFrom.value
+  if (!src) return
+  const recut = deckFromIssue(src.issue, { only: src.only, format: next, id: src.id })
+  if (recut) {
+    deck.value = recut
+    // A vertical cut has more slides than its landscape twin, so an
+    // index from the other format can land past the end.
+    slideIndex.value = Math.min(slideIndex.value, recut.slides.length - 1)
+  }
+})
 
 const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
 
@@ -612,6 +642,7 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
   deck.value = null
+  builtFrom.value = null
   try {
     const uuid = route.params.leagueId
     if (typeof uuid !== 'string') throw new Error('No league in the URL.')
@@ -631,6 +662,50 @@ async function load(): Promise<void> {
 
     const teamName = (teamId: string) =>
       data.teams.find((t) => t.id === teamId)?.name ?? `Team ${teamId}`
+
+    const teamVisual = (teamId: string) => {
+      const t = data.teams.find((x) => x.id === teamId)
+      if (!t) return undefined
+      return {
+        name: t.name,
+        avatarUrl: t.avatarUrl,
+        avatarColor: t.avatarColor,
+        ownerInitials: t.ownerInitials,
+      }
+    }
+
+    // Which deck the URL asked for. This used to be ignored — every
+    // route built the draft deck, so /present/board silently rendered
+    // the draft. Adding a second deck is what surfaced it.
+    const deckId = typeof route.params.deckId === 'string' ? route.params.deckId : 'draft'
+
+    const points =
+      data.format === 'h2h-points' ? (data as LeagueDataH2HPoints) : null
+
+    // THE LIVE DECK, before anything else.
+    //
+    // The only deck not built from the issue, and deliberately so: by
+    // Monday night the issue is hours old and these scores are minutes
+    // old. Presenting the frozen version would read out numbers that
+    // have already moved, which is the one thing a live deck exists
+    // not to do.
+    if (deckId === 'live' && points) {
+      const live = buildLiveDeck({
+        leagueName: record.league_name || data.leagueName,
+        season: data.currentSeason,
+        week: points.currentWeek,
+        matchups: points.currentWeekMatchups ?? [],
+        teamName,
+        team: teamVisual,
+      })
+      if (live) {
+        builtFrom.value = { issue: live, only: 'this-week', id: 'live' }
+        deck.value = deckFromIssue(live, { only: 'this-week', format: format.value, id: 'live' })
+        loading.value = false
+        return
+      }
+      throw new Error('Nothing is in flight this week.')
+    }
 
     // The baseline for the value read AND the projected-roster grade.
     //
@@ -740,37 +815,21 @@ async function load(): Promise<void> {
       }
     }
 
-    const teamVisual = (teamId: string) => {
-      const t = data.teams.find((x) => x.id === teamId)
-      if (!t) return undefined
-      return {
-        name: t.name,
-        avatarUrl: t.avatarUrl,
-        avatarColor: t.avatarColor,
-        ownerInitials: t.ownerInitials,
-      }
-    }
-
-    // Which deck the URL asked for. This used to be ignored — every
-    // route built the draft deck, so /present/board silently rendered
-    // the draft. Adding a second deck is what surfaced it.
-    const deckId = typeof route.params.deckId === 'string' ? route.params.deckId : 'draft'
-
-    // ISSUE SECTIONS FIRST. Any `:deckId` matching a section of the
+    // ISSUE SECTIONS NEXT. Any `:deckId` matching a section of the
     // assembled issue is presented from that issue, so the deck and
     // the page cannot describe the same week differently. The legacy
     // decks below remain the fallback for ids the issue does not cover
     // — nothing breaks mid-migration.
-    const issue = await loadPreseasonIssue({
-      leagueName: record.league_name || data.leagueName,
-      season: data.currentSeason,
-      platform: record.platform,
-      platformLeagueId: id,
-      picks,
-      transactions: (data as unknown as LeagueDataH2HPoints).transactions,
-      teamName,
-      team: teamVisual,
-    }).catch(() => null)
+    const issue = points
+      ? await assembleIssue({
+          data: points,
+          leagueName: record.league_name || data.leagueName,
+          platform: record.platform,
+          platformLeagueId: id,
+          teamName,
+          team: teamVisual,
+        }).catch(() => null)
+      : null
 
     if (issue) {
       const wanted = issue.sections.some((s) => s.id === deckId) ? deckId : undefined
@@ -779,6 +838,7 @@ async function load(): Promise<void> {
         format: format.value,
       })
       if (fromIssue && (wanted || deckId === 'issue')) {
+        builtFrom.value = { issue, only: wanted }
         deck.value = fromIssue
         loading.value = false
         return
