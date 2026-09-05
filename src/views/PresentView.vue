@@ -1,5 +1,5 @@
 <template>
-  <div class="present" tabindex="-1" @keydown="onKey">
+  <div class="present" :class="{ 'is-vertical': format === 'vertical' }" tabindex="-1" @keydown="onKey">
     <!-- Loading / error / empty states, before any deck exists. -->
     <div v-if="loading" class="present-msg">Building the deck…</div>
 
@@ -28,6 +28,14 @@
       <header class="present-chrome">
         <span class="present-chrome-brand">The League Beat</span>
         <span class="present-chrome-deck">{{ deck.title }}</span>
+        <button
+          type="button"
+          class="present-chrome-format"
+          :title="format === 'vertical' ? 'Switch to widescreen' : 'Switch to vertical (social)'"
+          @click="toggleFormat"
+        >
+          {{ format === 'vertical' ? '▭' : '▯' }}
+        </button>
         <router-link :to="backLink" class="present-chrome-exit">Exit</router-link>
       </header>
 
@@ -155,6 +163,27 @@
           </ul>
         </section>
 
+        <!-- SPOTLIGHT — one thing, alone. What a list row becomes in
+             vertical: a waiver claim, a matchup, one side of a trade. -->
+        <section v-else-if="slide.kind === 'spotlight'" class="slide slide-spot">
+          <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
+          <div
+            v-if="slide.imageUrl || slide.logoUrl || slide.logoColor"
+            class="spot-art"
+            :style="{ background: slide.logoColor ? `linear-gradient(135deg, ${slide.logoColor})` : undefined }"
+          >
+            <img v-if="slide.imageUrl" :src="slide.imageUrl" class="spot-face" alt="" />
+            <img v-else-if="slide.logoUrl" :src="slide.logoUrl" class="spot-face" alt="" />
+            <span v-else class="spot-initials">{{ slide.logoInitials }}</span>
+          </div>
+          <h2 class="spot-title">{{ slide.title }}</h2>
+          <p v-if="slide.subtitle" class="spot-sub">{{ slide.subtitle }}</p>
+          <p v-if="slide.statValue" class="spot-stat">
+            <span class="spot-stat-value">{{ slide.statValue }}</span>
+            <span v-if="slide.statLabel" class="spot-stat-label">{{ slide.statLabel }}</span>
+          </p>
+        </section>
+
         <!-- SIGN OFF -->
         <section v-else class="slide slide-signoff">
           <h2 class="signoff-headline">{{ slide.headline }}</h2>
@@ -227,6 +256,8 @@ import {
   type BridgePlatform,
 } from '@/editorial/points/playerIdBridge'
 import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
+import { deckFromIssue, type PresentFormat } from '@/editorial/issue/toSlides'
+import { loadPreseasonIssue } from '@/editorial/issue/loadPreseasonIssue'
 
 const route = useRoute()
 const router = useRouter()
@@ -246,6 +277,39 @@ const backLink = computed(() => {
   const id = route.params.leagueId
   return typeof id === 'string' ? `/leagues/${id}/the-issue` : '/'
 })
+
+/**
+ * Landscape for a room, vertical for a phone.
+ *
+ * A query param rather than a setting: you want the TV format for a
+ * league call and vertical for a social clip on the same afternoon, and
+ * a settings trip between them is two trips too many. The choice is
+ * remembered so the toggle is one tap next time, and `?format=vertical`
+ * on a link opens that way regardless.
+ */
+const FORMAT_KEY = 'tlb_present_format'
+const format = ref<PresentFormat>('landscape')
+
+watch(
+  () => route.query.format,
+  (q) => {
+    if (q === 'vertical' || q === 'landscape') {
+      format.value = q
+      try { localStorage.setItem(FORMAT_KEY, q) } catch { /* private mode */ }
+      return
+    }
+    try {
+      const saved = localStorage.getItem(FORMAT_KEY)
+      if (saved === 'vertical' || saved === 'landscape') format.value = saved
+    } catch { /* private mode */ }
+  },
+  { immediate: true },
+)
+
+function toggleFormat(): void {
+  const next = format.value === 'vertical' ? 'landscape' : 'vertical'
+  void router.replace({ query: { ...route.query, format: next } })
+}
 
 const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
 
@@ -691,6 +755,35 @@ async function load(): Promise<void> {
     // route built the draft deck, so /present/board silently rendered
     // the draft. Adding a second deck is what surfaced it.
     const deckId = typeof route.params.deckId === 'string' ? route.params.deckId : 'draft'
+
+    // ISSUE SECTIONS FIRST. Any `:deckId` matching a section of the
+    // assembled issue is presented from that issue, so the deck and
+    // the page cannot describe the same week differently. The legacy
+    // decks below remain the fallback for ids the issue does not cover
+    // — nothing breaks mid-migration.
+    const issue = await loadPreseasonIssue({
+      leagueName: record.league_name || data.leagueName,
+      season: data.currentSeason,
+      platform: record.platform,
+      platformLeagueId: id,
+      picks,
+      transactions: (data as unknown as LeagueDataH2HPoints).transactions,
+      teamName,
+      team: teamVisual,
+    }).catch(() => null)
+
+    if (issue) {
+      const wanted = issue.sections.some((s) => s.id === deckId) ? deckId : undefined
+      const fromIssue = deckFromIssue(issue, {
+        only: wanted,
+        format: format.value,
+      })
+      if (fromIssue && (wanted || deckId === 'issue')) {
+        deck.value = fromIssue
+        loading.value = false
+        return
+      }
+    }
 
     if (deckId === 'wire') {
       deck.value = buildWireDeck({
@@ -1192,4 +1285,81 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   font-weight: 700;
   text-decoration: none;
 }
+
+/* ── SPOTLIGHT ──────────────────────────────────────────────────────
+   One item, alone. Sized to read at arm's length on a phone, which is
+   where a social clip is watched. */
+.slide-spot { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.spot-art {
+  width: 148px; height: 148px; border-radius: 28px;
+  display: grid; place-items: center; overflow: hidden; flex: none;
+}
+.spot-face { width: 100%; height: 100%; object-fit: cover; }
+.spot-initials { font-size: 2.2rem; font-weight: 800; }
+.spot-title {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  font-weight: 800; line-height: 1.02; letter-spacing: -0.02em; margin: 0;
+}
+.spot-sub { font-size: 1.05rem; color: oklch(0.66 0.01 90); margin: 0; }
+.spot-stat { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 0; }
+.spot-stat-value {
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  font-weight: 800; line-height: 1; color: oklch(0.85 0.17 92);
+}
+.spot-stat-label {
+  font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: oklch(0.62 0.01 90);
+}
+
+/* ── VERTICAL (9:16 social) ─────────────────────────────────────────
+   Laid out against the 1080x1920 guide:
+
+     head circle   x60  y220   330px   — WE DO NOT DRAW THIS. The
+                                         presenter's camera sits here,
+                                         so the top 550px stays empty.
+     the slide     x60  y610   870x930 — everything we render
+     icon rail     right 150px          — covered by the app's UI
+     caption       bottom 380px         — covered by caption + username
+
+   Percentages, not pixels, so it holds at any 9:16 size — a phone, a
+   1080x1920 window, an OBS canvas. Percentages of the FRAME, and the
+   slide box then sizes its own type, because viewport units would size
+   against the window rather than the safe area and be wrong in both. */
+.present.is-vertical { aspect-ratio: 9 / 16; margin-inline: auto; max-height: 100vh; }
+
+/* Chrome would land in the icon rail and the caption strip, both of
+   which the app covers. It is also not for the audience — the reader
+   of a TikTok has no keyboard. */
+.present.is-vertical .present-chrome,
+.present.is-vertical .present-hint,
+.present.is-vertical .present-progress { display: none; }
+
+.present.is-vertical .present-stage {
+  position: absolute;
+  left: 5.55%;              /* x60  / 1080 */
+  top: 31.77%;              /* y610 / 1920 */
+  width: 80.55%;            /* 870  / 1080 */
+  height: 48.44%;           /* 930  / 1920 */
+  padding: 0;
+  place-items: start;
+  overflow: hidden;         /* the box is the box; nothing may spill */
+}
+.present.is-vertical .slide { width: 100%; }
+
+/* Type sizes relative to the BOX, not the window. `vw` here would
+   measure the whole frame and overshoot by a quarter. */
+.present.is-vertical .slide-headline,
+.present.is-vertical .spot-title { font-size: clamp(1.9rem, 4.4cqw, 3.2rem); }
+.present.is-vertical .cold-title { font-size: clamp(2.2rem, 5.4cqw, 3.8rem); }
+.present.is-vertical .team-rank { font-size: clamp(3rem, 7cqw, 5rem); }
+.present.is-vertical .present-stage { container-type: inline-size; }
+
+/* One column: the box is nearly square (870x930), so the two-column
+   split that rescued a 1440x820 window would make every row too narrow
+   to read on a phone. */
+.present.is-vertical .list-rows.is-split {
+  display: flex;
+  flex-direction: column;
+}
+.present.is-vertical .present-tap { display: block; }
 </style>
