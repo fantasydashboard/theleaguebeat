@@ -23,7 +23,7 @@ const router = createRouter({
         if (authStore.isAuthenticated && leaguesStore.leagues.length > 0) {
           const primary = leaguesStore.leagues.find((l) => l.is_primary)
           const target = primary ?? leaguesStore.leagues[0]
-          next(`/leagues/${target.id}/the-beat`)
+          next(`/leagues/${target.id}/the-issue`)
           return
         }
         next()
@@ -96,16 +96,21 @@ const router = createRouter({
       component: () => import('@/views/MyLeagueLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', redirect: (to) => `/leagues/${to.params.leagueId}/the-beat` },
+        { path: '', redirect: (to) => `/leagues/${to.params.leagueId}/the-issue` },
         {
           path: 'your-column',
           name: 'my-league-your-column',
           component: () => import('@/views/YourColumnView.vue'),
         },
         {
+          // The Beat is retired. It rendered the same week the Issue
+          // renders, at a different temperature, and it never supported
+          // points leagues at all — a football league got an
+          // "unsupported format" panel and nothing else. Redirect
+          // rather than 404: this path was the league default for
+          // months and is in bookmarks and history.
           path: 'the-beat',
-          name: 'my-league-the-beat',
-          component: () => import('@/views/BeatFeedView.vue'),
+          redirect: (to) => `/leagues/${to.params.leagueId}/the-issue`,
         },
         {
           // New single-page Issue view — magazine spread. Lives
@@ -132,7 +137,7 @@ const router = createRouter({
           // CategoryDemoHomeView remains in the codebase for
           // reference but is no longer reachable via the nav.
           path: 'home',
-          redirect: (to) => `/leagues/${to.params.leagueId}/the-beat`,
+          redirect: (to) => `/leagues/${to.params.leagueId}/the-issue`,
         },
         {
           path: 'power-rankings',
@@ -165,15 +170,18 @@ const router = createRouter({
           // Seasons / Records) created a circular UX where the
           // CHRONICLES sub-tab was a hub for its siblings. Now
           // Chronicles IS the editorial archive directly.
+          // Chronicles is retired. Past issues are reached through the
+          // Issue's own prev/next navigation, and the Hall of Fame
+          // belongs on the dashboard rather than in a weekly
+          // publication.
           path: 'chronicles',
-          name: 'my-league-chronicles',
-          component: () => import('@/views/CategoryDemoHistoryView.vue'),
+          redirect: (to) => `/leagues/${to.params.leagueId}/the-issue`,
         },
         {
           // Backward-compatible alias for the old /history URL.
           // External shares and old issue cross-links still resolve.
           path: 'history',
-          redirect: (to) => `/leagues/${to.params.leagueId}/chronicles`,
+          redirect: (to) => `/leagues/${to.params.leagueId}/the-issue`,
         },
         {
           path: 'archive',

@@ -182,19 +182,9 @@
         >Your Column</router-link>
         <router-link
           class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/the-beat`"
-          :class="{ 'league-nav-tab-active': activeSection === 'beat' }"
-        >The Beat</router-link>
-        <router-link
-          class="league-nav-tab"
           :to="`/leagues/${routeLeagueId}/the-issue`"
           :class="{ 'league-nav-tab-active': activeSection === 'issue' }"
         >The Issue</router-link>
-        <router-link
-          class="league-nav-tab"
-          :to="`/leagues/${routeLeagueId}/chronicles`"
-          :class="{ 'league-nav-tab-active': activeSection === 'chronicles' }"
-        >Chronicles</router-link>
       </div>
     </nav>
 
@@ -353,7 +343,7 @@ async function confirmRemove(league: { id: string; league_name: string }): Promi
   // "couldn't be resolved"; move somewhere real instead.
   if (wasActive) {
     const next = leaguesStore.leagues[0]
-    void router.push(next ? `/leagues/${next.id}/the-beat` : '/demo-categories/connect')
+    void router.push(next ? `/leagues/${next.id}/the-issue` : '/demo-categories/connect')
   }
 }
 
@@ -376,42 +366,39 @@ const activeLeague = computed(() =>
    THE BEAT since it's a single view).
 ───────────────────────────────────────────────────────────────── */
 
-type SectionKey = 'column' | 'beat' | 'issue' | 'chronicles'
-
-const ISSUE_PATHS = ['the-issue', 'power-rankings', 'matchups', 'draft'] as const
-const CHRONICLES_PATHS = ['chronicles', 'history', 'archive'] as const
+/**
+ * Two sections now: the Issue and Your Column.
+ *
+ * The Beat and Chronicles are retired. The Beat rendered the same week
+ * the Issue renders, at a different temperature, and never supported
+ * points leagues at all — a football league reached it and got an
+ * "unsupported format" panel. Chronicles duplicated navigation the
+ * Issue already has, and the Hall of Fame belongs on the dashboard
+ * rather than in a weekly publication.
+ *
+ * Their paths still resolve: `the-beat`, `chronicles`, `history` and
+ * `home` all redirect to the Issue, because those URLs have been live
+ * for months and sit in bookmarks and shared links.
+ */
+type SectionKey = 'column' | 'issue'
 
 const activeSection = computed<SectionKey>(() => {
   // Match path SEGMENTS so deep routes (e.g. /the-issue/:weekNumber)
-  // still resolve to their section. The previous endsWith check
-  // missed those and fell through to 'beat'.
+  // still resolve to their section.
   const segments = route.path.split('/').filter(Boolean)
   if (segments.includes('your-column')) return 'column'
-  if (ISSUE_PATHS.some((slug) => segments.includes(slug))) return 'issue'
-  if (CHRONICLES_PATHS.some((slug) => segments.includes(slug))) return 'chronicles'
-  return 'beat'
+  return 'issue'
 })
 
-const subNav = computed<Array<{ path: string; label: string }>>(() => {
-  if (activeSection.value === 'issue') {
-    // The Issue is one cohesive magazine spread. PR / Matchups /
-    // Draft live AS SECTIONS within it (not as sub-tabs). Direct
-    // URLs to the legacy dashboard views still resolve — they're
-    // "deeper-view" cross-links from within the Issue.
-    return []
-  }
-  if (activeSection.value === 'chronicles') {
-    // Two-tab structure: Chronicles IS the editorial archive
-    // (year-cards + eras + receipts), Past Issues is the issue
-    // library. The previous third tab (a hub linking to its own
-    // siblings) was circular UX.
-    return [
-      { path: 'chronicles', label: 'Chronicles' },
-      { path: 'archive',    label: 'Past issues' },
-    ]
-  }
-  return []
-})
+/**
+ * No sub-navigation.
+ *
+ * The Issue is one cohesive spread — power rankings, matchups and the
+ * draft live inside it as SECTIONS, not as sub-tabs. The legacy
+ * dashboard URLs still resolve as deeper-view cross-links from within
+ * the Issue; they are simply not navigation.
+ */
+const subNav = computed<Array<{ path: string; label: string }>>(() => [])
 
 /* ─────────────────────────────────────────────────────────────────
    Coverage gate — TLB renders the full editorial pipeline ONLY for
