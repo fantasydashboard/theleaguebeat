@@ -20,12 +20,7 @@
  * between them.
  */
 import type { CategoryLeagueDataDraftPick } from '../types'
-import {
-  buildDraftStoryFacts,
-  draftLede,
-  numberWord,
-  positionWord,
-} from '../points/draftStory'
+import { buildDraftStoryFacts } from '../points/draftStory'
 import {
   findDraftDivergences,
   findAdpDivergences,
@@ -191,50 +186,17 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     meta: `${input.season} · ${facts.totalPicks} picks · ${facts.rounds} rounds`,
   })
 
-  // The lede — the single most arguable thing about the draft.
-  const lede = draftLede(facts, input.teamName)
-  if (lede) {
-    slides.push({
-      kind: 'statement',
-      eyebrow: 'The room',
-      headline: lede,
-      chips: [
-        { value: String(facts.totalPicks), label: 'picks' },
-        { value: String(facts.rounds), label: 'rounds' },
-        { value: String(facts.teamCount), label: 'teams' },
-      ],
-    })
-  }
-
-  // Where each position first went. Reveals one at a time, because the
-  // interesting part is the GAP between them — a quarterback going at 41
-  // in one league and 22 in another is the whole conversation.
-  if (facts.firstAtPosition.length >= 2) {
-    slides.push({
-      kind: 'list',
-      eyebrow: 'Off the board',
-      headline: 'Where each position went first.',
-      support: 'Draft slot, as round and pick.',
-      revealOneByOne: true,
-      rows: facts.firstAtPosition.slice(0, 6).map((f) => ({
-        lead: f.position,
-        label: f.playerName,
-        sub: input.teamName(f.teamId),
-        value: draftSlot(f.pickOverall, f.round, facts.teamCount),
-        ...teamVisual(input, f.teamId),
-      })),
-    })
-  }
-
-  const top = facts.concentrations[0]
-  if (top) {
-    slides.push({
-      kind: 'statement',
-      eyebrow: 'Loaded up',
-      headline: `${input.teamName(top.teamId)} left with ${numberWord(top.count)} ${positionWord(top.position, top.count)}.`,
-      support: 'More than anyone else in the room.',
-    })
-  }
+  // JUST THE RANKING.
+  //
+  // This deck used to open with a lede, a where-each-position-went
+  // list and a loaded-up statement, and close on a verdict. All four
+  // were true and none of them was what the deck is for: the countdown
+  // is the presentation, and the material around it was four slides
+  // the room sat through before reaching it.
+  //
+  // The facts they carried are not lost — the issue page still prints
+  // the draft lede and the position board, and the rank-one card IS
+  // the verdict the closing slide used to restate.
 
   // Steals and reaches. Two baselines, and they are not equal: real
   // ADP when it resolved, Sleeper's `search_rank` only as a fallback.
@@ -442,63 +404,9 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
       }
     }
 
-    // The projected-roster countdown that used to sit here is gone —
-    // the team cards above already carry every one of its figures, and
-    // a second ten-row pass over the same league said nothing the room
-    // had not just been shown one team at a time.
-    if (strength.length >= 4) {
-      // The crown — and it must crown the team the COUNTDOWN built to,
-      // which is now the best draft grade rather than the best roster.
-      // Ranking the cards one way and crowning the other would have the
-      // deck contradict itself on its last slide.
-      //
-      // The roster winner, when it is somebody else, becomes the twist
-      // instead of the verdict: it is the more interesting fact once
-      // the deck has spent ten cards establishing who drafted well.
-      const bestDraft = graded[0]
-      const bestRoster = strength[0]
-      const differs = bestRoster && bestRoster.teamId !== bestDraft.teamId
-      slides.push({
-        kind: 'statement',
-        eyebrow: 'The verdict',
-        headline: `${input.teamName(bestDraft.teamId)} won the draft.`,
-        support:
-          `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague} rounds per pick ` +
-          `against ${basis}, the best in the room. ` +
-          (differs
-            ? `${input.teamName(bestRoster.teamId)} walks away with the stronger ` +
-              'roster on projection — beating the board and owning the best team ' +
-              'are different achievements, and this room split them. '
-            : 'They walk away with the strongest projected roster too. ') +
-          'Projections are a forecast, not a result. The season decides.',
-        chips: [
-          {
-            value: `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague}`,
-            label: 'rounds / pick',
-          },
-          ...(bestDraft.grade !== '—'
-            ? [{ value: bestDraft.grade, label: 'grade' }]
-            : []),
-          ...(bestRoster
-            ? [{ value: `${bestRoster.pointsPerWeek}`, label: 'top roster pts / wk' }]
-            : []),
-        ],
-      })
-    } else if (graded.length >= 4) {
-      // No projections resolved — fall back to crowning the value
-      // winner, which is a weaker claim and says so.
-      const winner = graded[0]
-      slides.push({
-        kind: 'statement',
-        eyebrow: 'The verdict',
-        headline: `${input.teamName(winner.teamId)} beat the board.`,
-        support:
-          `${winner.vsLeague > 0 ? '+' : ''}${winner.vsLeague} rounds per pick ` +
-          `better than the league average against ${basis}. That is value ` +
-          'against the market, which is not the same as the best roster — ' +
-          'saying which would need projections.',
-      })
-    }
+    // No closing verdict slide. It restated the rank-one card the
+    // countdown had just built to — the same team, the same figure,
+    // one slide later.
   }
 
   slides.push({

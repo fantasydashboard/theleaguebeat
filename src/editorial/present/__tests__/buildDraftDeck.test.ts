@@ -22,7 +22,9 @@ describe('the draft deck', () => {
   it('builds from a real draft', () => {
     expect(deck).not.toBeNull()
     expect(deck.id).toBe('draft')
-    expect(deck.slides.length).toBeGreaterThan(3)
+    // Just the ranking now: a title card, the countdown, an end card.
+    // Without a baseline there are no grades, so no countdown either.
+    expect(deck.slides.map((sl) => sl.kind)).toEqual(['cold-open', 'sign-off'])
   })
 
   it('opens cold and closes on a sign-off', () => {
@@ -76,25 +78,29 @@ describe('the draft deck', () => {
 })
 
 describe('logos and position-relative order', () => {
-  const deck = buildDraftDeck({
-    leagueName: data.leagueName,
-    season: data.currentSeason,
-    picks: [...(data.draft?.picks ?? [])],
-    teamName: nameOf,
-    team: (id) => {
-      const t = data.teams.find((x) => x.id === id)
-      return t && { name: t.name, avatarUrl: t.avatarUrl, avatarColor: t.avatarColor, ownerInitials: t.ownerInitials }
-    },
-  })!
-
-  it('carries a drawable team on rows that name one', () => {
-    const rows = deck.slides.flatMap((s) => (s.kind === 'list' ? s.rows : []))
-    const withTeam = rows.filter((r) => r.teamId)
+  it('carries a drawable team on every card', () => {
+    const all = [...(data.draft?.picks ?? [])]
+    const order = new Map(all.map((p, i) => [p.playerId, all.length - i]))
+    const graded = buildDraftDeck({
+      leagueName: data.leagueName,
+      season: data.currentSeason,
+      picks: all,
+      teamName: nameOf,
+      team: (id) => {
+        const t = data.teams.find((x) => x.id === id)
+        return t && { name: t.name, avatarUrl: t.avatarUrl, avatarColor: t.avatarColor, ownerInitials: t.ownerInitials }
+      },
+      consensusRank: (id) => order.get(id),
+    })!
+    const cards = graded.slides.filter((s) => s.kind === 'team-card') as unknown as {
+      teamId?: string; logoUrl?: string; logoColor?: string; logoInitials?: string
+    }[]
+    const withTeam = cards.filter((c) => c.teamId)
     expect(withTeam.length).toBeGreaterThan(0)
-    for (const r of withTeam) {
+    for (const c of withTeam) {
       // Either a real logo, or the colour+initials fallback. Never a
-      // row that claims a team and gives the renderer nothing to draw.
-      expect(Boolean(r.logoUrl || (r.logoColor && r.logoInitials))).toBe(true)
+      // card that claims a team and gives the renderer nothing to draw.
+      expect(Boolean(c.logoUrl || (c.logoColor && c.logoInitials))).toBe(true)
     }
   })
 
@@ -217,23 +223,24 @@ describe('draft grades', () => {
     }
   })
 
-  it('crowns the team the countdown built to', () => {
-    // Ranking the cards by draft grade and crowning the best ROSTER
-    // would have the deck contradict itself on its final slide.
-    const last = cards[cards.length - 1]
-    const verdict = deck.slides.find(
-      (s) => 'eyebrow' in s && s.eyebrow === 'The verdict',
-    ) as { headline: string } | undefined
-    expect(verdict).toBeDefined()
-    expect(last.rank).toBe(1)
-    expect(verdict!.headline).toContain(last.teamName)
+  it('is only the ranking — nothing before it and nothing after', () => {
+    // Four slides used to sit in front of the countdown and one
+    // behind. All were true; none was what the deck is for.
+    expect(deck.slides[0].kind).toBe('cold-open')
+    expect(deck.slides[deck.slides.length - 1].kind).toBe('sign-off')
+    const middle = deck.slides.slice(1, -1)
+    expect(middle.every((s) => s.kind === 'team-card')).toBe(true)
+    expect(middle).toHaveLength(cards.length)
   })
 
-  it('crowns the draft winner even when another team has the better roster', () => {
+  it('ends on the best draft, so the last card IS the verdict', () => {
+    expect(cards[cards.length - 1].rank).toBe(1)
+  })
+
+  it('ends on the draft winner even when another team has the better roster', () => {
     // The branch that runs when projections resolve — the one the
     // fixture above never reaches, since it passes only consensusRank.
-    // A mutation crowning the ROSTER winner survived until this
-    // existed.
+    // A mutation ranking by ROSTER survived until this existed.
     //
     // The baseline deliberately makes the WORST-graded team the
     // strongest projected roster, so the two winners cannot coincide
@@ -267,15 +274,19 @@ describe('draft grades', () => {
     const projCards = withProjections.slides.filter(
       (sl) => sl.kind === 'team-card',
     ) as unknown as { rank: number; teamName: string }[]
-    const verdict = withProjections.slides.find(
-      (sl) => 'eyebrow' in sl && sl.eyebrow === 'The verdict',
-    ) as { headline: string; support?: string } | undefined
-
-    const topDraft = projCards[projCards.length - 1].teamName
-    expect(verdict!.headline).toContain(topDraft)
-    // ...and the boosted roster is mentioned as the twist, not crowned.
-    expect(verdict!.headline).not.toContain(worstGraded)
-    expect(verdict!.support).toContain(worstGraded)
+    // `boostedTeam` was handed 1000 projected points per player, so it
+    // owns the strongest roster in the room by a mile. The countdown
+    // must still end on the best DRAFT — roster strength is not a
+    // measure of drafting and must not reorder this deck.
+    const boostedName = nameOf(boostedTeam)
+    expect(projCards[projCards.length - 1].teamName).not.toBe(boostedName)
+    // And it is genuinely the roster leader, or the assertion is empty.
+    const boostedCard = projCards.find((c) => c.teamName === boostedName) as unknown as {
+      chips?: { value: string; label: string }[]
+    }
+    expect(
+      boostedCard.chips?.find((ch) => ch.label === 'roster in the league')?.value,
+    ).toBe('1st')
   })
 
   it('leads with the figure it sorts on', () => {

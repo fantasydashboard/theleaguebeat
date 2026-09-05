@@ -1602,20 +1602,61 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
 .present.is-vertical .slide-headline,
 .present.is-vertical .spot-title { font-size: clamp(1.9rem, 4.4cqw, 3.2rem); }
 .present.is-vertical .cold-title { font-size: clamp(2.2rem, 5.4cqw, 3.8rem); }
-.present.is-vertical .team-rank { font-size: clamp(3rem, 7cqw, 5rem); }
-.present.is-vertical .team-grade { font-size: clamp(3.5rem, 9cqw, 6rem); }
+.present.is-vertical .team-rank { font-size: clamp(2rem, 7cqw, 5rem); }
+.present.is-vertical .team-grade { font-size: clamp(2.4rem, 11cqw, 6rem); }
 
-/* VERTICAL DROPS THE THREE-FACE ROW.
-   870x930 is nearly square, and three faces with names beneath them
-   shrink to the point where none of them reads at arm's length. The
-   highlighted pick keeps its face and gets bigger instead: one face
-   somebody can actually see beats three they cannot. */
-.present.is-vertical .team-players { display: none; }
-.present.is-vertical .team-player-face.is-large { width: 96px; height: 96px; }
-.present.is-vertical .team-highlight-name { font-size: 1.5rem; }
+/* EVERYTHING ON THIS CARD IS CONTAINER-RELATIVE.
+   The 870x930 box is a DESIGN size; on screen the frame is sized to
+   the window, so the real box is often ~550px wide. `vw` measures the
+   window and `px` does not scale at all — either one oversizes as the
+   box shrinks, which is what pushed the card off its own safe area.
+   `cqw` is the only unit here that tracks the box. */
+.present.is-vertical .team-name { font-size: clamp(1.1rem, 5cqw, 2.4rem); }
+.present.is-vertical .team-stat-value { font-size: clamp(1.6rem, 7.5cqw, 4rem); }
+.present.is-vertical .team-stat-label,
+.present.is-vertical .team-place,
+.present.is-vertical .team-slot { font-size: clamp(0.62rem, 2cqw, 0.86rem); }
+.present.is-vertical .team-logo { width: 11cqw; height: 11cqw; border-radius: 2.5cqw; }
+.present.is-vertical .team-head { gap: 3cqw; }
+.present.is-vertical .team-note { font-size: clamp(0.72rem, 2.4cqw, 0.98rem); }
+
+/* VERTICAL STACKS THE FACES rather than dropping them.
+   Three faces SIDE BY SIDE do not work here — the box is nearly
+   square, so each would get a third of the width and none would read
+   at arm's length. One per row does, and the tall box has the height
+   spare. The picks are the point of the card; losing them to save
+   space was solving the wrong problem. */
+.present.is-vertical .team-players { flex-direction: column; gap: 1.6cqw; width: 100%; }
+.present.is-vertical .team-player { width: 100%; column-gap: 3cqw; }
+.present.is-vertical .team-player-face { width: 12cqw; height: 12cqw; }
+.present.is-vertical .team-player-name { font-size: clamp(0.82rem, 3cqw, 1.15rem); }
+.present.is-vertical .team-player-sub { font-size: clamp(0.66rem, 2.2cqw, 0.9rem); }
+.present.is-vertical .team-highlight {
+  /* Was 62ch, which is measured in the ROOT font and so ignored the
+     box entirely — the card ran off the safe area and the platform
+     clipped the basis mid-word. */
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 3cqw;
+  padding: 2.5cqw;
+}
+.present.is-vertical .team-player-face.is-large { width: 17cqw; height: 17cqw; }
+.present.is-vertical .team-highlight-tag { font-size: clamp(0.58rem, 1.9cqw, 0.7rem); }
+.present.is-vertical .team-highlight-name { font-size: clamp(1rem, 4.2cqw, 1.6rem); }
+.present.is-vertical .team-highlight-sub {
+  font-size: clamp(0.68rem, 2.3cqw, 0.9rem);
+  /* The basis can be long — "6 rds ahead of Sleeper half-PPR ADP" —
+     and a clipped basis is worse than a wrapped one, because the
+     figure above it stops being checkable. */
+  overflow-wrap: anywhere;
+}
 /* Chips are the first thing to go if the card still runs long: they
    are context, and the grade, the pick and the twist are the claim. */
 .present.is-vertical .slide-team .slide-chips { display: none; }
+/* Last resort. The stage clips silently, so a card that still runs
+   long would lose its bottom line with no sign it had. */
+.present.is-vertical .slide-team { gap: 2.5cqw; }
 .present.is-vertical .present-stage { container-type: inline-size; }
 
 /* One column: the box is nearly square (870x930), so the two-column
