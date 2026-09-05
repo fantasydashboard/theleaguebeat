@@ -185,14 +185,22 @@
                      supplies the noun, so the label is just "Present" —
                      "Present the draft" inside a header that already
                      says The draft is the word twice. -->
-                <span v-if="routeLeagueId && isPresentable(sec)" class="issue-sec-present">
+                <!-- A section earns a button either by having its own
+                     sequence to walk (isPresentable) or by naming a
+                     purpose-built deck it introduces. The draft is the
+                     second kind: one statement here, ten cards in
+                     present mode. -->
+                <span
+                  v-if="routeLeagueId && (sec.deckId || isPresentable(sec))"
+                  class="issue-sec-present"
+                >
                   <router-link
-                    :to="`/leagues/${routeLeagueId}/present/${sec.id}`"
+                    :to="`/leagues/${routeLeagueId}/present/${sec.deckId ?? sec.id}`"
                     class="issue-present-btn"
                     :title="`Present ${sec.eyebrow.toLowerCase()}`"
                   >▶ Present</router-link>
                   <router-link
-                    :to="`/leagues/${routeLeagueId}/present/${sec.id}?format=vertical`"
+                    :to="`/leagues/${routeLeagueId}/present/${sec.deckId ?? sec.id}?format=vertical`"
                     class="issue-present-btn issue-present-btn-alt"
                     :title="`Present ${sec.eyebrow.toLowerCase()} vertically, for social`"
                   >▯</router-link>

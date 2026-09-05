@@ -128,6 +128,21 @@ export interface IssueSection {
    * cases the default cannot know about.
    */
   presentable?: boolean
+  /**
+   * A bespoke deck this section introduces, by deck id.
+   *
+   * `presentable` asks whether a section can generate its OWN slides
+   * from its own rows and cards. This asks a different question: does
+   * a purpose-built deck already exist that this section is the
+   * doorway to? The draft is one statement on the page and a
+   * ten-card countdown in present mode, and the button belongs beside
+   * the statement — which is where a reader looks for it — rather than
+   * on whichever legacy section happens to be rendering at the foot of
+   * the page.
+   *
+   * Set it and the section gets a button regardless of `presentable`.
+   */
+  deckId?: string
 }
 
 export interface Issue {

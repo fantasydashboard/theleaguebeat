@@ -924,7 +924,13 @@ async function load(): Promise<void> {
     // the page cannot describe the same week differently. The legacy
     // decks below remain the fallback for ids the issue does not cover
     // — nothing breaks mid-migration.
-    const issue = points
+    // Bespoke decks below own these ids outright, and assembling the
+    // issue to discover that costs a preseason league the 3MB
+    // projections payload, the roster fetch and fourteen weeks of
+    // matchups — on the exact route the reader chose to open. The
+    // issue would then be discarded a few lines down.
+    const BESPOKE = ['draft', 'board', 'wire']
+    const issue = points && !BESPOKE.includes(deckId)
       ? await assembleIssue({
           data: points,
           leagueName: record.league_name || data.leagueName,

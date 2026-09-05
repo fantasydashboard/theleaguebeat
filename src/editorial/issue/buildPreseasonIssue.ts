@@ -137,6 +137,10 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
       // disagreement between them.
       visual: artFor(input, [bestDraft.teamId, best.teamId]),
       priority: 20,
+      // One statement on the page, a ten-card countdown in present
+      // mode. The button belongs beside the statement about the draft,
+      // which is where a reader goes looking for it.
+      deckId: 'draft',
     })
   }
 

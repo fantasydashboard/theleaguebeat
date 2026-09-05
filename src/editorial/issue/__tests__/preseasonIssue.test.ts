@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildPreseasonIssue } from '../buildPreseasonIssue'
 import { deckFromIssue } from '../toSlides'
-import { orderSections, type IssueSection } from '../types'
+import { isPresentable, orderSections, type IssueSection } from '../types'
 import type { TeamStrength } from '@/editorial/points/rosterStrength'
 import type { TeamDraftValue } from '@/editorial/points/draftValue'
 
@@ -85,6 +85,25 @@ describe('buildPreseasonIssue', () => {
     const twist = differs.sections.find((s) => s.id === 'draft-vs-roster')!
     expect(twist.headline).toContain('Team e')
     expect(twist.headline).toContain("don't have the best team")
+  })
+
+  it('points the draft section at the draft deck', () => {
+    // The section is ONE statement, so `isPresentable` says it cannot
+    // generate its own slides — correct, and it used to mean no button
+    // at all on the section labelled "The draft". The ten-card deck
+    // behind it exists either way, and the button belongs beside the
+    // statement rather than on whichever legacy section happens to be
+    // rendering at the foot of the page.
+    const issue = buildPreseasonIssue({
+      ...base, strength: five, graded: graded(['e', 'b', 'c', 'd', 'a']),
+    })!
+    const draft = issue.sections.find((s) => s.id === 'draft-vs-roster')!
+    expect(draft.deckId).toBe('draft')
+    expect(isPresentable(draft)).toBe(false)
+
+    // And it still cannot be presented AS a section — the deck it
+    // names is built elsewhere, not from these slides.
+    expect(deckFromIssue(issue, { only: 'draft-vs-roster' })).toBeNull()
   })
 
   it('gives every team a card with something specific about them', () => {
