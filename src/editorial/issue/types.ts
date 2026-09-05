@@ -32,6 +32,9 @@ export interface IssueRow {
   logoUrl?: string
   logoColor?: string
   logoInitials?: string
+  /** A face, when the row is about a person. Vertical format gives a
+   *  row its own screen, and a name alone on a screen is thin. */
+  imageUrl?: string
 }
 
 /** One team, presented on its own. */

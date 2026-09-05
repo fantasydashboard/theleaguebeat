@@ -52,6 +52,9 @@ export interface PreseasonIssueInput {
   team?: (teamId: string) => PreseasonIssueTeam | undefined
   /** e.g. "half-PPR" — names the projection basis. */
   formatLabel?: string
+  /** Headshot for a player id. Optional: without it a waiver slide
+   *  shows the acquiring team's crest instead of a face. */
+  playerImage?: (playerId: string) => string | null | undefined
 }
 
 /** Section artwork for one or two teams. */
@@ -267,6 +270,7 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
         sub: input.teamName(a.teamId),
         value: a.faabBid ? `$${a.faabBid}` : undefined,
         teamId: a.teamId,
+        imageUrl: input.playerImage?.(a.playerId) ?? undefined,
         ...visual(input, a.teamId),
       })),
       priority: 50,

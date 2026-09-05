@@ -19,6 +19,9 @@ import { acquiringTeams } from '../transactions/types'
 
 export interface WireAdd {
   teamId: string
+  /** Platform-native player id, for a headshot. Vertical format gives
+   *  a claim its own screen, and a name alone on a screen is thin. */
+  playerId: string
   playerName: string
   position?: string
   /** Winning FAAB bid, when the league uses FAAB. */
@@ -110,6 +113,7 @@ export function buildWireFacts(
     if (!teamId || !arriving) continue
     adds.push({
       teamId,
+      playerId: arriving.playerId,
       playerName: arriving.playerName,
       position: arriving.position,
       faabBid: tx.faabBid,

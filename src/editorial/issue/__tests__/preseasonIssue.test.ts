@@ -40,6 +40,18 @@ const base = {
 
 const five = strength([['a', 112], ['b', 108], ['c', 104], ['d', 100], ['e', 96]])
 
+/** Enough of a projected season for the schedule section to exist. */
+const projected = five.map((t, i) => ({
+  teamId: t.teamId,
+  pointsPerWeek: t.pointsPerWeek,
+  expectedWins: 7 - i * 0.4,
+  gamesScheduled: 14,
+  opponentPointsPerWeek: 106,
+  powerRank: i + 1,
+  seasonRank: i + 1,
+  scheduleSwing: 0,
+}))
+
 describe('buildPreseasonIssue', () => {
   it('leads with a named favourite, not a table', () => {
     // A preseason issue that opens with "here is the board" is not an
@@ -98,9 +110,18 @@ describe('buildPreseasonIssue', () => {
 })
 
 describe('deckFromIssue', () => {
+  // `projected` matters: without it there is no schedule section, and
+  // the opt-out test below passes vacuously while asserting nothing.
   const issue = buildPreseasonIssue({
-    ...base, strength: five, graded: graded(['e', 'b', 'c', 'd', 'a']),
+    ...base, strength: five, graded: graded(['e', 'b', 'c', 'd', 'a']), projected,
   })!
+
+  it('has the sections these tests rely on', () => {
+    // Guards the fixture itself. A missing section turns the assertions
+    // below into tautologies that pass while testing nothing.
+    expect(issue.sections.map((s) => s.id)).toContain('schedule')
+    expect(issue.sections.map((s) => s.id)).toContain('the-field')
+  })
 
   it('presents the issue rather than assembling its own', () => {
     // THE architectural guarantee. Every headline the deck shows must
@@ -141,6 +162,70 @@ describe('deckFromIssue', () => {
     }
     const deck = deckFromIssue(trimmed)!
     expect(JSON.stringify(deck)).not.toContain('schedule spread')
+  })
+
+  it('presents one section alone, titled by that section', () => {
+    // Every section button is this. A single-section deck is its own
+    // clip, so it is titled "The schedule", not "Week 3".
+    const deck = deckFromIssue(issue, { only: 'schedule' })!
+    expect(deck.id).toBe('schedule')
+    expect(deck.title).toBe('The schedule')
+    const eyebrows = deck.slides
+      .map((s) => ('eyebrow' in s ? s.eyebrow : null))
+      .filter(Boolean)
+    expect(new Set(eyebrows)).toEqual(new Set(['The schedule']))
+  })
+
+  it('returns null for a section that does not exist', () => {
+    expect(deckFromIssue(issue, { only: 'nonsense' })).toBeNull()
+  })
+
+  it('explodes a list into one screen per item in vertical', () => {
+    // THE reason vertical exists as a format rather than a stylesheet.
+    // A list that accumulates rows is unreadable in an 870x930 box and
+    // gives the presenter nothing to talk about one at a time.
+    const withRows = {
+      ...issue,
+      sections: [
+        {
+          id: 'wire', eyebrow: 'Since the draft', headline: '8 moves already.',
+          support: 'Long support the presenter would be reading aloud.',
+          priority: 50,
+          rows: [
+            { label: 'Player A', sub: 'Team a', value: '$7' },
+            { label: 'Player B', sub: 'Team b', value: '$4' },
+          ],
+        },
+      ],
+    }
+    const landscape = deckFromIssue(withRows, { only: 'wire' })!
+    const vertical = deckFromIssue(withRows, { only: 'wire', format: 'vertical' })!
+
+    expect(landscape.slides.filter((s) => s.kind === 'list')).toHaveLength(1)
+    expect(vertical.slides.filter((s) => s.kind === 'list')).toHaveLength(0)
+    const spots = vertical.slides.filter((s) => s.kind === 'spotlight') as { title: string }[]
+    expect(spots.map((s) => s.title)).toEqual(['Player A', 'Player B'])
+  })
+
+  it('drops support text in vertical, because the presenter is the narration', () => {
+    // Two sentences on screen while somebody reads them aloud is the
+    // same information twice, in the space a name needs.
+    const vertical = deckFromIssue(issue, { format: 'vertical' })!
+    const landscape = deckFromIssue(issue)!
+    const supportOf = (d: typeof vertical) =>
+      d.slides.map((s) => ('support' in s ? s.support : undefined)).filter(Boolean)
+    expect(supportOf(landscape).length).toBeGreaterThan(0)
+    expect(supportOf(vertical)).toHaveLength(0)
+  })
+
+  it('still counts cards down one-per-slide in both formats', () => {
+    // Cards were already the right unit; vertical did not need to
+    // change them, only rows.
+    for (const format of ['landscape', 'vertical'] as const) {
+      const deck = deckFromIssue(issue, { format })!
+      const cards = deck.slides.filter((s) => s.kind === 'team-card') as { rank: number }[]
+      expect(cards.map((c) => c.rank)).toEqual([5, 4, 3, 2, 1])
+    }
   })
 
   it('returns null when nothing is presentable', () => {

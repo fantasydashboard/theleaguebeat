@@ -108,6 +108,35 @@ export interface TeamCardSlide {
   logoInitials?: string
 }
 
+/**
+ * One thing, alone on the screen.
+ *
+ * What a list row becomes in vertical format. A waiver pickup, a
+ * matchup, one side of a trade — anything where the unit is a single
+ * item the presenter talks about for a sentence.
+ *
+ * Distinct from `team-card` because the subject is not always a team:
+ * a $47 waiver claim is about a PLAYER, and forcing it through a team
+ * shape would bury the name that is the whole point of the slide.
+ */
+export interface SpotlightSlide {
+  kind: 'spotlight'
+  eyebrow: string
+  /** The subject — a player, a matchup, a side of a trade. */
+  title: string
+  /** Who it belongs to, or what it is set against. */
+  subtitle?: string
+  /** The figure that makes it worth a slide. */
+  statValue?: string
+  statLabel?: string
+  /** A face, when there is one. */
+  imageUrl?: string
+  teamId?: string
+  logoUrl?: string
+  logoColor?: string
+  logoInitials?: string
+}
+
 /** Closing card. */
 export interface SignOffSlide {
   kind: 'sign-off'
@@ -120,6 +149,7 @@ export type PresentSlide =
   | StatementSlide
   | ListSlide
   | TeamCardSlide
+  | SpotlightSlide
   | SignOffSlide
 
 export interface PresentDeck {

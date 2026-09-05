@@ -72,6 +72,13 @@ describe('buildWireFacts', () => {
     expect(facts.adds.map((a) => a.playerName)).toEqual(['First', 'Second'])
   })
 
+  it('carries the arriving player id, so a slide can show a face', () => {
+    // Vertical format gives a claim its own screen. Without the id
+    // there is no headshot, and a name alone on a screen is thin.
+    const facts = buildWireFacts([add('1', 't1', 'Arriving', 3, { faabBid: 9 })])!
+    expect(facts.adds[0].playerId).toBe('p-1')
+  })
+
   it('names the arriving player, not the one dropped', () => {
     // A pickup that drops someone is still a pickup; naming the corpse
     // would bury the story.
@@ -135,16 +142,16 @@ describe('buildWireFacts', () => {
 
 describe('describeCost', () => {
   it('states how a claim was won', () => {
-    expect(describeCost({ teamId: 't', playerName: 'A', faabBid: 47, kind: 'faab-add' })).toBe('$47')
+    expect(describeCost({ teamId: 't', playerId: 'p', playerName: 'A', faabBid: 47, kind: 'faab-add' })).toBe('$47')
     expect(
-      describeCost({ teamId: 't', playerName: 'A', waiverPriority: 3, kind: 'waiver-add' }),
+      describeCost({ teamId: 't', playerId: 'p', playerName: 'A', waiverPriority: 3, kind: 'waiver-add' }),
     ).toBe('priority 3')
-    expect(describeCost({ teamId: 't', playerName: 'A', kind: 'fa-add' })).toBe('free agency')
+    expect(describeCost({ teamId: 't', playerId: 'p', playerName: 'A', kind: 'fa-add' })).toBe('free agency')
   })
 
   it('does not render a $0 bid as a price paid', () => {
     // Sleeper reports 0 for a claim in a league with no FAAB.
-    expect(describeCost({ teamId: 't', playerName: 'A', faabBid: 0, kind: 'waiver-add' })).toBe(
+    expect(describeCost({ teamId: 't', playerId: 'p', playerName: 'A', faabBid: 0, kind: 'waiver-add' })).toBe(
       'off waivers',
     )
   })
