@@ -133,6 +133,20 @@
         </div>
       </section>
 
+      <!-- Present the WHOLE issue. The section buttons below are for
+           one clip each; this is the league-call walkthrough. -->
+      <div v-if="issueBody.length && routeLeagueId" class="issue-present-all">
+        <router-link
+          :to="`/leagues/${routeLeagueId}/present/issue`"
+          class="issue-present-btn issue-present-btn-lead"
+        >▶ Present the issue</router-link>
+        <router-link
+          :to="`/leagues/${routeLeagueId}/present/issue?format=vertical`"
+          class="issue-present-btn issue-present-btn-alt"
+          title="Vertical, for social"
+        >▯ Vertical</router-link>
+      </div>
+
       <!-- ─── THE ASSEMBLED ISSUE ──────────────────────────────────
            Sections from `buildPreseasonIssue`, which present mode
            renders from the SAME object. Loaded lazily: the projections
@@ -163,7 +177,27 @@
               </span>
             </div>
             <header class="section-head issue-sec-copy">
-              <p class="section-eyebrow">{{ sec.eyebrow }}</p>
+              <div class="issue-sec-bar">
+                <p class="section-eyebrow">{{ sec.eyebrow }}</p>
+                <!-- The control sits with its subject. Three buttons in
+                     a row under the draft meant "Present the board" was
+                     attached to a story about the draft. The section
+                     supplies the noun, so the label is just "Present" —
+                     "Present the draft" inside a header that already
+                     says The draft is the word twice. -->
+                <span v-if="sec.presentable !== false && routeLeagueId" class="issue-sec-present">
+                  <router-link
+                    :to="`/leagues/${routeLeagueId}/present/${sec.id}`"
+                    class="issue-present-btn"
+                    :title="`Present ${sec.eyebrow.toLowerCase()}`"
+                  >▶ Present</router-link>
+                  <router-link
+                    :to="`/leagues/${routeLeagueId}/present/${sec.id}?format=vertical`"
+                    class="issue-present-btn issue-present-btn-alt"
+                    :title="`Present ${sec.eyebrow.toLowerCase()} vertically, for social`"
+                  >▯</router-link>
+                </span>
+              </div>
               <h2 class="section-headline">{{ sec.headline }}</h2>
               <p v-if="sec.support" class="section-lede">{{ sec.support }}</p>
             </header>
@@ -387,43 +421,18 @@
           </li>
         </ul>
 
-        <!-- Both decks live here rather than under Power Rankings,
-             because Power Rankings is hidden until the season starts
-             and the board's preseason edition is exactly what a league
-             wants in the week BEFORE kickoff. -->
+        <!-- The three "Present the ..." buttons that used to sit here
+             are gone. They were attached to the DRAFT section while
+             presenting the board and the wire, and each section now
+             carries its own control. What remains is the link to the
+             full draft board, which is a deeper view rather than a
+             presentation. -->
         <div v-if="routeLeagueId" class="points-draft-actions">
-          <router-link
-            :to="`/leagues/${routeLeagueId}/present/draft`"
-            class="points-draft-link points-draft-link-primary"
-          >
-            Present the draft
-          </router-link>
-          <!-- Sleeper only, and shown conditionally rather than
-               offered and then failing. The board is built from
-               Sleeper's ADP and projections, which are keyed by Sleeper
-               player_id; an ESPN or Yahoo pick carries that platform's
-               own id and resolves to nothing. Offering the button and
-               landing on "nothing to present" is worse than not
-               offering it. -->
-          <router-link
-            v-if="canPresentWire"
-            :to="`/leagues/${routeLeagueId}/present/wire`"
-            class="points-draft-link points-draft-link-primary"
-          >
-            Present the wire
-          </router-link>
-          <router-link
-            v-if="canPresentBoard"
-            :to="`/leagues/${routeLeagueId}/present/board`"
-            class="points-draft-link points-draft-link-primary"
-          >
-            Present the board
-          </router-link>
           <router-link
             :to="`/leagues/${routeLeagueId}/draft`"
             class="points-draft-link"
           >
-            See the full board
+            See the full board            See the full board
           </router-link>
         </div>
       </section>
@@ -1559,40 +1568,6 @@ const showPointsDraft = computed(
     hasDraftData.value &&
     pointsCover.value?.eyebrow !== 'The draft',
 )
-
-/**
- * Whether the power-rankings deck can actually be built.
- *
- * Two editions, two requirements:
- *
- *   in season   all-play power, from `weeklyScores` and `standings` on
- *               the contract. Every platform builds these now, so any
- *               league qualifies once games have been played.
- *   preseason   projections, current rosters and the published
- *               schedule — all Sleeper-specific fetches. ESPN and
- *               Yahoo cannot produce this edition.
- *
- * So a non-Sleeper league gets the button the moment week one closes,
- * and not before. Offering it earlier would land on an empty deck.
- */
-/**
- * Whether there is a wire worth presenting.
- *
- * Platform-neutral: transactions are on the points contract for all
- * three now. Gated on there being at least one move, because a deck
- * that opens on "0 moves this week" is not a quiet week worth
- * reporting — it is an empty deck.
- */
-const canPresentWire = computed(
-  () => (livePointsData.value?.transactions?.length ?? 0) > 0,
-)
-
-const canPresentBoard = computed(() => {
-  const data = livePointsData.value
-  if (!data) return false
-  if (livePlatform.value === 'sleeper') return showPointsDraft.value
-  return hasPlayedGames(data)
-})
 
 /** The few facts worth stating outright, each only when present. */
 const pointsDraftFacts = computed(() => {
@@ -3661,4 +3636,33 @@ function collectUserIdentity() {
 /* The field is the one section that earns its length — it is ten teams
    and people read their own. Everything else stays compact. */
 .issue-sec .standings { margin-top: 10px; }
+
+/* ── PRESENT CONTROLS ───────────────────────────────────────────────
+   Attached to their subject rather than piled in one row. Small, so
+   six of them down a page read as controls and not as a call to
+   action competing with the copy. */
+.issue-sec-bar { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.issue-sec-present { display: inline-flex; gap: 6px; flex: none; }
+.issue-present-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; text-decoration: none;
+  color: oklch(0.85 0.17 92);
+  border: 1px solid oklch(0.4 0.09 92);
+  background: oklch(0.14 0.03 92);
+  white-space: nowrap;
+}
+.issue-present-btn:hover { background: oklch(0.2 0.05 92); }
+.issue-present-btn-alt { padding: 6px 10px; letter-spacing: 0; }
+.issue-present-btn-lead {
+  font-size: 0.78rem; padding: 10px 18px;
+  background: oklch(0.85 0.17 92); color: oklch(0.15 0.02 90);
+  border-color: transparent;
+}
+.issue-present-btn-lead:hover { background: oklch(0.9 0.17 92); }
+.issue-present-all { display: flex; gap: 10px; align-items: center; margin: 4px 0 8px; }
+@media (max-width: 700px) {
+  .issue-sec-bar { flex-wrap: wrap; }
+}
 </style>

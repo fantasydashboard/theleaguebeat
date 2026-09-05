@@ -92,6 +92,20 @@ const router = createRouter({
     // by the Supabase `leagues.id` UUID so the switcher can deep-link
     // without exposing platform identifiers.
     {
+      // PRESENT MODE IS TOP-LEVEL, not a child of the league layout.
+      // Nested, the app's masthead and nav tabs rendered on top of what
+      // is meant to be a full-screen presentation — the audience saw
+      // "YOUR COLUMN / THE ISSUE" above the slide, and the deck's own
+      // chrome (exit, format toggle) was pushed behind it and became
+      // unreachable.
+      //
+      // One deck per URL so a specific one can be linked and reopened.
+      path: '/leagues/:leagueId/present/:deckId',
+      name: 'my-league-present',
+      component: () => import('@/views/PresentView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/leagues/:leagueId',
       component: () => import('@/views/MyLeagueLayout.vue'),
       meta: { requiresAuth: true },
@@ -153,14 +167,6 @@ const router = createRouter({
           path: 'draft',
           name: 'my-league-draft',
           component: () => import('@/views/CategoryDemoDraftView.vue'),
-        },
-        {
-          // Present mode — full-screen slides a commissioner can walk
-          // their league through, live or over a screenshare. One deck
-          // per URL so a specific deck can be linked and reopened.
-          path: 'present/:deckId',
-          name: 'my-league-present',
-          component: () => import('@/views/PresentView.vue'),
         },
         {
           // Chronicles — the editorial archive. Year-Cards + The
