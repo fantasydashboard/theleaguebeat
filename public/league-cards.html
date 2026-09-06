@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League cards — The League Beat</title>
+<!--
+  Full-screen vertical cards for video: who is in each league, and who has
+  actually won this thing.
+
+    ?view=lor        League of Record, by division
+    ?view=ffl        Futures Football League
+    ?view=honours    Champions, 2019 onward
+    ?ratio=16x9      widescreen cut of any of the above
+    ?export          renders 1:1 for a clean full-page capture
+
+  ROSTERS ARE FETCHED LIVE from Sleeper's public API. Team names change
+  constantly — mid-season, after a bad week, for a joke — and a graphic
+  with last month's names in it is worse than no graphic. The endpoints
+  are public and unauthenticated, and the app already reads them from the
+  browser, so there is nothing to proxy.
+
+  CHAMPIONS ARE BAKED IN. Working them out live costs three requests per
+  season and they cannot change: the bracket for 2021 is settled forever.
+
+  NO USERNAMES, ANYWHERE — not on screen, not in this file. Teams are
+  identified by their FRANCHISE name only.
+
+  Champions are keyed on the owner id, an opaque API key rather than a
+  name, because one manager won in both 2019 and 2021 under two
+  different team names. Keyed on team name that reads as two separate
+  one-time winners and loses a two-time champion; keyed on owner and
+  resolved to the franchise they run TODAY, the repeat shows and nobody
+  is named.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: oklch(0.97 0.005 90); --muted: oklch(0.62 0.01 90); --dim: oklch(0.48 0.01 90);
+    --bg: oklch(0.09 0.014 90); --panel: oklch(0.15 0.012 90); --line: oklch(0.26 0.02 90);
+    --gold: oklch(0.85 0.17 92); --pink: oklch(0.70 0.27 350);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: #000;
+    font-family: 'Barlow', system-ui, sans-serif;
+    display: grid; place-items: center; overflow: hidden;
+  }
+  .frame {
+    width: 1080px; height: 1920px; flex: none;
+    position: fixed; left: 50%; top: 50%;
+    transform-origin: center;
+    background:
+      radial-gradient(120% 60% at 50% 0%, oklch(0.18 0.035 92 / 0.5), transparent 62%),
+      var(--bg);
+    color: var(--ink);
+  }
+  body[data-ratio="16x9"] .frame { width: 1920px; height: 1080px; }
+
+  /* Taller than the ground-rules card: a full roster is the content, not
+     an overlay, so it uses more of the screen. Still clear of the caption
+     strip at the bottom and the button rail on the right. */
+  .safe {
+    position: absolute; left: 5.5%; top: 7%; width: 83%; height: 81%;
+    display: flex; flex-direction: column;
+  }
+  body[data-ratio="16x9"] .safe { left: 6%; top: 7%; width: 88%; height: 84%; }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  .head { display: flex; align-items: center; gap: 28px; margin-bottom: 30px; }
+  .crest {
+    width: 168px; height: 168px; object-fit: contain; flex: none;
+    border-radius: 20px;  /* the logo files carry their own cream ground */
+  }
+  body[data-ratio="16x9"] .crest { width: 130px; height: 130px; }
+  .head-copy { min-width: 0; }
+  .eyebrow {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--pink); margin-bottom: 4px;
+  }
+  h1 { margin: 0; font-size: 68px; font-weight: 900; line-height: 0.95; letter-spacing: -0.03em; }
+  body[data-ratio="16x9"] h1 { font-size: 56px; }
+  .sub { font-size: 26px; color: var(--muted); margin-top: 8px; }
+
+  /* ── Team list ────────────────────────────────────────────── */
+  .divhead {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+    margin: 22px 0 12px; display: flex; align-items: center; gap: 14px;
+  }
+  .divhead::after { content: ''; flex: 1; height: 2px; background: var(--line); }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  li {
+    display: flex; align-items: center; gap: 20px;
+    background: var(--panel); border: 2px solid transparent;
+    border-radius: 16px; padding: 12px 20px;
+  }
+  li[data-champ] { border-color: oklch(0.42 0.10 92); background: linear-gradient(90deg, oklch(0.20 0.045 92 / 0.7), var(--panel) 55%); }
+  .av {
+    width: 72px; height: 72px; border-radius: 14px; flex: none; overflow: hidden;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 800; font-size: 24px; color: var(--muted);
+  }
+  .av img { width: 100%; height: 100%; object-fit: cover; }
+  /* Spans, so they must be told to stack — inline by default put the
+     the second line sat alongside the first, overlapping it. */
+  .names { min-width: 0; flex: 1; }
+  .names > span { display: block; }
+  .tname {
+    font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cups { display: flex; gap: 6px; flex: none; align-items: center; }
+  .cup { font-size: 30px; line-height: 1; filter: saturate(1.2); }
+  .cupn {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 22px;
+    color: var(--gold); letter-spacing: 0.08em;
+  }
+
+  /* Two columns when a list runs long in widescreen. */
+  body[data-ratio="16x9"] .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; align-items: start; }
+
+  /* ── Honours board ────────────────────────────────────────── */
+  .years { display: flex; flex-direction: column; gap: 12px; }
+  .yr { display: flex; align-items: center; gap: 22px; padding: 14px 20px;
+        background: var(--panel); border-radius: 16px; border: 2px solid transparent; }
+  .yr[data-repeat] { border-color: oklch(0.42 0.10 92); }
+  .yr-num {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 40px;
+    color: var(--gold); flex: none; width: 110px; letter-spacing: 0.02em;
+  }
+  .yr-name { font-size: 34px; font-weight: 800; line-height: 1.1; }
+  .yr-as { font-size: 21px; color: var(--dim); margin-top: 2px; }
+  .foot {
+    margin-top: auto; padding-top: 26px;
+    font-size: 24px; color: var(--dim); line-height: 1.4;
+    border-left: 3px solid var(--line); padding-left: 18px;
+  }
+  .err { padding: 40px; font-size: 28px; color: oklch(0.72 0.19 40); }
+
+  /* Export: 1:1, page sized to the frame, nothing overlaid. */
+  html[data-export], body[data-export] { display: block; overflow: visible; height: auto; width: auto; }
+  .shell { display: contents; }
+  body[data-export] .shell { display: block; overflow: hidden; margin: 0; }
+  body[data-export] .frame { position: relative; left: 0; top: 0; transform-origin: top left; }
+  body[data-export] .hint { display: none; }
+  .hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+          font-size: 12px; color: #555; font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+  <div class="shell" id="shell">
+    <div class="frame" id="frame">
+      <div class="safe" id="safe"><div class="err">Loading…</div></div>
+    </div>
+  </div>
+  <div class="hint" id="hint"></div>
+
+<script>
+const LEAGUES = {
+  lor: { id: '1389692138421239808', name: 'League of Record', eyebrow: 'Top flight',  crest: '/league/lor-logo.png', divisions: true },
+  ffl: { id: '1389738108437680128', name: 'Futures Football League', eyebrow: 'Second tier', crest: '/league/ffl-logo.png', divisions: false },
+}
+
+// Settled history — keyed on OWNER, because team names move.
+const CHAMPIONS = [
+  { year: 2019, owner: '460845073509117952', as: 'Black Panther' },
+  { year: 2020, owner: '414190204908216320', as: 'Gridiron Man' },
+  { year: 2021, owner: '460845073509117952', as: 'Inspector General' },
+  { year: 2022, owner: '342904407941357568', as: 'Scuttlebucs' },
+  { year: 2023, owner: '414190204908216320', as: 'Gridiron Man' },
+  { year: 2024, owner: '414222972006453248', as: 'Mighty Mallards' },
+  { year: 2025, owner: '460815427782569984', as: 'The Aman-Ra Stars' },
+]
+const TITLES = CHAMPIONS.reduce((m, c) => (m[c.owner] = (m[c.owner] || 0) + 1, m), {})
+
+const params = new URLSearchParams(location.search)
+const view = params.get('view') || 'lor'
+const exporting = params.has('export')
+if (params.get('ratio') === '16x9') document.body.dataset.ratio = '16x9'
+if (exporting) { document.body.dataset.export = ''; document.documentElement.dataset.export = '' }
+
+const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+const initials = (s) => String(s || '?').replace(/[^\p{L}\p{N} ]/gu, '').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'
+
+function cups(n) {
+  if (!n) return ''
+  return `<span class="cups">${'<span class="cup">🏆</span>'.repeat(Math.min(n, 2))}${n > 2 ? `<span class="cupn">×${n}</span>` : ''}</span>`
+}
+
+function teamRow(t) {
+  const n = TITLES[t.owner] || 0
+  const av = t.avatar
+    ? `<img src="${esc(t.avatar)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${esc(initials(t.team))}'}))">`
+    : esc(initials(t.team))
+  return `<li ${n ? 'data-champ' : ''}>
+    <span class="av">${av}</span>
+    <span class="names"><span class="tname">${esc(t.team)}</span></span>
+    ${cups(n)}
+  </li>`
+}
+
+async function loadLeague(key) {
+  const cfg = LEAGUES[key]
+  const [league, rosters, users] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/users`).then((r) => r.json()),
+  ])
+  const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+  const teams = rosters.map((r) => {
+    const u = byId[r.owner_id] || {}
+    const md = u.metadata || {}
+    return {
+      owner: r.owner_id,
+      // A roster can be orphaned, so never assume an owner resolves.
+      team: md.team_name || `Team ${r.roster_id}`,
+      avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
+      division: (r.settings || {}).division || 0,
+    }
+  })
+  const md = league.metadata || {}
+  const groups = cfg.divisions
+    ? [...new Set(teams.map((t) => t.division))].sort().map((d) => ({
+        label: md[`division_${d}`] || `Division ${d}`,
+        teams: teams.filter((t) => t.division === d),
+      }))
+    : [{ label: null, teams }]
+
+  document.getElementById('safe').innerHTML = `
+    <div class="head">
+      <img class="crest" src="${cfg.crest}" alt="">
+      <div class="head-copy">
+        <div class="eyebrow">${esc(cfg.eyebrow)}</div>
+        <h1>${esc(league.name || cfg.name)}</h1>
+        <div class="sub">${teams.length} teams · ${league.season}</div>
+      </div>
+    </div>
+    <div class="cols">
+      ${groups.map((g) => `
+        ${g.label ? `<div class="divhead">${esc(g.label)}</div>` : ''}
+        <ol>${g.teams.map(teamRow).join('')}</ol>
+      `).join('')}
+    </div>`
+}
+
+async function currentFranchises() {
+  // Both leagues, so a champion who has since been relegated still
+  // resolves to the franchise they run today.
+  const out = {}
+  await Promise.all(Object.values(LEAGUES).map(async (cfg) => {
+    const [rosters, users] = await Promise.all([
+      fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
+      fetch(`https://api.sleeper.app/v1/league/${cfg.id}/users`).then((r) => r.json()),
+    ])
+    const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+    for (const r of rosters) {
+      const u = byId[r.owner_id]
+      if (u) out[r.owner_id] = (u.metadata || {}).team_name || `Team ${r.roster_id}`
+    }
+  }))
+  return out
+}
+
+async function loadHonours() {
+  const now = await currentFranchises()
+  // The franchise as it stands today. Listing only the name a title was
+  // won under splits one manager's two titles across two names and hides
+  // the repeat completely.
+  const nameOf = (c) => now[c.owner] || c.as
+  // Sleeper stores names with stray whitespace — "Black Panther " and
+  // "Black Panther" are the same franchise, and comparing them raw
+  // printed "won as Black Panther" underneath "Black Panther".
+  const same = (a, b) => String(a).trim() === String(b).trim()
+  const repeat = new Set(Object.keys(TITLES).filter((o) => TITLES[o] > 1))
+  document.getElementById('safe').innerHTML = `
+    <div class="head">
+      <img class="crest" src="${LEAGUES.lor.crest}" alt="">
+      <div class="head-copy">
+        <div class="eyebrow">The honours board</div>
+        <h1>Every champion.</h1>
+        <div class="sub">League of Record · ${CHAMPIONS[0].year}–${CHAMPIONS[CHAMPIONS.length - 1].year}</div>
+      </div>
+    </div>
+    <div class="years">
+      ${[...CHAMPIONS].reverse().map((c) => `
+        <div class="yr" ${repeat.has(c.owner) ? 'data-repeat' : ''}>
+          <span class="yr-num">${c.year}</span>
+          <span class="names"><span class="yr-name">${esc(nameOf(c))}</span>${!same(nameOf(c), c.as) ? `<span class="yr-as">won as ${esc(c.as)}</span>` : ''}</span>
+          ${repeat.has(c.owner) ? '<span class="cups"><span class="cup">🏆</span></span>' : ''}
+        </div>`).join('')}
+    </div>
+    <p class="foot">Two franchises have won it twice — and nobody has ever gone back to back.</p>`
+}
+
+function fit() {
+  const f = document.getElementById('frame')
+  if (exporting) {
+    const s = Math.min(1, window.innerWidth / f.offsetWidth)
+    f.style.transform = `scale(${s})`
+    const shell = document.getElementById('shell')
+    shell.style.width = `${f.offsetWidth * s}px`
+    shell.style.height = `${f.offsetHeight * s}px`
+    return
+  }
+  const scale = Math.min(1, window.innerWidth / f.offsetWidth, window.innerHeight / f.offsetHeight)
+  f.style.transform = `translate(-50%, -50%) scale(${scale})`
+  document.getElementById('hint').textContent =
+    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours  ?ratio=16x9  ?export`
+}
+
+;(async () => {
+  try {
+    if (view === 'honours') await loadHonours()
+    else await loadLeague(view in LEAGUES ? view : 'lor')
+  } catch (e) {
+    document.getElementById('safe').innerHTML =
+      `<div class="err">Couldn't reach Sleeper.<br><small>${esc(e.message)}</small></div>`
+  }
+  addEventListener('resize', fit)
+  document.fonts.ready.then(fit)
+  fit()
+})()
+</script>
+</body>
+</html>
