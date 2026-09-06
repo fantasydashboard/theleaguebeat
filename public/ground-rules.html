@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ground rules — The League Beat</title>
+<!--
+  A single static card for the top of a video: "here are the ground rules".
+
+  Composed at 1080x1920 and scaled to fit whatever it is opened on, so a
+  screenshot at any window size lands on the same layout. Everything sits
+  inside the vertical safe area the present decks use, so a caption strip
+  or a platform UI rail cannot cover a line of it.
+
+  Deliberately carries NO team names, records or season — it is the same
+  graphic every week, and one that needed updating would stop being used.
+
+  Add ?ratio=16x9 for a widescreen version.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:       oklch(0.97 0.005 90);
+    --muted:     oklch(0.62 0.01 90);
+    --dim:       oklch(0.50 0.01 90);
+    --bg:        oklch(0.09 0.014 90);
+    --panel:     oklch(0.145 0.012 90);
+    --line:      oklch(0.28 0.02 90);
+    --gold:      oklch(0.85 0.17 92);
+    --pink:      oklch(0.70 0.27 350);
+    --up:        oklch(0.78 0.17 145);
+    --down:      oklch(0.72 0.19 40);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #000;
+    font-family: 'Barlow', system-ui, sans-serif;
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+
+  /* The frame is a fixed 1080x1920 composition, scaled to the window.
+     Fixing the pixel size is what makes every screenshot identical
+     regardless of the screen it was taken on. */
+  .frame {
+    width: 1080px; height: 1920px;
+    flex: none;
+    /* Positioned rather than laid out: a scaled element keeps its
+       ORIGINAL layout box, so a centred 1080x1920 box inside a smaller
+       window overflows and drags the composition off-screen. */
+    position: fixed; left: 50%; top: 50%;
+    background:
+      radial-gradient(120% 70% at 50% 0%, oklch(0.17 0.03 92 / 0.55), transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    transform-origin: center;
+  }
+  body[data-ratio="16x9"] .frame { width: 1920px; height: 1080px; }
+
+  /* The safe area: content stays inside it so platform chrome cannot
+     cover a rule. Same box the vertical decks compose into. */
+  .safe {
+    position: absolute;
+    left: 5.55%; top: 14%; width: 88.9%; height: 72%;
+    display: flex; flex-direction: column; justify-content: center;
+    gap: 44px;
+  }
+  body[data-ratio="16x9"] .safe {
+    left: 8%; top: 8%; width: 84%; height: 84%;
+    gap: 30px;
+  }
+
+  .masthead { display: flex; align-items: baseline; gap: 18px; }
+  .brand {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800; font-size: 30px;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--pink);
+  }
+  .rule { flex: 1; height: 2px; background: var(--line); }
+
+  h1 {
+    margin: 0;
+    font-size: 96px; font-weight: 900; line-height: 0.92;
+    letter-spacing: -0.03em;
+  }
+  .sub { margin: 0; font-size: 30px; color: var(--muted); line-height: 1.35; }
+  body[data-ratio="16x9"] h1 { font-size: 74px; }
+
+  /* ── A tier ────────────────────────────────────────────────── */
+  .tier {
+    border: 2px solid var(--line);
+    border-radius: 22px;
+    background: var(--panel);
+    padding: 30px 36px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 20px;
+  }
+  .tier[data-flight="top"] {
+    border-color: oklch(0.45 0.10 92);
+    background:
+      linear-gradient(180deg, oklch(0.22 0.05 92 / 0.55), transparent 70%),
+      var(--panel);
+  }
+  .flight {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800; font-size: 24px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .tier[data-flight="top"] .flight { color: var(--gold); }
+  .tier-name {
+    font-size: 60px; font-weight: 900; line-height: 1;
+    letter-spacing: -0.02em; margin: 6px 0 8px;
+  }
+  .tier-meta { font-size: 28px; color: var(--muted); }
+  .count {
+    font-size: 92px; font-weight: 900; line-height: 0.85;
+    letter-spacing: -0.04em;
+    text-align: right;
+  }
+  .count small {
+    display: block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--muted);
+    margin-top: 10px;
+  }
+
+  /* ── The exchange. This is the whole system, so it gets the middle
+        of the card and the only colour on it. ─────────────────── */
+  .swap {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
+  }
+  .move {
+    border-radius: 18px; padding: 24px 26px;
+    border: 2px solid;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .move[data-dir="down"] { border-color: oklch(0.42 0.12 40); background: oklch(0.20 0.05 40 / 0.5); }
+  .move[data-dir="up"]   { border-color: oklch(0.42 0.11 145); background: oklch(0.19 0.05 145 / 0.5); }
+  .move-head {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 52px; font-weight: 900; line-height: 1; letter-spacing: -0.02em;
+  }
+  .move[data-dir="down"] .move-head { color: var(--down); }
+  .move[data-dir="up"]   .move-head { color: var(--up); }
+  .move-head .arrow { font-size: 40px; }
+  .move-body { font-size: 27px; line-height: 1.3; color: oklch(0.80 0.01 90); }
+
+  .foot {
+    font-size: 24px; color: var(--dim); line-height: 1.4;
+    border-left: 3px solid var(--line); padding-left: 18px;
+  }
+
+  /* EXPORT MODE (?export). Renders the frame at exactly 1:1 in normal
+     flow so a full-page screenshot is a pixel-exact 1080x1920 (or
+     1920x1080) PNG, with no scaling and nothing overlaid. */
+  html[data-export], body[data-export] {
+    display: block; overflow: visible; height: auto; width: auto;
+  }
+  /* The frame is the whole page in export mode, so a full-page capture
+     is exactly the frame — set the browser window to 1080x1920 (or
+     1920x1080) and the PNG comes out pixel-exact at that ratio. */
+  /* The shell is exactly the frame's ON-SCREEN size, so a full-page
+     capture is the frame and nothing else. It exists because a browser
+     window cannot always be opened at 1920 CSS px, and a full-page
+     shot of an oversized frame comes back cropped rather than scaled. */
+  .shell { display: contents; }
+  body[data-export] .shell {
+    display: block; overflow: hidden; margin: 0;
+  }
+  body[data-export] .frame { margin: 0; }
+  /* `relative`, NOT `static`: the frame is the containing block for the
+     absolutely-positioned safe area, and taking it out of position
+     entirely re-resolved that against the viewport — which pushed the
+     whole composition into the left half of a widescreen export and cut
+     the masthead off the top. */
+  /* `left`/`top` still apply under relative positioning — leaving the
+     50% offsets in place pushed the frame flush to the right edge. */
+  body[data-export] .frame {
+    position: relative; left: 0; top: 0;
+    transform-origin: top left;
+  }
+  body[data-export] .hint { display: none; }
+
+  /* Screenshot helper — never part of the composition. */
+  .hint {
+    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: #555; font-family: ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="shell" id="shell">
+  <div class="frame" id="frame">
+    <div class="safe">
+
+      <div>
+        <div class="masthead">
+          <span class="brand">The League Beat</span>
+          <span class="rule"></span>
+        </div>
+        <h1>The ground rules.</h1>
+        <p class="sub">Two leagues. One ladder. Finish last and you go down.</p>
+      </div>
+
+      <div class="tier" data-flight="top">
+        <div>
+          <div class="flight">Top flight</div>
+          <div class="tier-name">League of Record</div>
+          <div class="tier-meta">Two divisions — East and West</div>
+        </div>
+        <div class="count">10<small>teams</small></div>
+      </div>
+
+      <div class="swap">
+        <div class="move" data-dir="down">
+          <div class="move-head"><span class="arrow">▼</span> 2 down</div>
+          <div class="move-body">Last place in <strong>each division</strong> is relegated.</div>
+        </div>
+        <div class="move" data-dir="up">
+          <div class="move-head"><span class="arrow">▲</span> 2 up</div>
+          <div class="move-body">Best regular-season record <strong>and</strong> the champion go up.</div>
+        </div>
+      </div>
+
+      <div class="tier">
+        <div>
+          <div class="flight">Second tier</div>
+          <div class="tier-name">Futures Football League</div>
+          <div class="tier-meta">The FFL</div>
+        </div>
+        <div class="count">12<small>teams</small></div>
+      </div>
+
+      <p class="foot">
+        Win the regular season <em>and</em> the title and the next-best record
+        goes up instead — it is always two up, two down.
+      </p>
+
+    </div>
+  </div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+
+<script>
+  // Scale the fixed composition to whatever it is opened on, so the
+  // layout is identical in a screenshot from any screen.
+  const params = new URLSearchParams(location.search)
+  if (params.get('ratio') === '16x9') document.body.dataset.ratio = '16x9'
+  const exporting = params.has('export')
+  // Both elements: <html> is a centring grid too, and leaving it set
+  // offset the frame inside the exported image.
+  if (exporting) {
+    document.body.dataset.export = ''
+    document.documentElement.dataset.export = ''
+  }
+
+  function fit() {
+    const f = document.getElementById('frame')
+    if (exporting) {
+      // Scale to fit whatever width the window allows, then size the
+      // shell to match so the page IS the frame. Capturing at less than
+      // 1920 CSS is not a quality loss — at 2x device pixels a 1500px
+      // capture is still 3000px of image.
+      const s = Math.min(1, window.innerWidth / f.offsetWidth)
+      f.style.transform = `scale(${s})`
+      const shell = document.getElementById('shell')
+      shell.style.width = `${f.offsetWidth * s}px`
+      shell.style.height = `${f.offsetHeight * s}px`
+      return
+    }
+    const scale = Math.min(
+      1,
+      window.innerWidth / f.offsetWidth,
+      window.innerHeight / f.offsetHeight,
+    )
+    f.style.transform = `translate(-50%, -50%) scale(${scale})`
+    document.getElementById('hint').textContent =
+      `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  add ?ratio=16x9 for widescreen`
+  }
+  addEventListener('resize', fit)
+  document.fonts.ready.then(fit)
+  fit()
+</script>
+</body>
+</html>
