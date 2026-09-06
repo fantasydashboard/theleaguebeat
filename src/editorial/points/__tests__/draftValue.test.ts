@@ -133,6 +133,81 @@ describe('significance weighting', () => {
   })
 })
 
+describe('what counts as evidence, versus what earns a slide', () => {
+  // A ten-team draft where most picks land near their ADP and a few
+  // move a long way — the ordinary shape of any real draft.
+  const teams = ['t1', 't2']
+  const picks: ValuedPick[] = Array.from({ length: 40 }, (_, i) => ({
+    pickOverall: i + 1,
+    round: Math.ceil((i + 1) / 10),
+    playerId: `p${i}`,
+    playerName: `P${i}`,
+    position: 'RB',
+    teamId: teams[i % 2],
+  }))
+  // ADP near pick order, perturbed deterministically. A pure two-player
+  // SWAP is no good here: it leaves every other pick at delta exactly
+  // zero, so the fixture has no small-but-nonzero divergence and cannot
+  // tell a working slide threshold from a missing one. Displacing
+  // players shifts everyone between them by a slot, which is the
+  // ordinary texture of a real board.
+  const adp = new Map(picks.map((p, i) => [p.playerId, i + 1]))
+  adp.set('p34', 2.5)   // t1: ADP wanted him early, league took him last
+  adp.set('p3', 38.5)   // t2: league took him far ahead of ADP
+
+  const div = findAdpDivergences(picks, (p) => adp.get(p.playerId), 10)
+
+  it('keeps every comparable pick in `all`, not just the ones worth showing', () => {
+    // `fell` and `reached` answer "what is worth a slide". `all`
+    // answers "what is the evidence" — a different question, and the
+    // one grading has to use.
+    expect(div.all).toHaveLength(picks.length)
+    expect(div.fell.length + div.reached.length).toBeLessThan(div.all.length)
+
+    // Every pick that DOES earn a slide cleared the threshold. Without
+    // this the lists fill with the ordinary texture of a draft — ADP
+    // itself moves a round week to week — and the steal of the draft
+    // ends up being somebody taken four slots off his ADP.
+    for (const d of [...div.fell, ...div.reached]) {
+      expect(Math.abs(d.roundsDelta), `${d.pick.playerName} is inside a round`)
+        .toBeGreaterThanOrEqual(1)
+    }
+    // And the fixture actually has near-ADP picks to exclude.
+    expect(div.all.filter((d) => Math.abs(d.roundsDelta) < 1).length).toBeGreaterThan(0)
+  })
+
+  it('sums to zero over every comparable pick', () => {
+    // THE property that justifies rank mapping. Scaling ADP by league
+    // size produced a systematic +1.01 round bias on a real draft —
+    // 58 fallers against 14 reaches — because it ignored a large
+    // intercept. Mapping the k-th best ADP onto the k-th used slot
+    // cannot: the slots are the draft's own.
+    const total = div.all.reduce((t, d) => t + d.roundsDelta, 0)
+    expect(Math.abs(total)).toBeLessThan(1e-9)
+
+    // Deliberately NOT asserted: that the filtered subset fails to sum
+    // to zero. On a real draft it summed to +4.1 rounds, but that is a
+    // property of how magnitudes happen to be distributed, not a
+    // theorem — a clean two-player swap filters to an exactly balanced
+    // pair. Only the full set is guaranteed.
+  })
+
+  it('grades over every comparable pick, so the per-pick figure is per PICK', () => {
+    // Grading off the filtered lists measured each team over only the
+    // picks that moved a round or more — three to seven of fourteen on
+    // a real draft — while the card called it "rounds per pick". It
+    // roughly doubled every figure.
+    const graded = gradeTeamDrafts(div.all)
+    for (const g of graded) {
+      expect(g.picksCompared).toBe(picks.length / teams.length)
+    }
+
+    const filtered = gradeTeamDrafts([...div.fell, ...div.reached])
+    const biggest = (rows: typeof graded) => Math.max(...rows.map((r) => Math.abs(r.vsLeague)))
+    expect(biggest(filtered)).toBeGreaterThan(biggest(graded))
+  })
+})
+
 describe('gradeTeamDrafts', () => {
   /** A divergence carrying only the fields the grade reads. */
   const div = (teamId: string, roundsDelta: number, i: number): Divergence => ({

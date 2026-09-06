@@ -131,7 +131,7 @@ export async function loadPreseasonIssue(
     }))
     const teamCount = new Set(valued.map((p) => p.teamId)).size
     const div = findAdpDivergences(valued, (p) => baseline.adpOf(p.playerId), teamCount)
-    const graded = gradeTeamDrafts([...div.fell, ...div.reached])
+    const graded = gradeTeamDrafts(div.all)
 
     // Roster strength needs current rosters, which only Sleeper
     // exposes without auth. Elsewhere the DRAFTED roster stands in —

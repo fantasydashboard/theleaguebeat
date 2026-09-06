@@ -236,7 +236,7 @@ export function buildDraftDeck(input: DraftDeckInput): PresentDeck | null {
     // manager, and ten steps of leaderboard before the cards was the
     // same information in the order that serves it worst.
 
-    const graded = gradeTeamDrafts([...div.fell, ...div.reached])
+    const graded = gradeTeamDrafts(div.all)
 
     // THE ACTUAL GRADE. Everything above measures who beat the board.
     // This measures who has the team — a different claim, and the one

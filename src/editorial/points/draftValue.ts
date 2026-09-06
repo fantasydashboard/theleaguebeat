@@ -118,6 +118,24 @@ export interface TeamDraftValue {
 export interface DraftDivergences {
   fell: Divergence[]
   reached: Divergence[]
+  /**
+   * EVERY comparable pick, unfiltered — including the ones that landed
+   * close to where the baseline expected.
+   *
+   * `fell` and `reached` answer "what is worth a slide", and the
+   * minimum-divergence thresholds exist for that question alone. This
+   * answers "what is the evidence", which is a different question, and
+   * grading must use this one.
+   *
+   * Feeding the filtered lists to `gradeTeamDrafts` measured each team
+   * over only its picks that moved a round or more — three to seven of
+   * fourteen on a real draft — while the card called the result
+   * "rounds per pick". It roughly doubled every figure, and the
+   * filtered subset summed to +4.1 rounds where the full set sums to
+   * exactly zero, quietly reviving the asymmetry rank mapping exists
+   * to remove.
+   */
+  all: Divergence[]
   /** Positions that had enough drafted players to compare. Useful for
    *  copy that wants to say what the read is based on. */
   positionsCompared: string[]
@@ -195,7 +213,6 @@ export function findDraftDivergences(
       const consensusAtPosition = i + 1
       const actualAtPosition = actualIndex.get(p.playerId)!
       const delta = actualAtPosition - consensusAtPosition
-      if (Math.abs(delta) < MIN_DIVERGENCE) return
       const expectedPickOverall = byPick[consensusAtPosition - 1].pickOverall
       const roundsDelta =
         teamCount > 0 ? (p.pickOverall - expectedPickOverall) / teamCount : 0
@@ -214,9 +231,12 @@ export function findDraftDivergences(
     })
   }
 
+  // The threshold applies to the SLIDES, not to the evidence.
+  const worthShowing = all.filter((d) => Math.abs(d.delta) >= MIN_DIVERGENCE)
   return {
-    fell: all.filter((d) => d.delta > 0).sort(byMagnitude),
-    reached: all.filter((d) => d.delta < 0).sort(byMagnitude),
+    fell: worthShowing.filter((d) => d.delta > 0).sort(byMagnitude),
+    reached: worthShowing.filter((d) => d.delta < 0).sort(byMagnitude),
+    all,
     positionsCompared: positionsCompared.sort(),
   }
 }
@@ -265,7 +285,7 @@ export function findAdpDivergences(
   adpOf: (pick: ValuedPick) => number | undefined,
   teamCount: number,
 ): DraftDivergences {
-  const empty = { fell: [], reached: [], positionsCompared: [] }
+  const empty = { fell: [], reached: [], all: [], positionsCompared: [] }
   if (teamCount <= 0) return empty
 
   const covered: { pick: ValuedPick; adp: number; expected: number }[] = []
@@ -313,7 +333,6 @@ export function findAdpDivergences(
   const all: Divergence[] = []
   for (const c of covered) {
     const roundsDelta = (c.pick.pickOverall - c.expected) / teamCount
-    if (Math.abs(roundsDelta) < MIN_ROUNDS_OFF_ADP) continue
     const expectedRound = Math.max(1, Math.ceil(c.expected / teamCount))
     all.push({
       pick: c.pick,
@@ -326,9 +345,12 @@ export function findAdpDivergences(
     })
   }
 
+  // The threshold applies to the SLIDES, not to the evidence.
+  const worthShowing = all.filter((d) => Math.abs(d.roundsDelta) >= MIN_ROUNDS_OFF_ADP)
   return {
-    fell: all.filter((d) => d.roundsDelta > 0).sort(byMagnitude),
-    reached: all.filter((d) => d.roundsDelta < 0).sort(byMagnitude),
+    fell: worthShowing.filter((d) => d.roundsDelta > 0).sort(byMagnitude),
+    reached: worthShowing.filter((d) => d.roundsDelta < 0).sort(byMagnitude),
+    all,
     positionsCompared: [...byPosition.keys()].sort(),
   }
 }
