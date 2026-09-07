@@ -122,6 +122,53 @@
   /* Two columns when a list runs long in widescreen. */
   body[data-ratio="16x9"] .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; align-items: start; }
 
+  /* ── Title card ───────────────────────────────────────────── */
+  .title-wrap { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 40px; }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  /* The gap between the crests IS the idea — one league sits above the
+     other, and the arrows between them are the whole format. */
+  .stack img { width: 300px; height: 300px; object-fit: contain; border-radius: 34px; }
+  .stack .between {
+    display: flex; align-items: center; gap: 26px;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 30px; letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  .stack .between .dn { color: oklch(0.72 0.19 40); }
+  .stack .between .up { color: oklch(0.78 0.17 145); }
+  .stack .between i { font-style: normal; opacity: 0.35; }
+  .big-title {
+    text-align: center; font-size: 104px; font-weight: 900;
+    line-height: 0.92; letter-spacing: -0.035em; margin: 0;
+  }
+  .big-sub { text-align: center; font-size: 32px; color: var(--muted); margin-top: 14px; }
+
+  /* ── A single rule, alone on the screen ───────────────────── */
+  .solo { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 34px; }
+  .solo-arrow { font-size: 190px; line-height: 0.8; }
+  .solo-head { font-size: 128px; font-weight: 900; line-height: 0.9; letter-spacing: -0.04em; }
+  .solo-body { font-size: 42px; line-height: 1.3; color: oklch(0.84 0.01 90); max-width: 20ch; }
+  .solo[data-dir="down"] .solo-arrow, .solo[data-dir="down"] .solo-head { color: oklch(0.72 0.19 40); }
+  .solo[data-dir="up"] .solo-arrow, .solo[data-dir="up"] .solo-head { color: oklch(0.78 0.17 145); }
+
+  /* ── One franchise, alone ─────────────────────────────────── */
+  .spot { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 30px; align-items: flex-start; }
+  .spot-av {
+    width: 340px; height: 340px; border-radius: 44px; overflow: hidden;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 900; font-size: 96px; color: var(--muted);
+    border: 3px solid oklch(0.42 0.10 92);
+  }
+  .spot-av img { width: 100%; height: 100%; object-fit: cover; }
+  .spot-cups { font-size: 74px; letter-spacing: 8px; }
+  .spot-name { font-size: 92px; font-weight: 900; line-height: 0.95; letter-spacing: -0.03em; }
+  .spot-line { font-size: 40px; line-height: 1.3; color: oklch(0.84 0.01 90); max-width: 22ch; }
+  .spot-tag {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 30px;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: oklch(0.72 0.19 40); border: 2px solid oklch(0.45 0.13 40);
+    padding: 10px 22px; border-radius: 999px; align-self: flex-start;
+  }
+
   /* ── Honours board ────────────────────────────────────────── */
   .years { display: flex; flex-direction: column; gap: 12px; }
   .yr { display: flex; align-items: center; gap: 22px; padding: 14px 20px;
@@ -295,6 +342,73 @@ async function loadHonours() {
     <p class="foot">Two franchises have won it twice — and nobody has ever gone back to back.</p>`
 }
 
+function loadTitle() {
+  document.getElementById('safe').innerHTML = `
+    <div class="title-wrap">
+      <div class="stack">
+        <img src="${LEAGUES.lor.crest}" alt="">
+        <div class="between">
+          <span class="dn">▼ 2 down</span><i>·</i><span class="up">2 up ▲</span>
+        </div>
+        <img src="${LEAGUES.ffl.crest}" alt="">
+      </div>
+      <div>
+        <h1 class="big-title">Drop Zone<br>League</h1>
+        <div class="big-sub">Two leagues. One ladder.</div>
+      </div>
+    </div>`
+}
+
+function loadSolo(dir) {
+  const copy = dir === 'down'
+    ? { head: '2 down', body: 'Last place in each division is relegated to the Futures Football League.' }
+    : { head: '2 up',   body: 'Best regular-season record and the champion are promoted to the League of Record.' }
+  document.getElementById('safe').innerHTML = `
+    <div class="solo" data-dir="${dir}">
+      <div class="solo-arrow">${dir === 'down' ? '▼' : '▲'}</div>
+      <div class="solo-head">${copy.head}</div>
+      <div class="solo-body">${copy.body}</div>
+    </div>`
+}
+
+/**
+ * The relegated champion.
+ *
+ * Found rather than hardcoded: any multiple-title winner currently
+ * sitting in the second tier. If that stops being true — they win
+ * promotion back — the card says so instead of asserting something
+ * that has stopped happening.
+ */
+async function loadChamp() {
+  const [rosters, users] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${LEAGUES.ffl.id}/rosters`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${LEAGUES.ffl.id}/users`).then((r) => r.json()),
+  ])
+  const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+  const found = rosters
+    .map((r) => ({ r, u: byId[r.owner_id], titles: TITLES[r.owner_id] || 0 }))
+    .filter((x) => x.u && x.titles > 1)
+    .sort((a, b) => b.titles - a.titles)[0]
+
+  if (!found) {
+    document.getElementById('safe').innerHTML =
+      `<div class="solo"><div class="solo-head">No former champion is in the second tier.</div></div>`
+    return
+  }
+  const md = found.u.metadata || {}
+  const team = md.team_name || `Team ${found.r.roster_id}`
+  const av = md.avatar || (found.u.avatar ? `https://sleepercdn.com/avatars/${found.u.avatar}` : null)
+  const years = CHAMPIONS.filter((c) => c.owner === found.r.owner_id).map((c) => c.year).join(' · ')
+  document.getElementById('safe').innerHTML = `
+    <div class="spot">
+      <span class="spot-tag">Relegated</span>
+      <div class="spot-av">${av ? `<img src="${esc(av)}" alt="">` : esc(initials(team))}</div>
+      <div class="spot-cups">${'🏆'.repeat(found.titles)}</div>
+      <div class="spot-name">${esc(team)}</div>
+      <div class="spot-line">${found.titles}-time champion — ${esc(years)} — playing in the second tier this season.</div>
+    </div>`
+}
+
 function fit() {
   const f = document.getElementById('frame')
   if (exporting) {
@@ -308,12 +422,15 @@ function fit() {
   const scale = Math.min(1, window.innerWidth / f.offsetWidth, window.innerHeight / f.offsetHeight)
   f.style.transform = `translate(-50%, -50%) scale(${scale})`
   document.getElementById('hint').textContent =
-    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours  ?ratio=16x9  ?export`
+    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours|title|down|up|champ  ?ratio=16x9  ?export`
 }
 
 ;(async () => {
   try {
     if (view === 'honours') await loadHonours()
+    else if (view === 'title') loadTitle()
+    else if (view === 'down' || view === 'up') loadSolo(view)
+    else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
     document.getElementById('safe').innerHTML =
