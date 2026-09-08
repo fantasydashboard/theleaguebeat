@@ -75,6 +75,14 @@
            pipeline, mirroring CategoryDemoHomeView's new-pipeline loop.
            The composition emits hero + supporting stories in priority
            order; we render via the existing components. -->
+      <!-- The assembled issue — the same one the league page renders.
+           Read-only by construction: IssueSections carries no Present
+           buttons and no UFD hand-offs, both of which are wrong in
+           front of an audience the whole league can see. -->
+      <template v-else-if="assembled">
+        <IssueSections :sections="assembled.sections" />
+      </template>
+
       <template v-else-if="issueData">
         <!-- Cover stories need games. Before kickoff the composition
              has nothing real to lead with and falls back to a
@@ -262,8 +270,10 @@ import { hasPlayedGames } from '@/editorial/leagueCore'
 import { buildDraftStoryFacts, draftLede } from '@/editorial/points/draftStory'
 import type { LeagueDataPointsMatchup } from '@/editorial/types'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
-import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
-import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
+import IssueSections from '@/components/issue/IssueSections.vue'
+import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
+import type { Issue } from '@/editorial/issue/types'
+import type { LeagueData } from '@/editorial/types'
 import type { CategoryLeagueData } from '@/editorial/types'
 
 /* ─────────────────────────────────────────────────────────────────
@@ -303,12 +313,18 @@ const shareSlug = computed(() => {
 /** Friendly body copy for the empty / error state — varies slightly
  *  with the failure mode so the reader knows whether to retry or
  *  give up. Stays voice-y, never technical. */
+/** The assembled issue, when the league is one we can build publicly. */
+const assembled = shallowRef<Issue | null>(null)
+
 const errorBody = computed(() => {
   switch (errorState.value) {
     case 'not-found':
       return "We couldn't find this league. It may have been moved, or the link's stale."
     case 'unsupported-platform':
-      return "We couldn't open this league publicly. Ask the commissioner to forward you a fresh issue."
+      // Named plainly. "Ask the commissioner" sent readers to chase a
+      // person about something no one in the league can fix.
+      return 'Public issues are Sleeper-only for now. ESPN and Yahoo need the ' +
+        "commissioner's own sign-in to read a league, which a link can't carry."
     case 'server-error':
       // Ours, not theirs. The old copy blamed the league for a
       // misconfigured server — which is what it said for months while
@@ -508,23 +524,44 @@ async function loadIssue() {
 
   // 2. Fan out to the right adapter.
   try {
-    let data: CategoryLeagueData | null = null
-    if (row.platform === 'sleeper') {
-      data = await sleeperLeagueToCategoryData(row.platform_league_id, {})
-    } else if (row.platform === 'espn') {
-      // This view already holds the league row, so the sport comes
-      // straight off it — no store lookup needed here.
-      data = await espnLeagueToCategoryData(row.platform_league_id, {
-        sport: row.sport === 'football' ? 'football' : 'baseball',
-      })
-    } else if (row.platform === 'yahoo') {
-      data = await yahooLeagueToCategoryData(row.platform_league_id, {})
-    } else {
+    // SLEEPER ONLY, on purpose.
+    //
+    // ESPN and Yahoo adapters read the OWNER'S browser cookies, which a
+    // visitor following a link does not have — so those shares were
+    // already failing for everybody but the person who made them.
+    // Saying so is better than rendering a page that half-loads.
+    if (row.platform !== 'sleeper') {
       errorState.value = 'unsupported-platform'
       loading.value = false
       return
     }
-    liveData.value = data
+    const data: LeagueData = await sleeperLeagueToCategoryData(
+      row.platform_league_id,
+      {},
+    )
+    if (data.format === 'h2h-category') liveData.value = data
+
+    // The same assembled issue the league page renders. Before this,
+    // the share page composed from the older story pipeline — so a
+    // reader following a link got a different issue from the one the
+    // commissioner was looking at, with different headlines.
+    if (data.format === 'h2h-points') {
+      assembled.value = await assembleIssue({
+        data,
+        leagueName: row.league_name || data.leagueName,
+        platform: row.platform,
+        platformLeagueId: row.platform_league_id,
+        teamName: (id) =>
+          (data.teams.find((t) => t.id === id)?.name ?? `Team ${id}`).trim(),
+        team: (id) => {
+          const t = data.teams.find((x) => x.id === id)
+          return t && {
+            name: t.name, avatarUrl: t.avatarUrl,
+            avatarColor: t.avatarColor, ownerInitials: t.ownerInitials,
+          }
+        },
+      })
+    }
   } catch (err) {
     console.warn('[PublicShareView] adapter load failed:', err)
     errorState.value = 'fetch-failed'

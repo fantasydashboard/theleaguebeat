@@ -133,6 +133,18 @@
         </div>
       </section>
 
+      <!-- Share. Sleeper only: a public reader has none of the
+           cookies the ESPN and Yahoo adapters need, so those links
+           were already failing for everyone but the person who made
+           them. Offering a button that produces a dead link is worse
+           than offering none. -->
+      <div v-if="canShare" class="issue-share">
+        <button type="button" class="issue-share-btn" @click="shareIssue">
+          {{ shareLabel }}
+        </button>
+        <span class="issue-share-hint">Anyone with the link can read it — no account needed.</span>
+      </div>
+
       <!-- Present the WHOLE issue. The section buttons below are for
            one clip each; this is the league-call walkthrough. -->
       <div v-if="presentEnabled && issueBody.length && routeLeagueId" class="issue-present-all">
@@ -1187,6 +1199,40 @@ const handoffs = computed(() => {
   return chooseHandoffs(available)
 })
 const handoffFor = (key: string) => handoffs.value.find((h) => h.key === key)
+
+/**
+ * Whether this issue can be handed to somebody without an account.
+ *
+ * Sleeper's API is public, so a visitor's browser can rebuild the
+ * league on its own. ESPN and Yahoo need the owner's cookies, which a
+ * URL cannot carry.
+ */
+const canShare = computed(
+  () => strictLeagueRecord.value?.platform === 'sleeper' && !!routeLeagueId.value,
+)
+const shareLabel = ref('Share this issue')
+
+async function shareIssue(): Promise<void> {
+  const url = `${window.location.origin}/i/${routeLeagueId.value}`
+  const title = `${strictLeagueRecord.value?.league_name ?? 'The League Beat'} — this week's issue`
+  // Native sheet where there is one; it is the only path that reaches
+  // a group chat in one tap, which is where these actually go.
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url })
+      return
+    } catch {
+      /* dismissed — fall through to copying */
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    shareLabel.value = 'Link copied'
+  } catch {
+    shareLabel.value = url
+  }
+  setTimeout(() => { shareLabel.value = 'Share this issue' }, 2600)
+}
 
 /** Which sections the assembled issue has taken over. */
 const issueCovers = (id: string) =>
@@ -3792,6 +3838,21 @@ function collectUserIdentity() {
   border-color: transparent;
 }
 .issue-present-btn-lead:hover { background: oklch(0.9 0.17 92); }
+.issue-share {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 4px 0 18px;
+}
+.issue-share-btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase; cursor: pointer;
+  padding: 9px 20px; border-radius: 999px;
+  background: transparent; color: oklch(0.85 0.17 92);
+  border: 1px solid oklch(0.85 0.17 92);
+}
+.issue-share-btn:hover { background: oklch(0.85 0.17 92); color: oklch(0.16 0.02 90); }
+.issue-share-hint { font-size: 0.82rem; color: oklch(0.58 0.01 90); }
+
 .issue-present-all { display: flex; gap: 10px; align-items: center; margin: 4px 0 8px; }
 @media (max-width: 700px) {
   .issue-sec-bar { flex-wrap: wrap; }
