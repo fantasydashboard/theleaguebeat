@@ -169,6 +169,34 @@
     padding: 10px 22px; border-radius: 999px; align-self: flex-start;
   }
 
+  /* ── Honours: franchises ranked by titles ─────────────────── */
+  .champs { display: flex; flex-direction: column; gap: 16px; }
+  .champ-row {
+    display: flex; align-items: center; gap: 26px;
+    background: var(--panel); border: 2px solid transparent;
+    border-radius: 20px; padding: 20px 26px;
+  }
+  .champ-row[data-multi] {
+    border-color: oklch(0.45 0.11 92);
+    background: linear-gradient(90deg, oklch(0.21 0.05 92 / 0.75), var(--panel) 60%);
+  }
+  .champ-av {
+    width: 110px; height: 110px; border-radius: 20px; flex: none; overflow: hidden;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 800; font-size: 34px; color: var(--muted);
+  }
+  .champ-av img { width: 100%; height: 100%; object-fit: cover; }
+  .champ-copy { flex: 1; min-width: 0; }
+  /* Spans stack only when told to — otherwise the years run into the
+     end of the team name. */
+  .champ-copy > span { display: block; }
+  .champ-name {
+    font-size: 44px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .champ-years { font-size: 24px; color: var(--dim); margin-top: 6px; }
+  .champ-cups { flex: none; display: flex; gap: 4px; font-size: 44px; line-height: 1; }
+
   /* ── Honours board ────────────────────────────────────────── */
   .years { display: flex; flex-direction: column; gap: 12px; }
   .yr { display: flex; align-items: center; gap: 22px; padding: 14px 20px;
@@ -305,41 +333,84 @@ async function currentFranchises() {
     const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
     for (const r of rosters) {
       const u = byId[r.owner_id]
-      if (u) out[r.owner_id] = (u.metadata || {}).team_name || `Team ${r.roster_id}`
+      if (!u) continue
+      const md = u.metadata || {}
+      out[r.owner_id] = {
+        team: md.team_name || `Team ${r.roster_id}`,
+        avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
+      }
     }
   }))
   return out
 }
 
+/**
+ * The honours board, as FRANCHISES ranked by titles.
+ *
+ * It used to be a year-by-year list with a trophy marking anyone who
+ * had won more than once — which read as "this is the year they got a
+ * trophy", leaving 2024 and 2025 apparently trophyless. The question
+ * people actually ask is "who has won this thing", so that is what it
+ * answers now. The season-by-season list survives at ?view=seasons.
+ */
 async function loadHonours() {
   const now = await currentFranchises()
-  // The franchise as it stands today. Listing only the name a title was
-  // won under splits one manager's two titles across two names and hides
-  // the repeat completely.
-  const nameOf = (c) => now[c.owner] || c.as
-  // Sleeper stores names with stray whitespace — "Black Panther " and
-  // "Black Panther" are the same franchise, and comparing them raw
-  // printed "won as Black Panther" underneath "Black Panther".
-  const same = (a, b) => String(a).trim() === String(b).trim()
-  const repeat = new Set(Object.keys(TITLES).filter((o) => TITLES[o] > 1))
+  const byOwner = new Map()
+  for (const c of CHAMPIONS) {
+    const e = byOwner.get(c.owner) || { owner: c.owner, years: [], as: c.as }
+    e.years.push(c.year)
+    byOwner.set(c.owner, e)
+  }
+  const rows = [...byOwner.values()]
+    .map((e) => ({ ...e, ...(now[e.owner] || { team: e.as }) }))
+    // Most titles first; a tie goes to whoever won most recently.
+    .sort((a, b) => b.years.length - a.years.length || Math.max(...b.years) - Math.max(...a.years))
+
   document.getElementById('safe').innerHTML = `
     <div class="head">
       <img class="crest" src="${LEAGUES.lor.crest}" alt="">
       <div class="head-copy">
         <div class="eyebrow">The honours board</div>
+        <h1>Who's won it.</h1>
+        <div class="sub">League of Record · ${CHAMPIONS[0].year}–${CHAMPIONS[CHAMPIONS.length - 1].year}</div>
+      </div>
+    </div>
+    <div class="champs">
+      ${rows.map((r) => `
+        <div class="champ-row" ${r.years.length > 1 ? 'data-multi' : ''}>
+          <span class="champ-av">${r.avatar ? `<img src="${esc(r.avatar)}" alt="">` : esc(initials(r.team))}</span>
+          <span class="champ-copy">
+            <span class="champ-name">${esc(r.team)}</span>
+            <span class="champ-years">${r.years.sort((a, b) => a - b).join(' · ')}</span>
+          </span>
+          <span class="champ-cups">${'🏆'.repeat(r.years.length)}</span>
+        </div>`).join('')}
+    </div>
+    <p class="foot">Seven seasons, ${rows.length} different champions. Nobody has ever gone back to back.</p>`
+}
+
+/** The original season-by-season list, kept for when the story is the
+ *  order things happened rather than who has won most. */
+async function loadSeasons() {
+  const now = await currentFranchises()
+  const nameOf = (c) => (now[c.owner] || {}).team || c.as
+  const same = (a, b) => String(a).trim() === String(b).trim()
+  document.getElementById('safe').innerHTML = `
+    <div class="head">
+      <img class="crest" src="${LEAGUES.lor.crest}" alt="">
+      <div class="head-copy">
+        <div class="eyebrow">Season by season</div>
         <h1>Every champion.</h1>
         <div class="sub">League of Record · ${CHAMPIONS[0].year}–${CHAMPIONS[CHAMPIONS.length - 1].year}</div>
       </div>
     </div>
     <div class="years">
       ${[...CHAMPIONS].reverse().map((c) => `
-        <div class="yr" ${repeat.has(c.owner) ? 'data-repeat' : ''}>
+        <div class="yr">
           <span class="yr-num">${c.year}</span>
           <span class="names"><span class="yr-name">${esc(nameOf(c))}</span>${!same(nameOf(c), c.as) ? `<span class="yr-as">won as ${esc(c.as)}</span>` : ''}</span>
-          ${repeat.has(c.owner) ? '<span class="cups"><span class="cup">🏆</span></span>' : ''}
         </div>`).join('')}
-    </div>
-    <p class="foot">Two franchises have won it twice — and nobody has ever gone back to back.</p>`
+    </div>`
 }
 
 function loadTitle() {
@@ -422,12 +493,13 @@ function fit() {
   const scale = Math.min(1, window.innerWidth / f.offsetWidth, window.innerHeight / f.offsetHeight)
   f.style.transform = `translate(-50%, -50%) scale(${scale})`
   document.getElementById('hint').textContent =
-    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours|title|down|up|champ  ?ratio=16x9  ?export`
+    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours|seasons|title|down|up|champ  ?ratio=16x9  ?export`
 }
 
 ;(async () => {
   try {
     if (view === 'honours') await loadHonours()
+    else if (view === 'seasons') await loadSeasons()
     else if (view === 'title') loadTitle()
     else if (view === 'down' || view === 'up') loadSolo(view)
     else if (view === 'champ') await loadChamp()
