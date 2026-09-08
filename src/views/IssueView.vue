@@ -260,6 +260,11 @@
             </li>
           </ol>
 
+          <UfdHandoff
+            v-if="handoffFor(sec.id)"
+            :handoff="handoffFor(sec.id)!"
+          />
+
           <!-- Its own row class. Reusing `standings` here truncated
                every name to "Mic…" and clipped owners to "The Ama" —
                that grid is built for a rank, a crest and a record, not
@@ -383,6 +388,11 @@
           </h2>
           <p class="section-lede">{{ livePointsEditorial.subHeadline }}</p>
         </header>
+
+        <UfdHandoff
+          v-if="handoffFor('live-matchups')"
+          :handoff="handoffFor('live-matchups')!"
+        />
 
         <ol class="points-matchups" role="list">
           <li
@@ -908,6 +918,8 @@ import { issueSeasonStarted } from '@/composables/useIssueChrome'
 import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { presentEnabled } from '@/composables/usePresentMode'
+import UfdHandoff from '@/components/issue/UfdHandoff.vue'
+import { chooseHandoffs } from '@/editorial/issue/handoff'
 import { isPresentable } from '@/editorial/issue/types'
 import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
@@ -1153,6 +1165,28 @@ const hasLiveDeck = computed(() => {
     }) !== null
   )
 })
+
+/**
+ * Which UFD hand-offs this issue earns, capped and ordered by intent.
+ *
+ * Computed from what is actually on the page, so a week with no trade
+ * does not leave a hole and a week with everything does not stack
+ * three promos.
+ *
+ * Gated on `routeLeagueId` — this view is only ever reached
+ * authenticated, and the copy says "your league" throughout. The
+ * public share page renders from a different component entirely and
+ * must never pick these up.
+ */
+const handoffs = computed(() => {
+  if (!routeLeagueId.value) return []
+  const available = [
+    ...issueBody.value.map((s) => s.id),
+    ...(pointsSeasonStarted.value ? ['live-matchups'] : []),
+  ]
+  return chooseHandoffs(available)
+})
+const handoffFor = (key: string) => handoffs.value.find((h) => h.key === key)
 
 /** Which sections the assembled issue has taken over. */
 const issueCovers = (id: string) =>
