@@ -73,3 +73,8 @@ video/out
 # you to save a downloaded league_issues.data blob before exporting it.
 .local/
 video/fixtures/reel-live.json
+.env*
+# ...but the template is meant to be in the repo. Without this negation
+# `.env.example` is only tracked by inertia: it survives because it was
+# added before the rule, and vanishes the moment anyone re-adds it.
+!.env.example
