@@ -183,6 +183,44 @@
       </div>
     </div>
 
+    <!-- Slide export — off by default, so the Issue stays a reading
+         page for everyone who is not making a video. -->
+    <div class="card">
+      <div class="card-header">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">▶</span>
+          <h2 class="card-title">Present Mode</h2>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="flex items-start justify-between gap-4 p-4 bg-dark-border/20 rounded-lg">
+          <div class="flex-1">
+            <div class="font-semibold text-dark-text">Slide export</div>
+            <p class="text-sm text-dark-textMuted mt-1">
+              Turns your issue into a set of vertical images you can download —
+              one per team, one per claim. Made for presenting to your league on
+              a shared screen, or for posting to TikTok, Reels and Stories.
+            </p>
+            <p class="text-sm text-dark-textMuted mt-2">
+              Switch it on and a <strong>Present</strong> button appears beside every
+              section that has something worth walking through. It downloads a
+              folder of PNG files; nothing is posted anywhere for you.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="presentEnabled"
+            class="tlb-switch"
+            :data-on="presentEnabled"
+            @click="togglePresent"
+          >
+            <span class="tlb-switch-knob"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Cache Management Section -->
     <div class="card">
       <div class="card-header">
@@ -239,10 +277,20 @@ import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
 import { cache } from '@/services/cache'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
+import { presentEnabled, setPresentEnabled } from '@/composables/usePresentMode'
 
 const leagueStore = useLeagueStore()
 const platformsStore = usePlatformsStore()
 const authStore = useAuthStore()
+
+function togglePresent(): void {
+  setPresentEnabled(!presentEnabled.value)
+  successMessage.value = presentEnabled.value
+    ? 'Present mode on — look for the Present buttons on your issue.'
+    : 'Present mode off.'
+  showSuccess.value = true
+  setTimeout(() => { showSuccess.value = false }, 3200)
+}
 
 const isLoading = ref(false)
 const showSuccess = ref(false)
@@ -350,6 +398,22 @@ watch(() => authStore.isAuthenticated, async (isAuth) => {
   }
 })
 </script>
+
+<style scoped>
+.tlb-switch {
+  flex: none; width: 56px; height: 32px; border-radius: 999px;
+  border: 1px solid oklch(0.36 0.02 90); background: oklch(0.24 0.02 90);
+  position: relative; cursor: pointer; transition: background 0.15s ease;
+}
+.tlb-switch[data-on='true'] { background: oklch(0.72 0.17 145); border-color: transparent; }
+.tlb-switch-knob {
+  position: absolute; top: 3px; left: 3px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: oklch(0.97 0.005 90);
+  transition: transform 0.15s ease;
+}
+.tlb-switch[data-on='true'] .tlb-switch-knob { transform: translateX(24px); }
+</style>
 
 <style scoped>
 /* ── Add League Banner ── */

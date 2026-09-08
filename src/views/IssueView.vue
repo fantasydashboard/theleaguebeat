@@ -135,7 +135,7 @@
 
       <!-- Present the WHOLE issue. The section buttons below are for
            one clip each; this is the league-call walkthrough. -->
-      <div v-if="issueBody.length && routeLeagueId" class="issue-present-all">
+      <div v-if="presentEnabled && issueBody.length && routeLeagueId" class="issue-present-all">
         <router-link
           :to="`/leagues/${routeLeagueId}/present/issue`"
           class="issue-present-btn issue-present-btn-lead"
@@ -191,7 +191,7 @@
                      second kind: one statement here, ten cards in
                      present mode. -->
                 <span
-                  v-if="routeLeagueId && (sec.deckId || isPresentable(sec))"
+                  v-if="presentEnabled && routeLeagueId && (sec.deckId || isPresentable(sec))"
                   class="issue-sec-present"
                 >
                   <router-link
@@ -379,7 +379,7 @@
                  By Monday night the issue is hours old and these
                  numbers are minutes old, so presenting the frozen
                  version would read out scores that have moved. -->
-            <span v-if="routeLeagueId && hasLiveDeck" class="issue-sec-present">
+            <span v-if="presentEnabled && routeLeagueId && hasLiveDeck" class="issue-sec-present">
               <router-link
                 :to="`/leagues/${routeLeagueId}/present/live`"
                 class="issue-present-btn"
@@ -459,7 +459,7 @@
                  the issue, its sections and the live deck, and nothing
                  pointed at /present/draft. It was reachable only by
                  typing the URL. -->
-            <span v-if="routeLeagueId" class="issue-sec-present">
+            <span v-if="presentEnabled && routeLeagueId" class="issue-sec-present">
               <router-link
                 :to="`/leagues/${routeLeagueId}/present/draft`"
                 class="issue-present-btn"
@@ -927,6 +927,7 @@ import { hasPlayedGames } from '@/editorial/leagueCore'
 import { issueSeasonStarted } from '@/composables/useIssueChrome'
 import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
+import { presentEnabled } from '@/composables/usePresentMode'
 import { isPresentable } from '@/editorial/issue/types'
 import type { Issue } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
