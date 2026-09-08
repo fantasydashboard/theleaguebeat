@@ -169,6 +169,71 @@
     padding: 10px 22px; border-radius: 999px; align-self: flex-start;
   }
 
+  /* Strip mode: ten full-size frames in a column, for one capture. */
+  body[data-strip] .strip { display: flex; flex-direction: column; }
+  body[data-strip] .strip-frame {
+    position: relative; width: 1080px; height: 1920px; transform: none;
+    background: radial-gradient(120% 60% at 50% 0%, oklch(0.18 0.035 92 / 0.5), transparent 62%), var(--bg);
+  }
+  body[data-strip] .strip-frame .safe {
+    position: absolute; left: 5.5%; top: 7%; width: 83%; height: 81%;
+    display: flex; flex-direction: column;
+  }
+  body[data-strip] { display: block; width: 1080px; }
+  body[data-strip] .hint { display: none; }
+
+  /* ── Power-ranking countdown card ─────────────────────────── */
+  .pr-head { display: flex; align-items: center; gap: 26px; margin-bottom: 22px; }
+  .pr-rank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 150px; line-height: 0.78; letter-spacing: -0.05em;
+    color: var(--gold); flex: none;
+  }
+  .pr-rank small {
+    display: block; font-size: 22px; letter-spacing: 0.18em;
+    color: var(--muted); margin-top: 8px;
+  }
+  .pr-crest {
+    width: 150px; height: 150px; border-radius: 26px; flex: none;
+    overflow: hidden; background: oklch(0.22 0.02 90);
+    display: grid; place-items: center; font-weight: 900; font-size: 44px;
+  }
+  .pr-crest img { width: 100%; height: 100%; object-fit: cover; }
+  .pr-id { min-width: 0; flex: 1; }
+  .pr-name {
+    font-size: 62px; font-weight: 900; line-height: 0.98;
+    letter-spacing: -0.03em; margin-bottom: 8px;
+  }
+  .pr-proj { font-size: 26px; color: var(--muted); }
+  .pr-proj b { color: var(--gold); font-size: 34px; font-family: 'Barlow Condensed', sans-serif; }
+
+  .pr-slots-label {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 22px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--pink);
+    margin: 6px 0 12px; display: flex; align-items: center; gap: 14px;
+  }
+  .pr-slots-label::after { content: ''; flex: 1; height: 2px; background: var(--line); }
+  .pr-slots { display: flex; flex-direction: column; gap: 9px; }
+  .pr-slot {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 13px 18px;
+  }
+  .pr-pos {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 21px;
+    letter-spacing: 0.1em; color: var(--muted);
+    width: 62px; flex: none; text-align: center;
+    border-right: 1px solid var(--line);
+  }
+  .pr-slot[data-flex] .pr-pos { color: oklch(0.72 0.14 250); }
+  .pr-player { flex: 1; min-width: 0; font-size: 31px; font-weight: 750;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pr-pts { flex: none; font-size: 27px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pr-note {
+    margin-top: 18px; padding-left: 16px; border-left: 3px solid var(--line);
+    font-size: 24px; line-height: 1.4; color: var(--dim);
+  }
+
   /* ── Honours: franchises ranked by titles ─────────────────── */
   .champs { display: flex; flex-direction: column; gap: 16px; }
   .champ-row {
@@ -413,6 +478,115 @@ async function loadSeasons() {
     </div>`
 }
 
+/**
+ * One team's countdown card: rank, crest, and the starting nine.
+ *
+ * The lineup is built the way the app builds it — most-restrictive slot
+ * first, so a flex cannot swallow the only tight end and leave the TE
+ * slot empty. Same projections, same scoring, so the number on the card
+ * is the number in the issue.
+ */
+const SLOT_ELIGIBLE = { QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], FLEX: ['RB', 'WR', 'TE'] }
+
+function bestLineup(roster, slots) {
+  const pool = [...roster].sort((a, b) => b.pts - a.pts)
+  // Most restrictive first: one eligible position before three.
+  const order = slots
+    .map((slot, i) => ({ slot, i, width: (SLOT_ELIGIBLE[slot] || [slot]).length }))
+    .sort((a, b) => a.width - b.width || a.i - b.i)
+  const out = new Array(slots.length)
+  const used = new Set()
+  for (const { slot, i } of order) {
+    const ok = SLOT_ELIGIBLE[slot] || [slot]
+    const pick = pool.find((p) => !used.has(p.id) && ok.includes(p.pos))
+    if (pick) { used.add(pick.id); out[i] = { slot, ...pick } }
+    else out[i] = { slot, name: '—', pts: 0, pos: '' }
+  }
+  return out
+}
+
+async function loadRanks() {
+  // Every card, stacked at full size, for a single capture that gets
+  // sliced into ten files.
+  const frames = []
+  for (let n = 1; n <= 10; n++) frames.push(`<div class="frame strip-frame" data-n="${n}"></div>`)
+  document.getElementById('shell').innerHTML = `<div class="strip">${frames.join('')}</div>`
+  document.body.dataset.strip = ''
+  for (let n = 1; n <= 10; n++) {
+    const host = document.querySelector(`.strip-frame[data-n="${n}"]`)
+    host.innerHTML = '<main class="present-stage"></main>'
+    const safe = document.createElement('div')
+    safe.className = 'safe'
+    host.appendChild(safe)
+    await renderRank(n, safe)
+  }
+}
+
+async function loadRank() {
+  return renderRank(Number(params.get('n') || 1), document.getElementById('safe'))
+}
+
+let _prCache = null
+async function renderRank(want, host) {
+  const cfg = LEAGUES.lor
+  const [league, rosters, users, proj] = _prCache || await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/users`).then((r) => r.json()),
+    fetch('https://api.sleeper.app/projections/nfl/2026?season_type=regular' +
+      '&position[]=QB&position[]=RB&position[]=WR&position[]=TE&order_by=ppr').then((r) => r.json()),
+  ])
+  _prCache = [league, rosters, users, proj]   // ten cards, one fetch
+  // Half-PPR, matching the league's scoring settings.
+  const P = {}
+  for (const row of proj) {
+    const id = String(row.player_id)
+    P[id] = {
+      pts: row.stats?.pts_half_ppr ?? 0,
+      pos: row.player?.position ?? '',
+      name: [row.player?.first_name, row.player?.last_name].filter(Boolean).join(' '),
+    }
+  }
+  const slots = (league.roster_positions || []).filter((x) => !['BN', 'IR', 'TAXI'].includes(x))
+  const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+
+  const teams = rosters.map((r) => {
+    const roster = (r.players || []).map((id) => ({ id, ...(P[id] || { pts: 0, pos: '', name: id }) }))
+    const nine = bestLineup(roster, slots)
+    const season = nine.reduce((t, p) => t + p.pts, 0)
+    const u = byId[r.owner_id] || {}
+    const md = u.metadata || {}
+    return {
+      team: md.team_name || `Team ${r.roster_id}`,
+      avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
+      perWeek: season / 17, nine,
+    }
+  }).sort((a, b) => b.perWeek - a.perWeek)
+
+  const t = teams[want - 1]
+  if (!t) { host.innerHTML = '<div class="err">No team at that rank.</div>'; return }
+
+  host.innerHTML = `
+    <div class="pr-head">
+      <span class="pr-rank">${want}<small>OF ${teams.length}</small></span>
+      <span class="pr-crest">${t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : esc(initials(t.team))}</span>
+      <span class="pr-id">
+        <span class="pr-name">${esc(t.team)}</span>
+        <span class="pr-proj"><b>${t.perWeek.toFixed(1)}</b> projected points per week</span>
+      </span>
+    </div>
+    <div class="pr-slots-label">Starting lineup</div>
+    <div class="pr-slots">
+      ${t.nine.map((p) => `
+        <div class="pr-slot" ${p.slot === 'FLEX' ? 'data-flex' : ''}>
+          <span class="pr-pos">${p.slot}</span>
+          <span class="pr-player">${esc(p.name)}</span>
+          <span class="pr-pts">${Math.round(p.pts)}</span>
+        </div>`).join('')}
+    </div>
+    <p class="pr-note">Best lineup each roster can field · half-PPR · Sleeper projections</p>`
+}
+
 function loadTitle() {
   document.getElementById('safe').innerHTML = `
     <div class="title-wrap">
@@ -493,13 +667,15 @@ function fit() {
   const scale = Math.min(1, window.innerWidth / f.offsetWidth, window.innerHeight / f.offsetHeight)
   f.style.transform = `translate(-50%, -50%) scale(${scale})`
   document.getElementById('hint').textContent =
-    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=lor|ffl|honours|seasons|title|down|up|champ  ?ratio=16x9  ?export`
+    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=rank&n=1..10 | lor|ffl|honours|seasons|title|down|up|champ  ?ratio=16x9  ?export`
 }
 
 ;(async () => {
   try {
     if (view === 'honours') await loadHonours()
     else if (view === 'seasons') await loadSeasons()
+    else if (view === 'ranks') await loadRanks()
+    else if (view === 'rank') await loadRank()
     else if (view === 'title') loadTitle()
     else if (view === 'down' || view === 'up') loadSolo(view)
     else if (view === 'champ') await loadChamp()
