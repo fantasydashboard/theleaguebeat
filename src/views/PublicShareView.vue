@@ -223,7 +223,18 @@
 
         <!-- CONVERSION CTA — pushes the reader toward starting their
              own coverage. Single button, single message, no nag. -->
-        <section class="share-cta" aria-labelledby="share-cta-h">
+      </template>
+
+      <!-- The one call to action, for anyone who read to the end.
+           OUTSIDE both content branches on purpose: it used to sit
+           inside the legacy one, so the day points leagues moved to
+           the assembled issue the page quietly stopped converting
+           anybody — and a share page with no way in is just a leak. -->
+        <section
+          v-if="!loading && !errorState && (assembled || issueData)"
+          class="share-cta"
+          aria-labelledby="share-cta-h"
+        >
           <h2 id="share-cta-h" class="share-cta-headline">
             Get your league covered like this.
           </h2>
@@ -238,7 +249,6 @@
             </svg>
           </router-link>
         </section>
-      </template>
     </main>
 
     <!-- Subtle footer — read-more link back to the landing only. We
