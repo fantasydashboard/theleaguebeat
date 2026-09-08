@@ -106,6 +106,41 @@ describe('buildPreseasonIssue', () => {
     expect(deckFromIssue(issue, { only: 'draft-vs-roster' })).toBeNull()
   })
 
+  it('finds where the board breaks, and says so', () => {
+    // A power ranking is only interesting where it clusters. The cover
+    // names a favourite and the field lists all ten; neither says what
+    // SHAPE the league is.
+    const cliffy = strength([
+      ['a', 112], ['b', 111.5], ['c', 111], ['d', 104], ['e', 103.5],
+    ])
+    const issue = buildPreseasonIssue({ ...base, strength: cliffy })!
+    const sec = issue.sections.find((s) => s.id === 'power-rankings')!
+    expect(sec.headline).toBe('Three teams have a case. Then it drops.')
+    // The claim rests on the cliff being wider than the race above it.
+    expect(sec.support).toContain('7')      // the drop from c to d
+    expect(sec.support).toContain('1')      // the spread across the top three
+  })
+
+  it('refuses to invent a tier on an evenly spread board', () => {
+    // Every board has a biggest gap. Only some have a cliff — and
+    // calling an even spread a tier is a story about rounding noise.
+    const even = strength([
+      ['a', 112], ['b', 110], ['c', 108], ['d', 106], ['e', 104],
+    ])
+    const issue = buildPreseasonIssue({ ...base, strength: even })!
+    expect(issue.sections.find((s) => s.id === 'power-rankings')).toBeUndefined()
+  })
+
+  it('words it differently when one team is alone at the top', () => {
+    const runaway = strength([
+      ['a', 125], ['b', 106], ['c', 105], ['d', 104], ['e', 103],
+    ])
+    const issue = buildPreseasonIssue({ ...base, strength: runaway })!
+    const sec = issue.sections.find((s) => s.id === 'power-rankings')!
+    expect(sec.headline).toBe('Team a are out on their own.')
+    expect(sec.headline).not.toMatch(/teams have a case/)
+  })
+
   it('gives every team a card with something specific about them', () => {
     const issue = buildPreseasonIssue({ ...base, strength: five })!
     const field = issue.sections.find((s) => s.id === 'the-field')!

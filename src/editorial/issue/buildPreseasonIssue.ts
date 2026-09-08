@@ -19,6 +19,7 @@
  * points a week less from running back than the league does" is a
  * fact, and it stings more than an adjective would.
  */
+import { numberWord } from '../points/draftStory'
 import { ordinal, type TeamDraftValue } from '../points/draftValue'
 import { tierFor, type TeamStrength } from '../points/rosterStrength'
 import { scheduleWeight, type ProjectedSeasonRow } from '../points/projectedSeason'
@@ -56,6 +57,8 @@ export interface PreseasonIssueInput {
    *  shows the acquiring team's crest instead of a face. */
   playerImage?: (playerId: string) => string | null | undefined
 }
+
+const sentenceCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
 
 /** Section artwork for one or two teams. */
 function artFor(input: PreseasonIssueInput, teamIds: string[]) {
@@ -142,6 +145,69 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
       // which is where a reader goes looking for it.
       deckId: 'draft',
     })
+  }
+
+  // ── 2b. WHERE THE FIELD BREAKS ─────────────────────────────────
+  //
+  // The cover names a favourite and section 3 lists all ten, but
+  // neither says what SHAPE the league is — and that is the thing a
+  // power ranking is actually for. A projection is only interesting
+  // where it clusters: four teams inside a point of each other is a
+  // race, and a three-point cliff underneath them is a different
+  // league below the line.
+  //
+  // Found rather than assumed: take the biggest drop between
+  // consecutive teams and check it is genuinely a break rather than
+  // the largest of ten similar gaps. Every board has a biggest gap;
+  // only some have a cliff.
+  const gaps = input.strength.slice(0, -1).map((t, i) => ({
+    after: i + 1,
+    size: Math.round((t.pointsPerWeek - input.strength[i + 1].pointsPerWeek) * 10) / 10,
+  }))
+  if (gaps.length >= 3) {
+    const sorted = [...gaps].map((g) => g.size).sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    const biggest = gaps.reduce((m, g) => (g.size > m.size ? g : m), gaps[0])
+
+    // Twice the typical gap, and not a rounding artefact on a flat
+    // board. Below either bar the field is evenly spread, and calling
+    // that a tier would be inventing a story about noise.
+    const isCliff = biggest.size >= Math.max(1.5, median * 2)
+    if (isCliff) {
+      const n = biggest.after
+      const above = input.strength[n - 1]
+      const below = input.strength[n]
+      const topSpread =
+        Math.round((input.strength[0].pointsPerWeek - above.pointsPerWeek) * 10) / 10
+
+      sections.push({
+        id: 'power-rankings',
+        eyebrow: 'Power rankings',
+        headline:
+          n === 1
+            ? `${input.teamName(best.teamId)} are out on their own.`
+            // `numberWord` is lowercase for mid-sentence use; this one
+            // opens a headline.
+            : `${sentenceCase(numberWord(n))} teams have a case. Then it drops.`,
+        support:
+          n === 1
+            ? `${biggest.size} points a week clear of ${input.teamName(below.teamId)} in second. ` +
+              'Nobody else in the room projects within that.'
+            : `The top ${numberWord(n)} are separated by ${topSpread} points a week. ` +
+              `The gap from ${input.teamName(above.teamId)} down to ` +
+              `${input.teamName(below.teamId)} is ${biggest.size} on its own — ` +
+              'wider than the whole race above it. Projections are a forecast, ' +
+              'not a result, but that is where this board breaks.',
+        // The two teams the line runs between: the section IS that gap.
+        visual: artFor(input, [above.teamId, below.teamId]),
+        chips: [
+          { value: `${n}`, label: n === 1 ? 'clear leader' : 'in the mix' },
+          { value: `${biggest.size}`, label: 'pts / week cliff' },
+          { value: `${Math.round((input.strength[0].pointsPerWeek - worst.pointsPerWeek) * 10) / 10}`, label: 'top to bottom' },
+        ],
+        priority: 25,
+      })
+    }
   }
 
   // ── 3. EVERY TEAM ──────────────────────────────────────────────
