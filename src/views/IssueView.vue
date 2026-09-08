@@ -1213,7 +1213,13 @@ const canShare = computed(
 const shareLabel = ref('Share this issue')
 
 async function shareIssue(): Promise<void> {
-  const url = `${window.location.origin}/i/${routeLeagueId.value}`
+  // Never hand out a localhost link. The whole point of the button is
+  // that somebody ELSE opens it, and http://localhost:5173/i/... is
+  // dead on every machine but this one.
+  const origin = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(window.location.origin)
+    ? 'https://www.theleaguebeat.com'
+    : window.location.origin
+  const url = `${origin}/i/${routeLeagueId.value}`
   const title = `${strictLeagueRecord.value?.league_name ?? 'The League Beat'} — this week's issue`
   // Native sheet where there is one; it is the only path that reaches
   // a group chat in one tap, which is where these actually go.

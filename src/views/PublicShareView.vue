@@ -512,6 +512,18 @@ async function loadIssue() {
       loading.value = false
       return
     }
+    // A 200 is not proof of an API. Vite serves index.html for any
+    // unmatched path, so a dev server without the function proxied
+    // returns the SPA shell with a 200 — `res.json()` then throws and
+    // the reader is told their league might be private, which sends
+    // them and their commissioner to debug something that is fine.
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      console.warn('[PublicShareView] /api/share returned', contentType, '— not JSON.')
+      errorState.value = 'server-error'
+      loading.value = false
+      return
+    }
     const body = await res.json()
     row = body.league as PublicLeagueRow
   } catch {

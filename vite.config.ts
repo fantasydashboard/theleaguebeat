@@ -29,6 +29,16 @@ export default defineConfig({
        * would point `share` and `supabase` at production too, which
        * means local development writing to the live database.
        */
+      /**
+       * Same reason, for the share page: without this, /api/share
+       * returns vite's index.html with a 200 on localhost, so a share
+       * link opened in development always renders "this issue isn't
+       * available" and blames the league.
+       */
+      '/api/share': {
+        target: 'https://www.theleaguebeat.com',
+        changeOrigin: true,
+      },
       '/api/proxy-image': {
         // www, not the apex: the apex 307s to www and vite's proxy
         // does not follow redirects, so every image came back as a
