@@ -122,27 +122,57 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
     priority: 10,
   })
 
-  // ── 2. THE TWIST ───────────────────────────────────────────────
-  // Only exists when two independent measures disagree, which is what
-  // makes it the most interesting fact available before kickoff.
-  if (bestDraft && bestDraft.teamId !== best.teamId) {
+  // ── 2. THE DRAFT, GRADED ───────────────────────────────────────
+  //
+  // Was a twist that only ran when the draft winner and the projected
+  // roster leader differed. That made the page assert a winner and a
+  // figure with nothing to check it against, and in the years the two
+  // measures agreed there were no draft grades on the page at all.
+  //
+  // So it always runs when there are grades, and it brings the whole
+  // board with it. The disagreement is still the better headline when
+  // it exists; when it does not, "won the draft and has the team to
+  // show for it" is a duller fact but a true one.
+  //
+  // Named "Draft grades" rather than "The draft" because the page also
+  // carries a draft-NIGHT section further down — first quarterback,
+  // opening pick, who loaded up. Two sections with one name read as a
+  // page that has looped.
+  if (bestDraft) {
+    const alsoBestRoster = bestDraft.teamId === best.teamId
+    const rosterRank = input.strength.findIndex((t) => t.teamId === bestDraft.teamId) + 1
+
     sections.push({
-      id: 'draft-vs-roster',
-      eyebrow: 'The draft',
-      headline: `${input.teamName(bestDraft.teamId)} won the draft and don't have the best team.`,
-      support:
-        `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague} rounds per pick ` +
-        `against ADP, the best in the room — and ${ordinal(
-          input.strength.findIndex((t) => t.teamId === bestDraft.teamId) + 1,
-        )} on projection. Beating the market and owning the best roster are ` +
-        'different achievements, and this room split them.',
-      // Two marks set against each other — the section IS the
-      // disagreement between them.
-      visual: artFor(input, [bestDraft.teamId, best.teamId]),
+      id: 'draft-grades',
+      eyebrow: 'Draft grades',
+      headline: alsoBestRoster
+        ? `${input.teamName(bestDraft.teamId)} won the draft and the room knows it.`
+        : `${input.teamName(bestDraft.teamId)} won the draft and don't have the best team.`,
+      support: alsoBestRoster
+        ? `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague} rounds per pick ` +
+          'against ADP, the best in the room — and the best roster on projection ' +
+          'as well. Beating the market and owning the best team are different ' +
+          'achievements; this year one manager did both.'
+        : `${bestDraft.vsLeague > 0 ? '+' : ''}${bestDraft.vsLeague} rounds per pick ` +
+          `against ADP, the best in the room — and ${ordinal(rosterRank)} on ` +
+          'projection. Beating the market and owning the best roster are ' +
+          'different achievements, and this room split them.',
+      // Every graded team, so the claim above is checkable. A letter is
+      // league-relative and says little alone, which is why the rounds
+      // figure travels with it on every row.
+      rows: input.graded!.map((g) => ({
+        lead: g.grade !== '—' ? g.grade : undefined,
+        label: input.teamName(g.teamId),
+        sub: `${g.picksCompared} picks compared`,
+        value: `${g.vsLeague > 0 ? '+' : ''}${g.vsLeague}`,
+        ...visual(input, g.teamId),
+      })),
+      // Two marks set against each other when the measures split; the
+      // winner alone when they agree.
+      visual: artFor(input, alsoBestRoster ? [bestDraft.teamId] : [bestDraft.teamId, best.teamId]),
       priority: 20,
-      // One statement on the page, a ten-card countdown in present
-      // mode. The button belongs beside the statement about the draft,
-      // which is where a reader goes looking for it.
+      // The rows are the evidence, but the DECK is the ten-card
+      // countdown — richer than a table, and already built.
       deckId: 'draft',
     })
   }

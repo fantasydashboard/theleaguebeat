@@ -140,12 +140,39 @@
           :to="`/leagues/${routeLeagueId}/present/issue`"
           class="issue-present-btn issue-present-btn-lead"
         >▶ Present the issue</router-link>
-        <router-link
-          :to="`/leagues/${routeLeagueId}/present/issue?format=vertical`"
-          class="issue-present-btn issue-present-btn-alt"
-          title="Vertical, for social"
-        >▯ Vertical</router-link>
       </div>
+
+      <!-- Table of contents.
+           Built from the assembled issue when there is one, so it
+           cannot list a section the issue dropped or miss one it
+           added. The hand-numbered list below is the fallback for the
+           moment before the issue lands. -->
+      <nav v-if="issueBody.length" class="issue-toc" aria-label="In this issue">
+        <p class="issue-toc-label">In this issue</p>
+        <ol class="issue-toc-list" role="list">
+          <li v-for="(sec, i) in issueBody" :key="sec.id">
+            <a :href="`#issue-${sec.id}`">
+              {{ String(i + 1).padStart(2, '0') }} — {{ sec.eyebrow }}
+            </a>
+          </li>
+          <li v-if="pointsSeasonStarted">
+            <a href="#section-matchups">
+              {{ String(issueBody.length + 1).padStart(2, '0') }} — Matchups
+            </a>
+          </li>
+        </ol>
+      </nav>
+      <nav v-else-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
+        <p class="issue-toc-label">In this issue</p>
+        <ol class="issue-toc-list" role="list">
+          <li><a href="#points-section-power">01 — Power Rankings</a></li>
+          <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Matchups</a></li>
+          <li v-if="showPointsDraft"><a href="#points-section-draft">Draft night</a></li>
+          <li v-if="pointsQuickReads.length">
+            <a href="#points-section-departments">{{ showPointsDraft ? '04' : '03' }} — Departments</a>
+          </li>
+        </ol>
+      </nav>
 
       <!-- ─── THE ASSEMBLED ISSUE ──────────────────────────────────
            Sections from `buildPreseasonIssue`, which present mode
@@ -199,11 +226,6 @@
                     class="issue-present-btn"
                     :title="`Present ${sec.eyebrow.toLowerCase()}`"
                   >▶ Present</router-link>
-                  <router-link
-                    :to="`/leagues/${routeLeagueId}/present/${sec.deckId ?? sec.id}?format=vertical`"
-                    class="issue-present-btn issue-present-btn-alt"
-                    :title="`Present ${sec.eyebrow.toLowerCase()} vertically, for social`"
-                  >▯</router-link>
                 </span>
               </div>
               <h2 class="section-headline">{{ sec.headline }}</h2>
@@ -261,38 +283,6 @@
           </ol>
         </section>
       </template>
-
-      <!-- Table of contents.
-           Built from the assembled issue when there is one, so it
-           cannot list a section the issue dropped or miss one it
-           added. The hand-numbered list below is the fallback for the
-           moment before the issue lands. -->
-      <nav v-if="issueBody.length" class="issue-toc" aria-label="In this issue">
-        <p class="issue-toc-label">In this issue</p>
-        <ol class="issue-toc-list" role="list">
-          <li v-for="(sec, i) in issueBody" :key="sec.id">
-            <a :href="`#issue-${sec.id}`">
-              {{ String(i + 1).padStart(2, '0') }} — {{ sec.eyebrow }}
-            </a>
-          </li>
-          <li v-if="pointsSeasonStarted">
-            <a href="#section-matchups">
-              {{ String(issueBody.length + 1).padStart(2, '0') }} — Matchups
-            </a>
-          </li>
-        </ol>
-      </nav>
-      <nav v-else-if="hasPointsPR" class="issue-toc" aria-label="In this issue">
-        <p class="issue-toc-label">In this issue</p>
-        <ol class="issue-toc-list" role="list">
-          <li><a href="#points-section-power">01 — Power Rankings</a></li>
-          <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Matchups</a></li>
-          <li v-if="showPointsDraft"><a href="#points-section-draft">03 — The draft</a></li>
-          <li v-if="pointsQuickReads.length">
-            <a href="#points-section-departments">{{ showPointsDraft ? '04' : '03' }} — Departments</a>
-          </li>
-        </ol>
-      </nav>
 
       <!-- ─── 01 — POWER RANKINGS ──────────────────────────────────
            The ladder from points records (a "win" is the higher weekly
@@ -385,11 +375,6 @@
                 class="issue-present-btn"
                 title="Present what each team still needs"
               >▶ Present</router-link>
-              <router-link
-                :to="`/leagues/${routeLeagueId}/present/live?format=vertical`"
-                class="issue-present-btn issue-present-btn-alt"
-                title="Present what each team still needs, vertically, for social"
-              >▯</router-link>
             </span>
           </div>
           <h2 class="section-headline" id="points-matchups-heading">
@@ -454,7 +439,7 @@
       >
         <header class="section-head">
           <div class="issue-sec-bar">
-            <p class="section-eyebrow">03 — The draft</p>
+            <p class="section-eyebrow">Draft night</p>
             <!-- The draft deck had no button at all: the page linked to
                  the issue, its sections and the live deck, and nothing
                  pointed at /present/draft. It was reachable only by
@@ -465,11 +450,6 @@
                 class="issue-present-btn"
                 title="Present the draft grades"
               >▶ Present</router-link>
-              <router-link
-                :to="`/leagues/${routeLeagueId}/present/draft?format=vertical`"
-                class="issue-present-btn issue-present-btn-alt"
-                title="Present the draft grades vertically, for social"
-              >▯</router-link>
             </span>
           </div>
           <h2 class="section-headline" id="points-draft-heading">{{ draftHeadline }}</h2>
@@ -494,7 +474,7 @@
             :to="`/leagues/${routeLeagueId}/draft`"
             class="points-draft-link"
           >
-            See the full board            See the full board
+            See the full board
           </router-link>
         </div>
       </section>

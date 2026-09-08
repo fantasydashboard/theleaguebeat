@@ -71,39 +71,50 @@ describe('buildPreseasonIssue', () => {
     expect(issue.week).toBe(0)
   })
 
-  it('runs the twist only when the two measures actually disagree', () => {
-    // The draft winner having the best roster too is a duller fact,
-    // and printing it as a twist would be inventing tension.
+  it('always grades the draft, and brings the whole board with it', () => {
+    // It used to run ONLY when the draft winner and the roster leader
+    // differed. That asserted a winner and a figure with nothing to
+    // check them against — and in the years the two agreed, the page
+    // carried no draft grades at all.
     const agrees = buildPreseasonIssue({
       ...base, strength: five, graded: graded(['a', 'b', 'c', 'd', 'e']),
     })!
-    expect(agrees.sections.find((s) => s.id === 'draft-vs-roster')).toBeUndefined()
+    const sec = agrees.sections.find((s) => s.id === 'draft-grades')!
+    expect(sec.headline).toContain('Team a')
+    expect(sec.rows).toHaveLength(5)
+    // A letter is league-relative and says little alone, so the rounds
+    // figure travels with it on every row.
+    for (const r of sec.rows!) expect(r.value).toMatch(/^[+-]?[\d.]+$/)
+  })
 
+  it('leads on the split when the two measures disagree', () => {
     const differs = buildPreseasonIssue({
       ...base, strength: five, graded: graded(['e', 'b', 'c', 'd', 'a']),
     })!
-    const twist = differs.sections.find((s) => s.id === 'draft-vs-roster')!
-    expect(twist.headline).toContain('Team e')
-    expect(twist.headline).toContain("don't have the best team")
+    const sec = differs.sections.find((s) => s.id === 'draft-grades')!
+    expect(sec.headline).toContain('Team e')
+    expect(sec.headline).toContain("don't have the best team")
+
+    // ...and does not claim a split when there is none.
+    const agrees = buildPreseasonIssue({
+      ...base, strength: five, graded: graded(['a', 'b', 'c', 'd', 'e']),
+    })!
+    const same = agrees.sections.find((s) => s.id === 'draft-grades')!
+    expect(same.headline).not.toContain("don't have the best team")
   })
 
   it('points the draft section at the draft deck', () => {
-    // The section is ONE statement, so `isPresentable` says it cannot
-    // generate its own slides — correct, and it used to mean no button
-    // at all on the section labelled "The draft". The ten-card deck
-    // behind it exists either way, and the button belongs beside the
-    // statement rather than on whichever legacy section happens to be
-    // rendering at the foot of the page.
+    // The section carries its own evidence rows now, so it COULD
+    // generate slides — but the deck it names is the ten-card
+    // countdown, which is richer than a table and already built.
     const issue = buildPreseasonIssue({
       ...base, strength: five, graded: graded(['e', 'b', 'c', 'd', 'a']),
     })!
-    const draft = issue.sections.find((s) => s.id === 'draft-vs-roster')!
+    const draft = issue.sections.find((s) => s.id === 'draft-grades')!
     expect(draft.deckId).toBe('draft')
-    expect(isPresentable(draft)).toBe(false)
-
-    // And it still cannot be presented AS a section — the deck it
-    // names is built elsewhere, not from these slides.
-    expect(deckFromIssue(issue, { only: 'draft-vs-roster' })).toBeNull()
+    expect(isPresentable(draft)).toBe(true)
+    // The button follows deckId, not the section id.
+    expect(deckFromIssue(issue, { only: 'draft-grades' })).not.toBeNull()
   })
 
   it('finds where the board breaks, and says so', () => {
