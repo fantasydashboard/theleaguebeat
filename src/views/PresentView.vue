@@ -1,5 +1,7 @@
 <template>
-  <div class="present" :class="{ 'is-vertical': format === 'vertical' }" tabindex="-1" @keydown="onKey">
+  <!-- Always vertical. The deck exists to produce social-format images;
+       a widescreen variant would be a format nobody exports. -->
+  <div class="present is-vertical is-export">
     <!-- Loading / error / empty states, before any deck exists. -->
     <div v-if="loading" class="present-msg">Building the deck…</div>
 
@@ -10,7 +12,7 @@
     </div>
 
     <div v-else-if="!deck" class="present-msg">
-      <p class="present-msg-head">Nothing to present yet.</p>
+      <p class="present-msg-head">Nothing to export yet.</p>
       <p class="present-msg-body">
         There isn't enough here to build this deck yet. Decks appear as
         the season gives them something to say.
@@ -19,33 +21,36 @@
     </div>
 
     <template v-else>
-      <!-- Progress. Counts revealed rows as their own step, so the bar
-           advances evenly rather than jumping through list slides. -->
-      <div class="present-progress" aria-hidden="true">
-        <span class="present-progress-fill" :style="{ width: `${progressPct}%` }"></span>
-      </div>
-
       <header class="present-chrome">
-        <span class="present-chrome-brand">The League Beat</span>
-        <span class="present-chrome-deck">{{ deck.title }}</span>
+        <span class="present-chrome-brand">Drop Zone League</span>
+        <span class="present-chrome-deck">{{ deck.title }} · {{ deck.slides.length }} slides</span>
         <button
           type="button"
-          class="present-chrome-format"
-          :title="format === 'vertical' ? 'Switch to widescreen' : 'Switch to vertical (social)'"
-          @click="toggleFormat"
+          class="present-export-btn"
+          :disabled="exporting"
+          @click="exportAll"
         >
-          {{ format === 'vertical' ? '▭' : '▯' }}
+          {{ exporting ? `Saving ${done}/${deck.slides.length}…` : 'Download all' }}
         </button>
         <router-link :to="backLink" class="present-chrome-exit">Exit</router-link>
       </header>
 
-      <main class="present-stage" role="region" :aria-label="`Slide ${slideIndex + 1} of ${deck.slides.length}`">
-        <!-- The null guard has to be its own wrapper: without it the
-             template cannot narrow the discriminated union below. -->
-        <template v-if="slide">
+      <p v-if="exportNote" class="present-note" :data-tone="exportTone">{{ exportNote }}</p>
+
+      <!-- Every slide, laid out to scroll. Each frame is a true
+           1080x1920 and only SCALED for preview, so what is captured is
+           what ships rather than whatever size the window happens to be. -->
+      <div class="sheet">
+        <figure
+          v-for="(slide, si) in deck.slides"
+          :key="si"
+          class="sheet-item"
+        >
+          <div class="frame" :ref="(el) => setFrame(el, si)">
+            <main class="present-stage">
         <!-- COLD OPEN -->
         <section v-if="slide.kind === 'cold-open'" class="slide slide-cold">
-          <p class="cold-brand">The League Beat</p>
+          <p class="cold-brand">Drop Zone League</p>
           <h1 class="cold-title">{{ slide.title }}</h1>
           <p class="cold-sub">{{ slide.subtitle }}</p>
           <p v-if="slide.meta" class="cold-meta">{{ slide.meta }}</p>
@@ -87,7 +92,6 @@
               v-for="(row, i) in slide.rows"
               :key="`${row.label}-${i}`"
               class="list-row"
-              :class="{ 'is-hidden': i > revealIndex }"
             >
               <span v-if="row.lead" class="list-lead">{{ row.lead }}</span>
               <span
@@ -96,7 +100,7 @@
                 :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
                 aria-hidden="true"
               >
-                <img v-if="row.logoUrl" :src="row.logoUrl" class="list-logo-img" alt="" />
+                <img v-if="row.logoUrl" :src="proxied(row.logoUrl)" class="list-logo-img" alt="" />
                 <span v-else class="list-logo-initials">{{ row.logoInitials }}</span>
               </span>
               <span class="list-copy">
@@ -133,7 +137,7 @@
               :style="{ background: slide.logoColor ? `linear-gradient(135deg, ${slide.logoColor})` : undefined }"
               aria-hidden="true"
             >
-              <img v-if="slide.logoUrl" :src="slide.logoUrl" class="team-logo-img" alt="" />
+              <img v-if="slide.logoUrl" :src="proxied(slide.logoUrl)" class="team-logo-img" alt="" />
               <span v-else class="team-logo-initials">{{ slide.logoInitials }}</span>
             </span>
             <span class="team-identity">
@@ -173,7 +177,7 @@
               <span class="team-player-face">
                 <img
                   v-if="p.imageUrl && !failedImages.has(p.imageUrl)"
-                  :src="p.imageUrl"
+                  :src="proxied(p.imageUrl)"
                   class="team-player-img"
                   alt=""
                   @error="onImageError(p.imageUrl)"
@@ -190,7 +194,7 @@
             <span class="team-player-face is-large">
               <img
                 v-if="slide.highlight.imageUrl && !failedImages.has(slide.highlight.imageUrl)"
-                :src="slide.highlight.imageUrl"
+                :src="proxied(slide.highlight.imageUrl)"
                 class="team-player-img"
                 alt=""
                 @error="onImageError(slide.highlight.imageUrl)"
@@ -231,8 +235,8 @@
             class="spot-art"
             :style="{ background: slide.logoColor ? `linear-gradient(135deg, ${slide.logoColor})` : undefined }"
           >
-            <img v-if="slide.imageUrl" :src="slide.imageUrl" class="spot-face" alt="" />
-            <img v-else-if="slide.logoUrl" :src="slide.logoUrl" class="spot-face" alt="" />
+            <img v-if="slide.imageUrl" :src="proxied(slide.imageUrl)" class="spot-face" alt="" />
+            <img v-else-if="slide.logoUrl" :src="proxied(slide.logoUrl)" class="spot-face" alt="" />
             <span v-else class="spot-initials">{{ slide.logoInitials }}</span>
           </div>
           <h2 class="spot-title">{{ slide.title }}</h2>
@@ -247,38 +251,24 @@
         <section v-else class="slide slide-signoff">
           <h2 class="signoff-headline">{{ slide.headline }}</h2>
           <p v-if="slide.sub" class="signoff-sub">{{ slide.sub }}</p>
-          <!-- The presentation is over and the room is looking at the
-               screen. Leaving them on a dead slide with only a small
-               "Exit" in the corner strands the presenter mid-sentence. -->
-          <div class="signoff-actions">
-            <router-link :to="backLink" class="signoff-action signoff-action-primary">
-              Back to the issue
-            </router-link>
-            <button type="button" class="signoff-action" @click="restart">
-              Start over
-            </button>
-          </div>
-          <p class="signoff-brand">theleaguebeat.com</p>
+          <p class="signoff-brand">Drop Zone League</p>
         </section>
-        </template>
       </main>
-
-      <!-- Click targets. Big and invisible, so a presenter can advance
-           without hunting for a control on a shared screen. -->
-      <button class="present-tap present-tap-prev" aria-label="Previous" @click="back"></button>
-      <button class="present-tap present-tap-next" aria-label="Next" @click="advance"></button>
-
-      <footer class="present-hint" aria-hidden="true">
-        <span>{{ stepIndex + 1 }} / {{ totalSteps }}</span>
-        <span class="present-hint-keys">← → to move · Esc to exit</span>
-      </footer>
+          </div>
+          <figcaption class="sheet-cap">
+            <span class="sheet-num">{{ String(si + 1).padStart(2, '0') }}</span>
+            <span class="sheet-name">{{ slideLabel(slide) }}</span>
+            <button type="button" class="sheet-one" @click="exportOne(si)">Save</button>
+          </figcaption>
+        </figure>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
@@ -315,14 +305,18 @@ import {
   SLEEPER_PLAYERS_URL,
   type BridgePlatform,
 } from '@/editorial/points/playerIdBridge'
-import { deckStepCount, type PresentDeck } from '@/editorial/present/types'
+import type { PresentDeck, PresentSlide } from '@/editorial/present/types'
 import { deckFromIssue, type PresentFormat } from '@/editorial/issue/toSlides'
+import {
+  chooseTarget,
+  frameToPng,
+  proxied,
+  slideFilename,
+} from '@/editorial/present/exportSlides'
 import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
-import type { Issue } from '@/editorial/issue/types'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 
 const route = useRoute()
-const router = useRouter()
 const leaguesStore = useLeaguesStore()
 
 const loading = ref(true)
@@ -330,10 +324,15 @@ const error = ref<string | null>(null)
 const deck = ref<PresentDeck | null>(null)
 
 /** Which slide, and how many rows of it are revealed. */
-const slideIndex = ref(0)
-const revealIndex = ref(0)
-/** Set when the presenter advances past the sign-off. */
-const atEnd = ref(false)
+/**
+ * The deck is always cut vertical.
+ *
+ * The old landscape mode and its toggle are gone: this screen exists to
+ * produce 1080x1920 images, and a widescreen variant would be a format
+ * nobody exports. `deckFromIssue` still understands both — only the
+ * view has an opinion.
+ */
+const format: PresentFormat = 'vertical'
 
 const backLink = computed(() => {
   const id = route.params.leagueId
@@ -341,80 +340,15 @@ const backLink = computed(() => {
 })
 
 /**
- * Landscape for a room, vertical for a phone.
- *
- * A query param rather than a setting: you want the TV format for a
- * league call and vertical for a social clip on the same afternoon, and
- * a settings trip between them is two trips too many. The choice is
- * remembered so the toggle is one tap next time, and `?format=vertical`
- * on a link opens that way regardless.
- */
-const FORMAT_KEY = 'tlb_present_format'
-const format = ref<PresentFormat>('landscape')
-
-watch(
-  () => route.query.format,
-  (q) => {
-    if (q === 'vertical' || q === 'landscape') {
-      format.value = q
-      try { localStorage.setItem(FORMAT_KEY, q) } catch { /* private mode */ }
-      return
-    }
-    try {
-      const saved = localStorage.getItem(FORMAT_KEY)
-      if (saved === 'vertical' || saved === 'landscape') format.value = saved
-    } catch { /* private mode */ }
-  },
-  { immediate: true },
-)
-
-function toggleFormat(): void {
-  const next = format.value === 'vertical' ? 'landscape' : 'vertical'
-  void router.replace({ query: { ...route.query, format: next } })
-}
-
-/**
- * The issue this deck was cut from, kept so the format toggle can
- * re-cut it.
- *
- * FORMAT IS NOT A STYLESHEET. Vertical explodes a list into one screen
- * per row and drops the support text — decisions made in
- * `deckFromIssue`, at build time. Without this the toggle flipped the
- * container class and left the slides in landscape shape: a list
- * stayed one crowded list, in a box built for a single name.
- *
- * Re-cutting from the cached issue rather than re-running `load()`
- * keeps the toggle instant and avoids refetching a league mid-
- * presentation.
- */
-const builtFrom = shallowRef<{ issue: Issue; only?: string; id?: string } | null>(null)
-
-watch(format, (next) => {
-  const src = builtFrom.value
-  if (!src) return
-  const recut = deckFromIssue(src.issue, { only: src.only, format: next, id: src.id })
-  if (recut) {
-    deck.value = recut
-    // A vertical cut has more slides than its landscape twin, so an
-    // index from the other format can land past the end.
-    slideIndex.value = Math.min(slideIndex.value, recut.slides.length - 1)
-  }
-})
-
-const slide = computed(() => deck.value?.slides[slideIndex.value] ?? null)
-
-/**
  * Headshots that 404'd, so the face falls back to initials.
  *
- * Sleeper's CDN has no image for every player it projects — rookies
- * and practice-squad bodies especially — and a broken-image icon in a
- * row of faces is worse than no faces at all. Keyed by URL rather than
- * player so one miss does not blank a player who appears twice.
+ * Sleeper has no image for every player it projects, and a broken-image
+ * icon baked into an exported PNG is permanent in a way an on-screen
+ * one is not.
  */
 const failedImages = ref(new Set<string>())
 function onImageError(url: string | undefined): void {
   if (!url) return
-  // A new Set, because mutating one in place is not reactive.
   failedImages.value = new Set(failedImages.value).add(url)
 }
 
@@ -435,6 +369,85 @@ function ordinalOf(n: number): string {
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
 }
 
+/* ── Export ────────────────────────────────────────────────────── */
+
+/** Live element per slide index, so a frame can be rasterised on demand. */
+const frames = new Map<number, HTMLElement>()
+function setFrame(el: unknown, i: number): void {
+  if (el instanceof HTMLElement) frames.set(i, el)
+  else frames.delete(i)
+}
+
+const exporting = ref(false)
+const done = ref(0)
+const exportNote = ref('')
+const exportTone = ref<'ok' | 'bad'>('ok')
+
+/** A short, filename-friendly name for a slide, from whatever it has. */
+function slideLabel(s: PresentSlide): string {
+  if (s.kind === 'team-card') return `${s.rank}-${s.teamName}`
+  if (s.kind === 'spotlight') return s.title
+  if (s.kind === 'cold-open') return s.subtitle || s.title
+  if (s.kind === 'sign-off') return 'end'
+  // Only `statement` and `list` remain, and both carry a headline.
+  return s.headline
+}
+
+async function exportAll(): Promise<void> {
+  const d = deck.value
+  if (!d || exporting.value) return
+  const target = await chooseTarget()
+  if (!target) return // picker dismissed — not a failure
+
+  exporting.value = true
+  done.value = 0
+  exportNote.value = ''
+  try {
+    for (let i = 0; i < d.slides.length; i++) {
+      const el = frames.get(i)
+      if (!el) throw new Error(`Slide ${i + 1} is not rendered.`)
+      const blob = await frameToPng(el)
+      await target.write(slideFilename(i, d.slides.length, slideLabel(d.slides[i])), blob)
+      done.value = i + 1
+    }
+    exportTone.value = 'ok'
+    exportNote.value = `${d.slides.length} images saved to ${target.label}.`
+  } catch (err) {
+    // Report how far it got: a partial export is still usable, and
+    // "it failed" without a count sends you back to slide one.
+    exportTone.value = 'bad'
+    exportNote.value = `Stopped after ${done.value}. ${(err as Error).message}`
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function exportOne(i: number): Promise<void> {
+  const d = deck.value
+  const el = frames.get(i)
+  if (!d || !el || exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await frameToPng(el)
+    const name = slideFilename(i, d.slides.length, slideLabel(d.slides[i]))
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    exportTone.value = 'ok'
+    exportNote.value = `Saved ${name}.`
+  } catch (err) {
+    exportTone.value = 'bad'
+    exportNote.value = (err as Error).message
+  } finally {
+    exporting.value = false
+  }
+}
+
 /**
  * Rows per column for a long list.
  *
@@ -451,80 +464,34 @@ function rowsPerColumn(total: number): number {
   return Math.ceil(total / columns)
 }
 
-/** A list slide with reveal-one-by-one consumes one step per row. */
-const stepsBefore = computed(() => {
-  const d = deck.value
-  if (!d) return 0
-  return d.slides.slice(0, slideIndex.value).reduce((total, s) => {
-    if (s.kind === 'list' && s.revealOneByOne) return total + Math.max(1, s.rows.length)
-    return total + 1
-  }, 0)
-})
-const stepIndex = computed(() => stepsBefore.value + revealIndex.value)
-const totalSteps = computed(() => (deck.value ? deckStepCount(deck.value) : 0))
-const progressPct = computed(() =>
-  totalSteps.value <= 1 ? 100 : ((stepIndex.value + 1) / totalSteps.value) * 100,
-)
 
-/** Rows still to reveal on the current slide, if any. */
-const rowsRemaining = computed(() => {
-  const s = slide.value
-  if (!s || s.kind !== 'list' || !s.revealOneByOne) return 0
-  return Math.max(0, s.rows.length - 1 - revealIndex.value)
-})
-
-function advance(): void {
-  if (!deck.value) return
-  if (rowsRemaining.value > 0) {
-    revealIndex.value += 1
-    return
+/** Pair one week's raw entries into scheduled games. `matchup_id` is
+ *  null for byes and unpaired teams — grouping before filtering would
+ *  invent games between teams that never met. */
+function pairSchedule(
+  week: number,
+  entries: { roster_id?: number; matchup_id?: number | null }[],
+): ScheduledGame[] {
+  const byId = new Map<number, string[]>()
+  for (const e of entries) {
+    if (e?.matchup_id == null || e.roster_id == null) continue
+    byId.set(e.matchup_id, [...(byId.get(e.matchup_id) ?? []), String(e.roster_id)])
   }
-  if (slideIndex.value < deck.value.slides.length - 1) {
-    slideIndex.value += 1
-    revealIndex.value = 0
-    return
+  const games: ScheduledGame[] = []
+  for (const pair of byId.values()) {
+    if (pair.length === 2) {
+      games.push({ week, homeTeamId: pair[0], awayTeamId: pair[1] })
+    }
   }
-  // Already on the sign-off. Advancing again leaves the deck rather
-  // than doing nothing, which reads as a broken key.
-  atEnd.value = true
+  return games
 }
 
-watch(atEnd, (done) => {
-  if (done) void router.push(backLink.value)
-})
-
-/** Present it again without leaving the room and reloading. */
-function restart(): void {
-  slideIndex.value = 0
-  revealIndex.value = 0
-}
-
-function back(): void {
-  if (!deck.value) return
-  if (revealIndex.value > 0) {
-    revealIndex.value -= 1
-    return
-  }
-  if (slideIndex.value > 0) {
-    slideIndex.value -= 1
-    const prev = deck.value.slides[slideIndex.value]
-    // Stepping back into a list lands on its LAST row, not its first —
-    // otherwise going back re-reveals rows the room has already seen.
-    revealIndex.value =
-      prev.kind === 'list' && prev.revealOneByOne ? Math.max(0, prev.rows.length - 1) : 0
-  }
-}
-
-function onKey(e: KeyboardEvent): void {
-  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-    e.preventDefault()
-    advance()
-  } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-    e.preventDefault()
-    back()
-  } else if (e.key === 'Escape') {
-    void router.push(backLink.value)
-  }
+/** Regular-season length from the league's playoff start. `0` means
+ *  UNSET on Sleeper, not "no playoffs", so it falls back rather than
+ *  producing a negative week count. */
+function regularSeasonWeeksOf(playoffWeekStart?: number): number {
+  const pws = Number(playoffWeekStart)
+  return Number.isFinite(pws) && pws > 1 ? pws - 1 : 14
 }
 
 /**
@@ -701,40 +668,10 @@ async function buildBoard(args: {
   })
 }
 
-/** Pair one week's raw entries into scheduled games. `matchup_id` is
- *  null for byes and unpaired teams — grouping before filtering would
- *  invent games between teams that never met. */
-function pairSchedule(
-  week: number,
-  entries: { roster_id?: number; matchup_id?: number | null }[],
-): ScheduledGame[] {
-  const byId = new Map<number, string[]>()
-  for (const e of entries) {
-    if (e?.matchup_id == null || e.roster_id == null) continue
-    byId.set(e.matchup_id, [...(byId.get(e.matchup_id) ?? []), String(e.roster_id)])
-  }
-  const games: ScheduledGame[] = []
-  for (const pair of byId.values()) {
-    if (pair.length === 2) {
-      games.push({ week, homeTeamId: pair[0], awayTeamId: pair[1] })
-    }
-  }
-  return games
-}
-
-/** Regular-season length from the league's playoff start. `0` means
- *  UNSET on Sleeper, not "no playoffs", so it falls back rather than
- *  producing a negative week count. */
-function regularSeasonWeeksOf(playoffWeekStart?: number): number {
-  const pws = Number(playoffWeekStart)
-  return Number.isFinite(pws) && pws > 1 ? pws - 1 : 14
-}
-
 async function load(): Promise<void> {
   loading.value = true
   error.value = null
   deck.value = null
-  builtFrom.value = null
   try {
     const uuid = route.params.leagueId
     if (typeof uuid !== 'string') throw new Error('No league in the URL.')
@@ -791,8 +728,7 @@ async function load(): Promise<void> {
         team: teamVisual,
       })
       if (live) {
-        builtFrom.value = { issue: live, only: 'this-week', id: 'live' }
-        deck.value = deckFromIssue(live, { only: 'this-week', format: format.value, id: 'live' })
+        deck.value = deckFromIssue(live, { only: 'this-week', format, id: 'live' })
         loading.value = false
         return
       }
@@ -945,10 +881,9 @@ async function load(): Promise<void> {
       const wanted = issue.sections.some((s) => s.id === deckId) ? deckId : undefined
       const fromIssue = deckFromIssue(issue, {
         only: wanted,
-        format: format.value,
+        format,
       })
       if (fromIssue && (wanted || deckId === 'issue')) {
-        builtFrom.value = { issue, only: wanted }
         deck.value = fromIssue
         loading.value = false
         return
@@ -1576,6 +1511,79 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
    1080x1920 window, an OBS canvas. Percentages of the FRAME, and the
    slide box then sizes its own type, because viewport units would size
    against the window rather than the safe area and be wrong in both. */
+/* ── EXPORT LAYOUT ─────────────────────────────────────────────
+   The old view was one slide filling the viewport. This one is every
+   slide at once, each a true 1080x1920 that is only SCALED for preview
+   — capture reads the real element, so what ships is not whatever size
+   the window happened to be. */
+.present.is-export {
+  position: static;
+  min-height: 100vh;
+  overflow: auto;
+  display: block;
+  padding-bottom: 80px;
+}
+.present.is-export .present-chrome {
+  position: sticky; top: 0; z-index: 10;
+  background: oklch(0.06 0.014 90 / 0.94);
+  backdrop-filter: blur(8px);
+}
+.present-export-btn {
+  font: inherit; font-weight: 700; font-size: 0.9rem;
+  padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  background: oklch(0.85 0.17 92); color: oklch(0.18 0.02 90);
+  border: none;
+}
+.present-export-btn:disabled { opacity: 0.55; cursor: default; }
+.present-note {
+  margin: 12px auto; max-width: 900px; padding: 0 20px;
+  font-size: 0.92rem; color: oklch(0.72 0.01 90);
+}
+.present-note[data-tone='bad'] { color: oklch(0.72 0.19 40); }
+
+.sheet {
+  display: flex; flex-wrap: wrap; gap: 40px;
+  justify-content: center; align-items: flex-start;
+  padding: 28px 20px;
+}
+.sheet-item { margin: 0; }
+/* The frame is full size; the wrapper shrinks it visually. Width and
+   height are set explicitly so the shrunken box does not leave a
+   1920px hole in the layout. */
+.frame {
+  position: relative;
+  width: 1080px; height: 1920px;
+  transform: scale(0.24);
+  transform-origin: top left;
+  background: oklch(0.06 0.014 90);
+  overflow: hidden;
+  border-radius: 6px;
+}
+/* Explicit basis: a flex item sizes to CONTENT by default, and the
+   content here is a 1080px-wide frame that only LOOKS small. */
+.sheet-item { flex: 0 0 259px; width: 259px; overflow: hidden; }
+.sheet-item > .frame { margin-bottom: -1459px; }  /* 1920 * (1 - 0.24) */
+.sheet-cap {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; font-size: 0.8rem; color: oklch(0.62 0.01 90);
+}
+.sheet-num { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.sheet-name {
+  flex: 1; min-width: 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.sheet-one {
+  font: inherit; font-size: 0.75rem; padding: 3px 10px;
+  border-radius: 999px; cursor: pointer;
+  background: transparent; color: oklch(0.80 0.01 90);
+  border: 1px solid oklch(0.32 0.02 90);
+}
+
+/* The old single-slide sizing. Neutralised under .is-export so the
+   frames above can set their own box. */
+.present.is-export.is-vertical { aspect-ratio: auto; max-height: none; margin-inline: 0; }
+.present.is-export .present-stage { position: absolute; }
+
 .present.is-vertical { aspect-ratio: 9 / 16; margin-inline: auto; max-height: 100vh; }
 
 /* Chrome would land in the icon rail and the caption strip, both of
