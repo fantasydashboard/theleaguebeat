@@ -73,14 +73,14 @@
                not happened. Naming it Preseason is the honest label and
                it also tells a reader why there are no results in it. -->
           <span class="issue-title-meta">
-            · {{ pointsSeasonStarted ? `Week ${livePointsData.currentWeek}` : 'Preseason' }}
+            · {{ pointsStageStarted ? `Week ${livePointsData.currentWeek}` : 'Preseason' }}
             · {{ livePointsData.currentSeason }}
           </span>
         </h1>
         <p class="issue-sub">
           <!-- "This week ... as it unfolds" is false before kickoff:
                nothing is unfolding. -->
-          {{ pointsSeasonStarted
+          {{ pointsStageStarted
             ? `This week in ${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, chronicled as it unfolds.`
             : `${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, before a snap of it has been played.` }}
         </p>
@@ -1071,6 +1071,28 @@ const pointsCoverStory = computed(() => {
  * land, and is then replaced by something better.
  */
 const issueLead = computed(() => assembledIssue.value?.sections[0] ?? null)
+
+/**
+ * Whether the masthead should say "Week N" or "Preseason".
+ *
+ * ASKS THE ISSUE, not a parallel test. The page previously used
+ * `hasPlayedGames` (standings show a decided game) while `loadIssue`
+ * chose its edition on `hasCompletedWeek` (a week has closed). Two
+ * questions, treated as one, and on the Thursday night of week one they
+ * gave opposite answers: the masthead read "Issue 1 · Preseason · 2026
+ * — before a snap of it has been played" directly above a section
+ * headlined "The board after 1 week."
+ *
+ * `Issue.week` is already the contract's own answer — 0 before kickoff —
+ * so the assembled issue and the words above it cannot disagree.
+ * Falls back to the standings test only for the legacy path, which
+ * builds no Issue to ask.
+ */
+const pointsStageStarted = computed(() => {
+  const issue = assembledIssue.value
+  if (issue) return issue.week > 0
+  return pointsSeasonStarted.value
+})
 
 /**
  * The sections rendered as blocks down the page.

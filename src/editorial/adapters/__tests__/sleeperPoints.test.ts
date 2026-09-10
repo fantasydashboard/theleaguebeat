@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { hasCompletedWeek } from '@/editorial/issue/loadIssue'
 import {
   buildSleeperPointsData,
   pointsWeeklyOutcomes,
@@ -447,5 +448,51 @@ describe('buildSleeperPointsData — playoff_week_start: 0 edge case', () => {
     const unsetData = buildSleeperPointsData(rawUnset)
     expect(unsetData.regularSeasonEndWeek).toBeUndefined()
     expect(unsetData.regularSeasonEndWeek).not.toBe(-1)
+  })
+})
+
+describe('a week in progress is not a week that happened', () => {
+  // Observed on a real 10-team league at 8pm on kickoff Thursday: five
+  // rosters had exactly one scored starter, five had none at all. The
+  // old test asked whether ANY roster had scored, which is true the
+  // moment a single player takes a snap — so an hour-old, one-game week
+  // was treated as finished. The issue flipped out of its preseason
+  // edition permanently, and the board dropped every roster still on
+  // 0.0: a ten-team league published five teams with an all-play of 4-0.
+  const thursdayNight = (): Parameters<typeof buildSleeperPointsData>[0] => {
+    const base = JSON.parse(JSON.stringify(raw))
+    base.league.settings.leg = 1 // Sleeper's own current week
+    const rosterIds: number[] = base.rosters.map((r: { roster_id: number }) => r.roster_id)
+    base.matchupsByWeek = {
+      '1': rosterIds.map((roster_id, i) => ({
+        roster_id,
+        matchup_id: Math.floor(i / 2) + 1,
+        // Only the teams with a player in the opening game have scored.
+        points: i < 4 ? [22.2, 12.82, 12.0, 6.8][i] : 0,
+        starters: [],
+        players: [],
+      })),
+    }
+    return base
+  }
+
+  it('counts no weekly scores while week one is still being played', () => {
+    const out = buildSleeperPointsData(thursdayNight())
+    expect(out.weeklyScores).toEqual([])
+  })
+
+  it('keeps the league in its preseason edition', () => {
+    // hasCompletedWeek reads weeklyScores, so this is what stopped a
+    // complete preseason issue being replaced by a worse live snapshot.
+    expect(hasCompletedWeek(buildSleeperPointsData(thursdayNight()))).toBe(false)
+  })
+
+  it('counts week one once the league has moved past it', () => {
+    const closed = thursdayNight()
+    closed.league.settings.leg = 2 // week one is now behind us
+    const out = buildSleeperPointsData(closed)
+    const week1 = out.weeklyScores!.filter((s) => s.week === 1)
+    // Every roster, including the ones the old zero-filter would drop.
+    expect(week1).toHaveLength(closed.rosters.length)
   })
 })

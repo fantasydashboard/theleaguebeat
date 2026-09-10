@@ -2029,18 +2029,34 @@ export function pointsWeeklyOutcomes(
  * (`league_average_match: 1`, where a week holds more results than it
  * holds games) without any of the logic that pairing needs to get right.
  *
- * Only weeks that have actually been played are included; an unplayed
- * week reports every roster at 0, which would read as a league-wide
- * shutout rather than as an absence.
+ * CLOSED WEEKS ONLY — strictly before the live week, which is the rule
+ * the ESPN points branch already uses.
+ *
+ * `weekHasBeenPlayed` is deliberately NOT the test here. It asks whether
+ * ANY roster has scored, which on the Thursday night of week one is true
+ * the moment a single player takes a snap. Everything downstream then
+ * treats an hour-old, one-game week as a finished one: `hasCompletedWeek`
+ * flips the issue out of its preseason edition permanently, and
+ * `scoresByWeek` drops every roster still on 0.0 — so a ten-team league
+ * published a five-team board with an all-play out of four.
+ *
+ * Observed on a real league at 8pm on kickoff Thursday: five rosters with
+ * exactly one scored starter, five with none.
+ *
+ * `leg` is Sleeper's own current week, so `week < leg` means the league
+ * has moved past it. This is the "never infer 'week closed' from
+ * 'everyone has scored'" rule in CLAUDE.md, applied where it was missing.
  */
 function buildSleeperWeeklyScores(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   regularSeasonBoundWeek: number,
+  currentWeek: number,
 ): PointsWeeklyScore[] {
   const out: PointsWeeklyScore[] = []
+  const lastClosedWeek = Math.min(regularSeasonBoundWeek, currentWeek - 1)
   const weeks = Object.keys(matchupsByWeek)
     .map(Number)
-    .filter((w) => Number.isFinite(w) && w <= regularSeasonBoundWeek)
+    .filter((w) => Number.isFinite(w) && w <= lastClosedWeek)
     .sort((a, b) => a - b)
 
   for (const week of weeks) {
@@ -2361,7 +2377,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   )
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
-  const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek)
+  const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
   const draft = buildSleeperDraft(raw, currentSeason)
   const seasonHistory = buildSleeperPointsSeasonHistory(raw)
 
