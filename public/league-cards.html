@@ -142,6 +142,76 @@
   }
   .big-sub { text-align: center; font-size: 32px; color: var(--muted); margin-top: 14px; }
 
+  /* ── Intro card: the frame a countdown opens on ───────────── */
+  .intro {
+    display: flex; flex-direction: column; justify-content: center;
+    align-items: center; height: 100%; text-align: center;
+  }
+  .intro-crest {
+    width: 340px; height: 340px; object-fit: contain;
+    border-radius: 42px; margin-bottom: 56px;
+  }
+  .intro-league {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 31px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--pink);
+    margin-bottom: 24px;
+  }
+  .intro-title {
+    font-size: 128px; font-weight: 900; line-height: 0.86;
+    letter-spacing: -0.04em; margin: 0;
+  }
+  .intro-season {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 54px;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--gold);
+    margin-top: 34px;
+  }
+  .intro-foot {
+    width: 640px; margin-top: 52px; padding-top: 28px;
+    border-top: 2px solid var(--line);
+    font-size: 30px; color: var(--muted);
+  }
+
+  /* ── Grouped reveal: three teams, top of frame ─────────────
+     Everything sits in the upper half. The bottom of the vertical is
+     left empty on purpose — that is where the person talking goes, and
+     the export fades this to transparent so it can sit over footage. */
+  .grp { padding-top: 26px; }
+  .grp-eyebrow {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 27px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--pink);
+    margin-bottom: 40px;
+  }
+  .grp-rows { display: flex; flex-direction: column; gap: 42px; }
+  .grp-row { display: flex; align-items: center; gap: 32px; }
+  .grp-rank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 140px;
+    line-height: 0.8; color: var(--gold); flex: none;
+    width: 164px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .grp-crest {
+    width: 172px; height: 172px; flex: none; border-radius: 36px; overflow: hidden;
+    background: oklch(0.22 0.02 90); display: grid; place-items: center;
+    font-weight: 900; font-size: 46px;
+  }
+  .grp-crest img { width: 100%; height: 100%; object-fit: cover; }
+  .grp-id { min-width: 0; flex: 1; }
+  .grp-name {
+    display: block; font-size: 62px; font-weight: 900; line-height: 1;
+    letter-spacing: -0.025em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* One line, always — a wrapped subtitle makes the three rows uneven. */
+  .grp-last {
+    display: block; font-size: 31px; color: var(--muted); margin-top: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* The number one reveal gets the whole top half to itself. */
+  .grp[data-solo] .grp-rank { font-size: 190px; width: 210px; }
+  .grp[data-solo] .grp-crest { width: 230px; height: 230px; border-radius: 46px; }
+  .grp[data-solo] .grp-name { font-size: 76px; white-space: normal; }
+  .grp[data-solo] .grp-last { font-size: 36px; margin-top: 18px; }
+
   /* ── A single rule, alone on the screen ───────────────────── */
   .solo { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 34px; }
   .solo-arrow { font-size: 190px; line-height: 0.8; }
@@ -207,28 +277,56 @@
   .pr-proj { font-size: 26px; color: var(--muted); }
   .pr-proj b { color: var(--gold); font-size: 34px; font-family: 'Barlow Condensed', sans-serif; }
 
+  /* Season odds. The point total says how good the roster is; these say
+     what it is likely to get, which is the thing the league argues about. */
+  .pr-odds {
+    display: flex; gap: 14px; margin: 20px 0 4px;
+  }
+  .pr-odds span {
+    flex: 1; padding: 14px 20px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line);
+    font-size: 23px; color: var(--muted); line-height: 1.25;
+  }
+  .pr-odds b {
+    display: block; font-family: 'Barlow Condensed', sans-serif;
+    font-size: 46px; font-weight: 900; color: #fff;
+    letter-spacing: -0.01em; margin-bottom: 2px;
+  }
+  .pr-odds span:last-child b { color: var(--pink); }
+
   .pr-slots-label {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 22px;
     letter-spacing: 0.2em; text-transform: uppercase; color: var(--pink);
     margin: 6px 0 12px; display: flex; align-items: center; gap: 14px;
   }
+  .pr-slots-label em {
+    font-family: system-ui, sans-serif; font-style: normal; font-weight: 500;
+    font-size: 21px; letter-spacing: 0; text-transform: none; color: var(--dim);
+  }
   .pr-slots-label::after { content: ''; flex: 1; height: 2px; background: var(--line); }
-  .pr-slots { display: flex; flex-direction: column; gap: 9px; }
+  .pr-slots { display: flex; flex-direction: column; gap: 12px; }
   .pr-slot {
     display: flex; align-items: center; gap: 16px;
     background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 13px 18px;
+    border-radius: 16px; padding: 12px 20px 12px 0;
   }
   .pr-pos {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 21px;
     letter-spacing: 0.1em; color: var(--muted);
-    width: 62px; flex: none; text-align: center;
+    width: 74px; flex: none; text-align: center;
     border-right: 1px solid var(--line);
   }
   .pr-slot[data-flex] .pr-pos { color: oklch(0.72 0.14 250); }
-  .pr-player { flex: 1; min-width: 0; font-size: 31px; font-weight: 750;
+  /* Sleeper headshots are 350×254 with the player centred and the head high
+     in the frame, so a straight centre crop cuts the forehead off. */
+  .pr-face {
+    width: 72px; height: 72px; flex: none; border-radius: 50%; overflow: hidden;
+    background: oklch(0.24 0.02 90); margin-left: -2px;
+  }
+  .pr-face img { width: 100%; height: 100%; object-fit: cover; object-position: center 18%; }
+  .pr-player { flex: 1; min-width: 0; font-size: 33px; font-weight: 750;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pr-pts { flex: none; font-size: 27px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pr-pts { flex: none; font-size: 29px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .pr-note {
     margin-top: 18px; padding-left: 16px; border-left: 3px solid var(--line);
     font-size: 24px; line-height: 1.4; color: var(--dim);
@@ -300,8 +398,11 @@
 
 <script>
 const LEAGUES = {
-  lor: { id: '1389692138421239808', name: 'League of Record', eyebrow: 'Top flight',  crest: '/league/lor-logo.png', divisions: true },
-  ffl: { id: '1389738108437680128', name: 'Futures Football League', eyebrow: 'Second tier', crest: '/league/ffl-logo.png', divisions: false },
+  // `prev` is last season, needed for the "how they finished" line. Both
+  // are loaded whichever league is rendering, because a promoted or
+  // relegated team's last season lives in the OTHER tier's table.
+  lor: { id: '1389692138421239808', prev: '1186844188245356544', name: 'League of Record', eyebrow: 'Top flight',  crest: '/league/lor-logo.png', divisions: true },
+  ffl: { id: '1389738108437680128', prev: '1257084943821967360', name: 'Futures Football League', eyebrow: 'Second tier', crest: '/league/ffl-logo.png', divisions: false },
 }
 
 // Settled history — keyed on OWNER, because team names move.
@@ -505,14 +606,235 @@ function bestLineup(roster, slots) {
   return out
 }
 
+/**
+ * Expected points per week — what the card actually ranks on.
+ *
+ * "Best lineup" assumes all fourteen players are available all seventeen
+ * weeks, which makes a bench worth exactly nothing. Real seasons take
+ * starters away: one bye plus a couple of missed games is roughly three
+ * of seventeen, so P_AVAIL is 0.82. When a player is out you start the
+ * best replacement you own — and when you own nobody, you stream, which
+ * is what REPL is: the best player at that position rostered in neither
+ * league. This is why a single-QB roster gives points back and a deep
+ * one does not.
+ *
+ * Computed exactly rather than sampled — every availability combination,
+ * weighted by its probability — so the number on the card is the same
+ * number every time it is generated.
+ */
+const P_AVAIL = 0.82
+const REPL = { QB: 14.58, RB: 5.93, WR: 8.15, TE: 7.32, FLEX: 8.15 }
+
+function fillFrom(byPos) {
+  let tot = 0
+  const left = []
+  for (const [pos, n] of [['QB', 1], ['RB', 2], ['WR', 2], ['TE', 1]]) {
+    const v = byPos[pos]
+    for (let i = 0; i < n; i++) tot += i < v.length ? v[i] : REPL[pos]
+    if (pos !== 'QB') for (let i = n; i < v.length; i++) left.push(v[i])
+  }
+  left.sort((a, b) => b - a)
+  for (let i = 0; i < 3; i++) tot += i < left.length ? left[i] : REPL.FLEX
+  return tot
+}
+
+function expectedWeekly(roster) {
+  // Sorted descending within each position, so a subset's available list
+  // comes out sorted by construction and never needs re-sorting.
+  const pl = ['QB', 'RB', 'WR', 'TE'].flatMap((pos) =>
+    roster.filter((p) => p.pos === pos).sort((a, b) => b.pts - a.pts)
+      .map((p) => ({ pos, val: p.pts / 17 })))
+  const n = pl.length
+  const q = 1 - P_AVAIL
+  const pk = [], qk = []
+  for (let i = 0; i <= n; i++) { pk[i] = P_AVAIL ** i; qk[i] = q ** i }
+  let total = 0
+  for (let mask = 0; mask < (1 << n); mask++) {
+    let k = 0
+    for (let m = mask; m; m &= m - 1) k++
+    const w = pk[k] * qk[n - k]
+    if (w < 1e-12) continue
+    const byPos = { QB: [], RB: [], WR: [], TE: [] }
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) byPos[pl[i].pos].push(pl[i].val)
+    total += w * fillFrom(byPos)
+  }
+  return total
+}
+
+/**
+ * Season odds. Not computable here — they come from simulating each
+ * league's real fourteen-week schedule and playoff format 200,000 times,
+ * with the weekly scoring spread measured from that league's own 2025
+ * results. Regenerate with scripts/season-odds when rosters change.
+ *
+ * Keyed on OWNER, for the same reason CHAMPIONS is: a manager renamed
+ * their team mid-week and a name-keyed table silently dropped their odds
+ * off the card. Owner ids survive renames, promotion and relegation.
+ */
+const ODDS = {
+  lor: {
+    '460815427782569984':  { playoffs: 80, tail: 7 },   // The Aman-Ra Stars
+    '414222972006453248':  { playoffs: 79, tail: 8 },   // Mighty Mallards
+    '342904407941357568':  { playoffs: 75, tail: 9 },   // Scuttlebucs
+    '414190204908216320':  { playoffs: 67, tail: 14 },  // Gridiron Man
+    '1263999646091460608': { playoffs: 68, tail: 13 },  // Chancla Warriors
+    '651270241543868416':  { playoffs: 55, tail: 22 },  // The Juggernauts
+    '1004143904419045376': { playoffs: 50, tail: 25 },  // Pigskin Prophtz
+    '809255351798038528':  { playoffs: 50, tail: 27 },  // OverDrive
+    '462641888436940800':  { playoffs: 40, tail: 36 },  // East Coast Enforcers
+    '857090100046213120':  { playoffs: 36, tail: 40 },  // Game of Throws
+  },
+  ffl: {
+    '856343193405497344':  { playoffs: 80, tail: 39 },  // UCDUST
+    '609396639873970176':  { playoffs: 65, tail: 22 },  // Go Birds
+    '866081289881686016':  { playoffs: 54, tail: 15 },  // Dom perignons
+    '441408338803027968':  { playoffs: 51, tail: 14 },  // Aggresive Chickens
+    '786079158324428800':  { playoffs: 53, tail: 14 },  // The Jabariz
+    '460845073509117952':  { playoffs: 49, tail: 12 },  // Black Panther
+    '858899987772325888':  { playoffs: 45, tail: 11 },  // HazeHunters
+    '1001636464716804096': { playoffs: 47, tail: 11 },  // Cabuloso Pats
+    '466332448230207488':  { playoffs: 44, tail: 10 },  // StreetGliders
+    '1398693580465246208': { playoffs: 41, tail: 9 },   // HawkForceOne
+    '1399190785370357760': { playoffs: 36, tail: 7 },   // Zenyatta
+    '414202398039343104':  { playoffs: 37, tail: 7 },   // Primetime Primates
+  },
+}
+const TAIL_LABEL = { lor: 'relegated', ffl: 'promoted' }
+
+/**
+ * Last season, keyed on OWNER — the same reason CHAMPIONS is: team names
+ * move, and this line has to survive a rename, a promotion and a
+ * relegation. A manager who isn't in either tier's previous table is
+ * genuinely new, which is its own answer.
+ */
+const _seasonCache = {}
+const ORD = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]) }
+
+async function seasonSummary(leagueId) {
+  if (_seasonCache[leagueId]) return _seasonCache[leagueId]
+  const [lg, rosters] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${leagueId}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then((r) => r.json()),
+  ])
+  const md = lg.metadata || {}
+  const rows = rosters.map((r) => ({
+    owner: r.owner_id,
+    w: r.settings?.wins || 0,
+    l: r.settings?.losses || 0,
+    pf: (r.settings?.fpts || 0) + (r.settings?.fpts_decimal || 0) / 100,
+    div: r.settings?.division,
+    divName: md[`division_${r.settings?.division}`] || null,
+  }))
+  // Sleeper's own tiebreak: wins, then points for.
+  const ranked = [...rows].sort((a, b) => b.w - a.w || b.pf - a.pf)
+  ranked.forEach((x, i) => { x.rank = i + 1 })
+  for (const d of new Set(rows.map((x) => x.div).filter(Boolean))) {
+    ranked.filter((x) => x.div === d).forEach((x, i) => { x.divRank = i + 1 })
+  }
+  const out = { size: rows.length, by: {} }
+  for (const x of rows) if (x.owner) out.by[x.owner] = x
+  _seasonCache[leagueId] = out
+  return out
+}
+
+/**
+ * "East Coast Enforcers" is twenty characters and does not fit next to a
+ * 172px crest at the size "UCDUST" wants to be. Step the type down rather
+ * than ellipsing a team's name off the end of its own card. Counted by
+ * code point, because two of these names carry emoji.
+ */
+function nameSize(team, solo) {
+  const n = [...team].length
+  if (solo) return n <= 15 ? 76 : n <= 18 ? 66 : 58
+  return n <= 15 ? 62 : n <= 18 ? 54 : 47
+}
+
+/**
+ * Black Panther's and Go Birds' 2025 rosters were deleted after the season
+ * finished. Sleeper still carries the roster rows and their records, but
+ * `owner_id` came back null, so there is no way to link either record to
+ * the manager who earned it. Without this, two relegated teams render as
+ * "New this season", which is the opposite of their story.
+ */
+const ORPHANED_2025 = {
+  '460845073509117952': { w: 2, l: 12, from: 'lor' },  // Black Panther
+  '609396639873970176': { w: 4, l: 10, from: 'lor' },  // Go Birds
+}
+
+function lastSeasonLabel(owner, key, own, other) {
+  const orphan = ORPHANED_2025[owner]
+  if (orphan) {
+    return orphan.from === 'lor'
+      ? `Relegated · ${orphan.w}-${orphan.l} in the top flight`
+      : `Promoted · ${orphan.w}-${orphan.l} in the FFL`
+  }
+  const a = own.by[owner]
+  if (a) {
+    return a.divName
+      ? `${a.w}-${a.l} · ${ORD(a.divRank)} in the ${a.divName}`
+      : `${a.w}-${a.l} · ${ORD(a.rank)} of ${own.size}`
+  }
+  const b = other.by[owner]
+  if (b) {
+    return key === 'lor'
+      ? `Promoted · ${b.w}-${b.l} in the FFL`
+      : `Relegated · ${b.w}-${b.l} in the top flight`
+  }
+  return 'New this season'
+}
+
+/**
+ * A bunch of teams on one frame, sized to leave the bottom of the
+ * vertical clear for a talking head. Deliberately carries less than the
+ * single-team card — rank, crest, name, last season — because anything
+ * more competes with the person saying it out loud.
+ */
+async function loadGroup() {
+  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
+  const cfg = LEAGUES[key]
+  const from = Number(params.get('from') || 3)
+  const to = Number(params.get('to') || from)
+  const [teams, own, other] = await Promise.all([
+    rankedTeams(cfg),
+    seasonSummary(cfg.prev),
+    seasonSummary(LEAGUES[key === 'lor' ? 'ffl' : 'lor'].prev),
+  ])
+  const want = []
+  for (let n = Math.max(from, to); n >= Math.min(from, to); n--) want.push(n)
+  const solo = want.length === 1
+
+  document.getElementById('safe').innerHTML = `
+    <div class="grp" ${solo ? 'data-solo' : ''}>
+      <div class="grp-eyebrow">${esc(cfg.name)} · Preseason power rankings</div>
+      <div class="grp-rows">
+        ${want.map((n) => {
+          const t = teams[n - 1]
+          if (!t) return ''
+          return `
+            <div class="grp-row">
+              <span class="grp-rank">${n}</span>
+              <span class="grp-crest">${t.avatar
+                ? `<img src="${esc(t.avatar)}" alt="">` : esc(initials(t.team))}</span>
+              <span class="grp-id">
+                <span class="grp-name" style="font-size:${nameSize(t.team, solo)}px">${esc(t.team)}</span>
+                <span class="grp-last">${esc(lastSeasonLabel(t.owner, key, own, other))}</span>
+              </span>
+            </div>`
+        }).join('')}
+      </div>
+    </div>`
+}
+
 async function loadRanks() {
   // Every card, stacked at full size, for a single capture that gets
   // sliced into ten files.
+  const from = Number(params.get('from') || 1)
+  const to = Number(params.get('to') || 10)
   const frames = []
-  for (let n = 1; n <= 10; n++) frames.push(`<div class="frame strip-frame" data-n="${n}"></div>`)
+  for (let n = from; n <= to; n++) frames.push(`<div class="frame strip-frame" data-n="${n}"></div>`)
   document.getElementById('shell').innerHTML = `<div class="strip">${frames.join('')}</div>`
   document.body.dataset.strip = ''
-  for (let n = 1; n <= 10; n++) {
+  for (let n = from; n <= to; n++) {
     const host = document.querySelector(`.strip-frame[data-n="${n}"]`)
     host.innerHTML = '<main class="present-stage"></main>'
     const safe = document.createElement('div')
@@ -526,17 +848,28 @@ async function loadRank() {
   return renderRank(Number(params.get('n') || 1), document.getElementById('safe'))
 }
 
-let _prCache = null
+const _prCache = {}
+// The ranked table, built once per league. expectedWeekly enumerates every
+// availability combination, so rebuilding it for each of twelve frames is
+// millions of redundant lineup evaluations — enough to stall a capture.
+const _tableCache = {}
+
 async function renderRank(want, host) {
-  const cfg = LEAGUES.lor
-  const [league, rosters, users, proj] = _prCache || await Promise.all([
+  // ?lg=ffl for the second tier; defaults to the top flight.
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  return paintRank(await rankedTeams(cfg), want, host, cfg)
+}
+
+async function rankedTeams(cfg) {
+  if (_tableCache[cfg.id]) return _tableCache[cfg.id]
+  const [league, rosters, users, proj] = _prCache[cfg.id] || await Promise.all([
     fetch(`https://api.sleeper.app/v1/league/${cfg.id}`).then((r) => r.json()),
     fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
     fetch(`https://api.sleeper.app/v1/league/${cfg.id}/users`).then((r) => r.json()),
     fetch('https://api.sleeper.app/projections/nfl/2026?season_type=regular' +
       '&position[]=QB&position[]=RB&position[]=WR&position[]=TE&order_by=ppr').then((r) => r.json()),
   ])
-  _prCache = [league, rosters, users, proj]   // ten cards, one fetch
+  _prCache[cfg.id] = [league, rosters, users, proj]   // every card, one fetch
   // Half-PPR, matching the league's scoring settings.
   const P = {}
   for (const row of proj) {
@@ -550,19 +883,32 @@ async function renderRank(want, host) {
   const slots = (league.roster_positions || []).filter((x) => !['BN', 'IR', 'TAXI'].includes(x))
   const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
 
+  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
   const teams = rosters.map((r) => {
     const roster = (r.players || []).map((id) => ({ id, ...(P[id] || { pts: 0, pos: '', name: id }) }))
     const nine = bestLineup(roster, slots)
     const season = nine.reduce((t, p) => t + p.pts, 0)
     const u = byId[r.owner_id] || {}
     const md = u.metadata || {}
+    // Sleeper stores whatever was typed, spaces included.
+    const team = (md.team_name || `Team ${r.roster_id}`).trim()
     return {
-      team: md.team_name || `Team ${r.roster_id}`,
+      team,
+      owner: r.owner_id,
       avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
-      perWeek: season / 17, nine,
+      fullStrength: season / 17,
+      perWeek: expectedWeekly(roster),
+      odds: ODDS[key][r.owner_id] || null,
+      nine,
     }
   }).sort((a, b) => b.perWeek - a.perWeek)
 
+  _tableCache[cfg.id] = teams
+  return teams
+}
+
+function paintRank(teams, want, host, cfg) {
+  const key = cfg === LEAGUES.ffl ? 'ffl' : 'lor'
   const t = teams[want - 1]
   if (!t) { host.innerHTML = '<div class="err">No team at that rank.</div>'; return }
 
@@ -572,19 +918,28 @@ async function renderRank(want, host) {
       <span class="pr-crest">${t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : esc(initials(t.team))}</span>
       <span class="pr-id">
         <span class="pr-name">${esc(t.team)}</span>
-        <span class="pr-proj"><b>${t.perWeek.toFixed(1)}</b> projected points per week</span>
+        <span class="pr-proj"><b>${t.perWeek.toFixed(1)}</b> expected points per week</span>
       </span>
     </div>
-    <div class="pr-slots-label">Starting lineup</div>
+    ${t.odds ? `
+      <div class="pr-odds">
+        <span><b>${t.odds.playoffs}%</b> make the playoffs</span>
+        <span><b>${t.odds.tail}%</b> ${TAIL_LABEL[key]}</span>
+      </div>` : ''}
+    <div class="pr-slots-label">Starting lineup<em>${t.fullStrength.toFixed(1)} at full strength</em></div>
     <div class="pr-slots">
       ${t.nine.map((p) => `
         <div class="pr-slot" ${p.slot === 'FLEX' ? 'data-flex' : ''}>
           <span class="pr-pos">${p.slot}</span>
+          <span class="pr-face">${p.id
+            ? `<img src="https://sleepercdn.com/content/nfl/players/${encodeURIComponent(p.id)}.jpg" alt="" loading="eager">`
+            : ''}</span>
           <span class="pr-player">${esc(p.name)}</span>
           <span class="pr-pts">${Math.round(p.pts)}</span>
         </div>`).join('')}
     </div>
-    <p class="pr-note">Best lineup each roster can field · half-PPR · Sleeper projections</p>`
+    <p class="pr-note">Expected weekly points after byes and injuries · half-PPR ·
+      Sleeper projections · odds from 200,000 simulated seasons</p>`
 }
 
 function loadTitle() {
@@ -601,6 +956,30 @@ function loadTitle() {
         <h1 class="big-title">Drop Zone<br>League</h1>
         <div class="big-sub">Two leagues. One ladder.</div>
       </div>
+    </div>`
+}
+
+/**
+ * The frame a countdown video opens on: whose league, what this is, when.
+ *
+ * The stake goes on the bottom line rather than the headline, because the
+ * two leagues are the same video with opposite consequences — one is
+ * playing to go up, the other to not go down — and that is the only thing
+ * a viewer needs before the countdown starts.
+ */
+function loadIntro() {
+  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
+  const cfg = LEAGUES[key]
+  const foot = key === 'ffl'
+    ? '12 teams · two go up to the League of Record'
+    : '10 teams · last in each division goes down'
+  document.getElementById('safe').innerHTML = `
+    <div class="intro">
+      <img class="intro-crest" src="${cfg.crest}" alt="">
+      <div class="intro-league">${esc(cfg.name)}</div>
+      <h1 class="intro-title">Power<br>Rankings</h1>
+      <div class="intro-season">Preseason 2026</div>
+      <div class="intro-foot">${esc(foot)}</div>
     </div>`
 }
 
@@ -677,6 +1056,8 @@ function fit() {
     else if (view === 'ranks') await loadRanks()
     else if (view === 'rank') await loadRank()
     else if (view === 'title') loadTitle()
+    else if (view === 'intro') loadIntro()
+    else if (view === 'group') await loadGroup()
     else if (view === 'down' || view === 'up') loadSolo(view)
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
