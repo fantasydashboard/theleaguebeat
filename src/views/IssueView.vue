@@ -965,6 +965,7 @@ import ShareCard from '@/components/issue/ShareCard.vue'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
+  prefersShareSheet,
   shareFilename,
   shareOrDownload,
   CARD_W,
@@ -1378,16 +1379,26 @@ async function shareIssue(): Promise<void> {
     : window.location.origin
   const url = `${origin}/i/${routeLeagueId.value}`
   const title = `${strictLeagueRecord.value?.league_name ?? 'The League Beat'} — this week's issue`
-  // Native sheet where there is one; it is the only path that reaches
-  // a group chat in one tap, which is where these actually go.
-  if (navigator.share) {
+
+  // On a phone the sheet reaches a group chat in one tap, which is
+  // where these actually go. On a laptop it is three clicks past a
+  // list of AirDrop targets and Reading List to do what one click of
+  // "copy" already did — and the link is going to be pasted into
+  // Discord or a group chat anyway. Same touch test the share-card
+  // image uses; macOS advertises the API and does not want it.
+  if (prefersShareSheet() && navigator.share) {
     try {
       await navigator.share({ title, url })
       return
-    } catch {
-      /* dismissed — fall through to copying */
+    } catch (err) {
+      // Dismissed is a decision, not a failure. Copying a link the user
+      // just declined to send is not a helpful fallback.
+      if ((err as DOMException)?.name === 'AbortError') return
+      // Anything else — a target that refused the payload — still
+      // deserves the link.
     }
   }
+
   try {
     await navigator.clipboard.writeText(url)
     shareLabel.value = 'Link copied'
