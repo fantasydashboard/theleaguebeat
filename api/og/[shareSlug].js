@@ -118,6 +118,27 @@ export default async function handler(req) {
   const ACCENT_UP = '#53c75d'
   const BG = '#020200'
   const BG_PANEL = '#050301'
+  const BORDER = '#19160e'
+
+  // The real lockup, not a monogram. Fetched from our own origin and
+  // inlined, so a failed fetch degrades to the wordmark instead of
+  // taking the whole render down with it.
+  let logoDataUri = null
+  try {
+    const logoRes = await fetch(new URL('/tlb-logo-primary.png', req.url).toString())
+    if (logoRes.ok) {
+      const bytes = new Uint8Array(await logoRes.arrayBuffer())
+      let bin = ''
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      logoDataUri = `data:image/png;base64,${btoa(bin)}`
+    }
+  } catch {
+    /* wordmark fallback below */
+  }
+
+  const stageLine = [platformLabel(league?.platform), titleizeSport(league?.sport), league?.season]
+    .filter(Boolean)
+    .join(' · ')
 
   const tree = h(
     'div',
@@ -127,107 +148,81 @@ export default async function handler(req) {
         height: '630px',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
         background: BG,
         backgroundImage: `radial-gradient(ellipse 800px 500px at 85% 15%, rgba(83, 199, 93, 0.10), transparent 70%), radial-gradient(ellipse 700px 500px at 10% 95%, rgba(225, 177, 0, 0.08), transparent 70%)`,
         color: INK_1,
-        padding: '64px 72px',
+        padding: '58px 72px',
         fontFamily: '"Barlow", system-ui, sans-serif',
       },
     },
-    // Masthead row
+
+    // Masthead — the real logo, at a size it can be read at.
     h(
       'div',
-      { style: { display: 'flex', alignItems: 'center', gap: '14px' } },
-      h('div', {
+      { style: { display: 'flex', alignItems: 'center', flexShrink: 0 } },
+      logoDataUri
+        ? h('img', { src: logoDataUri, width: 340, height: 129, style: { display: 'flex' } })
+        : h('div', {
+            style: {
+              display: 'flex',
+              fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
+              fontSize: '34px',
+              fontWeight: 900,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: INK_1,
+            },
+          }, 'The League Beat'),
+    ),
+
+    // The league, filling what used to be dead space.
+    h(
+      'div',
+      {
         style: {
-          width: '44px',
-          height: '44px',
-          borderRadius: '8px',
-          background: ACCENT_PRIMARY,
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
           justifyContent: 'center',
-          color: BG,
-          fontWeight: 900,
-          fontSize: '24px',
-          letterSpacing: '-0.02em',
+          flexGrow: 1,
+          gap: '14px',
         },
-      }, 'TLB'),
+      },
       h('div', {
         style: {
           display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
           fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
           fontSize: '22px',
           fontWeight: 800,
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          color: INK_1,
-        },
-      }, 'The League Beat'),
-      h('div', {
-        style: {
-          marginLeft: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '6px 12px',
-          borderRadius: '999px',
-          border: `1px solid rgba(83, 199, 93, 0.35)`,
-          background: `rgba(83, 199, 93, 0.10)`,
-          color: ACCENT_UP,
-          fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
-          fontSize: '16px',
-          fontWeight: 800,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
-        },
-      },
-        h('div', { style: { display: 'flex', width: '8px', height: '8px', borderRadius: '50%', background: ACCENT_UP } }),
-        'Live issue',
-      ),
-    ),
-
-    // Headline block
-    h(
-      'div',
-      { style: { display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '1000px' } },
-      h('div', {
-        style: {
-          fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
-          fontSize: '20px',
-          fontWeight: 800,
-          letterSpacing: '0.20em',
+          letterSpacing: '0.22em',
           textTransform: 'uppercase',
           color: ACCENT_PRIMARY,
-          display: 'flex',
         },
       }, eyebrowText),
       h('div', {
         style: {
-          fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
-          fontSize: leagueName.length > 32 ? '74px' : '96px',
-          fontWeight: 900,
-          letterSpacing: '-0.015em',
-          lineHeight: 0.96,
-          color: INK_1,
           display: 'flex',
+          fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
+          fontSize: leagueName.length > 30 ? '82px' : '104px',
+          fontWeight: 900,
+          letterSpacing: '-0.02em',
+          lineHeight: 0.94,
+          color: INK_1,
         },
       }, leagueName),
-      h('div', {
-        style: {
-          fontSize: '24px',
-          fontWeight: 500,
-          color: INK_3,
-          letterSpacing: '0.02em',
-          display: 'flex',
-        },
-      }, metaLine),
+      stageLine
+        ? h('div', {
+            style: {
+              display: 'flex',
+              fontSize: '26px',
+              fontWeight: 500,
+              color: INK_3,
+              letterSpacing: '0.02em',
+            },
+          }, stageLine)
+        : null,
     ),
 
-    // Footer row
+    // Foot. No fake button — the whole card is already the link.
     h(
       'div',
       {
@@ -235,38 +230,36 @@ export default async function handler(req) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexShrink: 0,
           paddingTop: '24px',
-          borderTop: `1px solid #19160e`,
+          borderTop: `1px solid ${BORDER}`,
         },
       },
       h('div', {
         style: {
+          display: 'flex',
           fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
-          fontSize: '20px',
+          fontSize: '21px',
           fontWeight: 800,
-          letterSpacing: '0.14em',
+          letterSpacing: '0.16em',
           textTransform: 'uppercase',
           color: INK_3,
-          display: 'flex',
         },
       }, 'Your league story, chronicled.'),
       h('div', {
         style: {
           display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '10px 18px',
-          borderRadius: '999px',
-          background: ACCENT_PRIMARY,
-          color: BG_PANEL,
           fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
-          fontSize: '20px',
+          fontSize: '21px',
           fontWeight: 900,
-          letterSpacing: '0.06em',
+          letterSpacing: '0.10em',
+          textTransform: 'uppercase',
+          color: ACCENT_PRIMARY,
         },
-      }, 'Read the issue →'),
+      }, 'theleaguebeat.com'),
     ),
   )
+
 
   return new ImageResponse(tree, {
     width: 1200,
