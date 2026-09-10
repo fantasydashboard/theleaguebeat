@@ -60,6 +60,7 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
       transactions: data.transactions,
       teamName: args.teamName,
       team: args.team,
+      rosterPositions: data.rosterPositions,
     })
   }
 

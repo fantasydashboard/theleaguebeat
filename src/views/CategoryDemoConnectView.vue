@@ -124,9 +124,11 @@
         <span class="sport-card-pill sport-card-pill-available">Available</span>
       </button>
 
-      <!-- Football is Sleeper-only for now: Sleeper's API is public and
-           unauthenticated, so the whole points path is built and tested
-           against it. Yahoo and ESPN football are not wired yet, and the
+      <!-- Football runs on Sleeper and ESPN. Sleeper's API is public, so
+           the points path was built and tested against it first; ESPN
+           reaches the same LeagueDataH2HPoints through its own
+           sport-segmented endpoints, gated on the browser cookies its
+           extension supplies. Yahoo football is still not wired, and the
            platform picker below says so rather than offering a dead
            button. -->
       <button
@@ -213,24 +215,20 @@
               : 'platform-card-pill-available'"
           >{{ selectedSport === 'football' ? 'Baseball only' : 'Available' }}</span>
         </button>
+        <!-- ESPN covers both sports. The adapter has been segment-aware
+             for a while — `ffl` for football, `flb` for baseball — and
+             its points branch builds the same LeagueDataH2HPoints the
+             Sleeper path does. This button was the only thing left
+             holding it shut. -->
         <button
           type="button"
           class="platform-card platform-card-active"
-          :class="{
-            'platform-card-selected': selectedPlatform === 'espn',
-            'platform-card-inactive': selectedSport === 'football',
-          }"
+          :class="{ 'platform-card-selected': selectedPlatform === 'espn' }"
           :aria-pressed="selectedPlatform === 'espn'"
-          :disabled="selectedSport === 'football'"
           @click="pickPlatform('espn')"
         >
           <span class="platform-card-name">ESPN</span>
-          <span
-            class="platform-card-pill"
-            :class="selectedSport === 'football'
-              ? 'platform-card-pill-soon'
-              : 'platform-card-pill-available'"
-          >{{ selectedSport === 'football' ? 'Baseball only' : 'Available' }}</span>
+          <span class="platform-card-pill platform-card-pill-available">Available</span>
         </button>
       </div>
     </section>
@@ -409,7 +407,7 @@
 
     <!-- ─── ESPN flow ──────────────────────────────────────────── -->
     <section
-      v-if="selectedSport === 'baseball' && selectedPlatform === 'espn'"
+      v-if="(selectedSport === 'baseball' || selectedSport === 'football') && selectedPlatform === 'espn'"
       class="form-section"
     >
       <!-- Signin gate: ESPN credentials persist to the user's UFD
@@ -539,7 +537,7 @@
         </ol>
 
         <label class="form-label" for="espn-league-id-input">
-          Paste your ESPN baseball league ID
+          Paste your ESPN {{ selectedSport === 'football' ? 'football' : 'baseball' }} league ID
         </label>
         <input
           id="espn-league-id-input"
@@ -554,7 +552,9 @@
         />
         <p class="form-help">
           Find it in your ESPN league URL:
-          <code>fantasy.espn.com/baseball/league?leagueId=<span class="form-help-em">[ID]</span></code>
+          <!-- ESPN's own URLs are sport-segmented too, so a football
+               manager sent to the baseball path finds nothing there. -->
+          <code>fantasy.espn.com/{{ selectedSport === 'football' ? 'football' : 'baseball' }}/league?leagueId=<span class="form-help-em">[ID]</span></code>
         </p>
 
         <!-- Advanced: manual cookie entry (collapsed by default) -->
@@ -1134,14 +1134,29 @@ async function onEspnSubmit(): Promise<void> {
   if (!id || selectedPlatform.value !== 'espn') return
   espnError.value = null
   espnBusy.value = true
+
+  // Whatever the user picked at the top of the page, not baseball by
+  // assumption. ESPN's API is segmented by game, so asking `flb` for a
+  // football league id returns nothing and the league connects as an
+  // empty baseball row that never loads.
+  const espnSport: 'baseball' | 'football' =
+    selectedSport.value === 'football' ? 'football' : 'baseball'
+
+  // NOT `new Date().getFullYear()`. The NFL season spans the new year,
+  // so from January to August the current football season is the
+  // PREVIOUS calendar year — asking ESPN for 2027 in February 2027
+  // requests a season that does not exist yet. getCurrentSeason knows
+  // each sport's rollover month.
+  const espnSeason = espnService.getCurrentSeason(espnSport)
+
   try {
     if (manualEspnS2.value.trim() && manualSwid.value.trim()) {
       const result = await platformsStore.storeEspnCredentials({
         espn_s2: manualEspnS2.value.trim(),
         swid: manualSwid.value.trim(),
         leagueId: id,
-        sport: 'baseball',
-        season: new Date().getFullYear(),
+        sport: espnSport,
+        season: espnSeason,
       })
       if (!result.success) {
         espnError.value = result.error || 'Could not validate ESPN cookies.'
@@ -1157,11 +1172,7 @@ async function onEspnSubmit(): Promise<void> {
     // backfill in loadBeat/loadIssue self-heals on first page load.
     let leagueInfo: { name: string; size: number; scoringType?: string } | undefined
     try {
-      const espnLeague = await espnService.getLeague(
-        'baseball',
-        id,
-        new Date().getFullYear(),
-      )
+      const espnLeague = await espnService.getLeague(espnSport, id, espnSeason)
       if (espnLeague?.name) {
         leagueInfo = {
           name: espnLeague.name,
@@ -1183,8 +1194,8 @@ async function onEspnSubmit(): Promise<void> {
       try {
         const result = await platformsStore.syncEspnLeague(
           id,
-          'baseball',
-          new Date().getFullYear(),
+          espnSport,
+          espnSeason,
           leagueInfo,
         )
         if (result.success) leagueRowId = result.leagueRowId

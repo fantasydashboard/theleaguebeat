@@ -574,6 +574,19 @@ export interface LeagueDataH2HPoints {
   regularSeasonEndWeek?: number
   synthesized?: boolean
 
+  /**
+   * Starting slots plus bench, in fill order — `['QB','RB','RB','WR',
+   * 'WR','TE','FLEX','FLEX','FLEX','BN',...]`.
+   *
+   * ON THE CONTRACT, not fetched per platform. The preseason issue
+   * needs this to rank roster strength, and it used to read Sleeper's
+   * `roster_positions` directly — so an ESPN league arrived with
+   * nothing, `rankRosterStrength` had no slots to fill, and the whole
+   * issue bailed out to a single legacy card. Every platform knows its
+   * own lineup shape; each adapter answers in the same vocabulary.
+   */
+  rosterPositions?: string[]
+
   // Teams (universal).
   teams: CategoryLeagueDataTeam[]
   divisions?: CategoryLeagueDataDivision[]

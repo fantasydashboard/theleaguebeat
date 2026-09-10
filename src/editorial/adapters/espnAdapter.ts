@@ -68,6 +68,7 @@ import {
   seasonStrengthPrior,
   daysInCurrentWeek,
 } from '../matchups-projection'
+import { espnRosterPositions } from './espnLineupSlots'
 import { buildH2H } from '../h2h/buildH2H'
 import type { H2HGame } from '../h2h/buildH2H'
 
@@ -416,6 +417,21 @@ export async function espnLeagueToCategoryData(
     // and is already error-tolerant.
     const pointsPlayerNights = await buildEspnPlayerNights(league)
 
+    // The draft. Without it `loadIssue` returns null for any league with
+    // no completed week — which is every league in the preseason — and
+    // the page falls back to a single live-matchup card reading 0.0 to
+    // 0.0. buildDraft is already sport-aware, and loadPreseasonIssue
+    // bridges ESPN's player ids onto Sleeper's via the players blob, so
+    // this was the only missing link in the preseason chain.
+    const pointsDraft = await buildDraft(leagueId, season, sport)
+
+    // Lineup shape, translated from ESPN's slot-id map into the same
+    // vocabulary Sleeper reports. The preseason issue cannot rank
+    // roster strength without it.
+    const pointsRosterPositions = espnRosterPositions(
+      (league.settings as any)?.rosterSettings?.lineupSlotCounts,
+    )
+
     const out: LeagueDataH2HPoints = {
       format: 'h2h-points',
       leagueId: String(league.id),
@@ -433,6 +449,10 @@ export async function espnLeagueToCategoryData(
       seasonHistory,
       h2hRecords,
       playerNights: pointsPlayerNights,
+      draft: pointsDraft,
+      regularSeasonEndWeek,
+      playoffCutoff,
+      rosterPositions: pointsRosterPositions,
     }
     return out
   }

@@ -2370,6 +2370,9 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     sport: 'nfl',
     leagueId: league.league_id,
     leagueName: league.name || 'Sleeper League',
+    // On the contract so the preseason issue does not have to re-fetch
+    // the league to learn its own lineup shape.
+    rosterPositions: league.roster_positions ?? undefined,
     currentWeek,
     currentSeason,
     playoffCutoff,

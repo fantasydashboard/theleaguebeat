@@ -57,6 +57,15 @@ export interface LoadPreseasonIssueArgs {
   transactions?: LeagueTransaction[]
   teamName: (teamId: string) => string
   team?: (teamId: string) => PreseasonIssueTeam | undefined
+  /**
+   * The league's lineup shape, off the contract.
+   *
+   * Roster strength cannot be ranked without it, and it used to be read
+   * only from Sleeper's own league endpoint — so an ESPN league reached
+   * `if (!rosterPositions?.length) return null` and the entire preseason
+   * issue collapsed to whatever the page could render on its own.
+   */
+  rosterPositions?: string[]
 }
 
 /** One week's pairings from a raw Sleeper matchups payload. */
@@ -87,7 +96,9 @@ export async function loadPreseasonIssue(
     // exposes its own settings; the others are not on the contract, so
     // they take the documented midpoint.
     let scoring: SleeperScoring = ASSUMED_SCORING
-    let rosterPositions: string[] | undefined
+    // Contract first. Sleeper still refetches below because it needs the
+    // scoring settings from the same call anyway.
+    let rosterPositions: string[] | undefined = args.rosterPositions
     let previousLeagueId: string | undefined
 
     if (platform === 'sleeper') {
@@ -133,6 +144,26 @@ export async function loadPreseasonIssue(
     const div = findAdpDivergences(valued, (p) => baseline.adpOf(p.playerId), teamCount)
     const graded = gradeTeamDrafts(div.all)
 
+    /**
+     * Position from the SAME source as the points, not the platform's.
+     *
+     * Sleeper's branch already reads `baseline.positionOf`; ESPN's read
+     * ESPN's own string, which arrives as 'Unknown' whenever the player
+     * lookup missed and can carry vocabulary the slot matcher does not
+     * know. A position that does not match a slot cannot be started, so
+     * the player sat on the roster scoring nothing — and a team whose
+     * picks mostly failed that way projected 17.9 points a week in a
+     * league where nobody is below 100.
+     *
+     * The platform's own string stays as the fallback: better a guess
+     * than an empty slot when the baseline has never heard of a player.
+     */
+    const rosterPlayerFromPick = (p: { playerId: string; position: string; draftedByTeamId: string }): RosterPlayer => ({
+      playerId: p.playerId,
+      position: baseline.positionOf(p.playerId) ?? p.position,
+      teamId: p.draftedByTeamId,
+    })
+
     // Roster strength needs current rosters, which only Sleeper
     // exposes without auth. Elsewhere the DRAFTED roster stands in —
     // it is the same roster until somebody makes a move, and this is
@@ -156,11 +187,7 @@ export async function loadPreseasonIssue(
       )
       rosterPositions = rosterPositions ?? []
     } else {
-      players = picks.map((p) => ({
-        playerId: p.playerId,
-        position: p.position,
-        teamId: p.draftedByTeamId,
-      }))
+      players = picks.map(rosterPlayerFromPick)
     }
     if (!rosterPositions?.length) return null
 
@@ -170,11 +197,7 @@ export async function loadPreseasonIssue(
     // Where each team ranked on the roster it DRAFTED — the difference
     // is what waivers have already done.
     const draftedStrength = rankRosterStrength(
-      picks.map((p) => ({
-        playerId: p.playerId,
-        position: p.position,
-        teamId: p.draftedByTeamId,
-      })),
+      picks.map(rosterPlayerFromPick),
       baseline.pointsOf,
       rosterPositions,
     )
