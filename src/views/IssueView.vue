@@ -239,6 +239,18 @@
                     :title="`Present ${sec.eyebrow.toLowerCase()}`"
                   >▶ Present</router-link>
                 </span>
+
+                <!-- Always on, unlike Present. Present serves the one
+                     person making a video; this serves everybody who
+                     wants to put the week in front of their league. -->
+                <button
+                  v-if="routeLeagueId && isShareable(sec)"
+                  type="button"
+                  class="issue-share-btn"
+                  :disabled="sharingId === sec.id"
+                  :title="`Share ${sec.eyebrow.toLowerCase()} as an image`"
+                  @click="shareSection(sec)"
+                >{{ imageLabel(sec.id) }}</button>
               </div>
               <h2 class="section-headline">{{ sec.headline }}</h2>
               <p v-if="sec.support" class="section-lede">{{ sec.support }}</p>
@@ -272,11 +284,6 @@
             </li>
           </ol>
 
-          <UfdHandoff
-            v-if="handoffFor(sec.id)"
-            :handoff="handoffFor(sec.id)!"
-          />
-
           <!-- Its own row class. Reusing `standings` here truncated
                every name to "Mic…" and clipped owners to "The Ama" —
                that grid is built for a rank, a crest and a record, not
@@ -298,6 +305,17 @@
               <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
             </li>
           </ol>
+
+          <!-- AFTER the cards/rows chain, never between the two. Sitting
+               in the middle re-pointed `v-else-if="sec.rows"` at this
+               component's own v-if, so a section with rows that earned a
+               hand-off rendered the promo INSTEAD of its content. It was
+               invisible only because no hand-off could fire yet — the
+               first one to land would have deleted the wire. -->
+          <UfdHandoff
+            v-if="handoffFor(sec.id)"
+            :handoff="handoffFor(sec.id)!"
+          />
         </section>
       </template>
 
@@ -903,11 +921,21 @@
       </nav>
     </footer>
     </template>
+
+    <!-- Mounted only while a capture is running. Off-screen, so it never
+         affects the page it is rendered beside. -->
+    <ShareCard
+      v-if="cardSection"
+      ref="shareCardRef"
+      :section="cardSection"
+      :league-name="leagueName"
+    />
+    <p v-if="shareImageError" class="issue-share-error" role="status">{{ shareImageError }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { renderPRPage, type RenderedPRCopy } from '@/editorial/render-pr'
 import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
@@ -931,9 +959,18 @@ import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { presentEnabled } from '@/composables/usePresentMode'
 import UfdHandoff from '@/components/issue/UfdHandoff.vue'
+import ShareCard from '@/components/issue/ShareCard.vue'
 import { chooseHandoffs } from '@/editorial/issue/handoff'
+import {
+  isShareable,
+  shareFilename,
+  shareOrDownload,
+  CARD_W,
+  CARD_H,
+} from '@/editorial/share/shareCard'
+import { elementToPng } from '@/editorial/present/exportSlides'
 import { isPresentable } from '@/editorial/issue/types'
-import type { Issue } from '@/editorial/issue/types'
+import type { Issue, IssueSection } from '@/editorial/issue/types'
 import { stripEmojiForEditorial } from '@/editorial/detect-lede'
 import LiveLoadError from '@/components/demo/LiveLoadError.vue'
 import UnsupportedFormatPanel from '@/components/editorial/UnsupportedFormatPanel.vue'
@@ -1199,6 +1236,58 @@ const handoffs = computed(() => {
   return chooseHandoffs(available)
 })
 const handoffFor = (key: string) => handoffs.value.find((h) => h.key === key)
+
+/* ── Shareable images ─────────────────────────────────────────────
+   One section, one PNG, straight into a league chat. The card is
+   mounted off-screen for the duration of the capture rather than kept
+   in the DOM for every section on the page — twelve hidden 1080x1350
+   frames would be twelve copies of every crest, on a page that already
+   loads the real ones. */
+const cardSection = ref<IssueSection | null>(null)
+const shareCardRef = ref<InstanceType<typeof ShareCard> | null>(null)
+const sharingId = ref<string | null>(null)
+const sharedId = ref<string | null>(null)
+
+const imageLabel = (id: string) => {
+  if (sharingId.value === id) return '…'
+  if (sharedId.value === id) return '✓ Saved'
+  return '↓ Image'
+}
+
+async function shareSection(sec: IssueSection) {
+  if (sharingId.value) return
+  sharingId.value = sec.id
+  sharedId.value = null
+  cardSection.value = sec
+  try {
+    // Two ticks: one to mount the card, one to let it lay out before
+    // html-to-image measures it.
+    await nextTick()
+    await nextTick()
+    const el = shareCardRef.value?.frame
+    if (!el) throw new Error('The card did not render.')
+    const blob = await elementToPng(el, CARD_W, CARD_H, 2)
+    const outcome = await shareOrDownload(
+      blob,
+      shareFilename(leagueName.value, sec),
+      `${leagueName.value} — ${sec.eyebrow}`,
+    )
+    if (outcome !== 'dismissed') {
+      sharedId.value = sec.id
+      setTimeout(() => {
+        if (sharedId.value === sec.id) sharedId.value = null
+      }, 4000)
+    }
+  } catch (err) {
+    console.error('[share] could not build the image', err)
+    shareImageError.value = 'That image would not build. Try again in a moment.'
+    setTimeout(() => { shareImageError.value = null }, 6000)
+  } finally {
+    sharingId.value = null
+    cardSection.value = null
+  }
+}
+const shareImageError = ref<string | null>(null)
 
 /**
  * Whether this issue can be handed to somebody without an account.
@@ -3837,6 +3926,28 @@ function collectUserIdentity() {
   white-space: nowrap;
 }
 .issue-present-btn:hover { background: oklch(0.2 0.05 92); }
+
+/* Neutral, not gold. Gold is Present, which is the specialist tool
+   behind a setting; this is the ordinary action and should not compete
+   with it for attention. */
+.issue-share-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+  font-family: inherit; text-transform: uppercase; white-space: nowrap;
+  color: oklch(0.82 0.01 90);
+  border: 1px solid oklch(0.32 0.012 90);
+  background: oklch(0.14 0.012 90);
+}
+.issue-share-btn:hover:not(:disabled) { background: oklch(0.2 0.014 90); }
+.issue-share-btn:disabled { opacity: 0.6; cursor: default; }
+
+.issue-share-error {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  z-index: 60; padding: 12px 20px; border-radius: 999px;
+  background: oklch(0.2 0.06 25); border: 1px solid oklch(0.42 0.12 25);
+  color: oklch(0.94 0.02 25); font-size: 0.9rem; font-weight: 600;
+}
 .issue-present-btn-alt { padding: 6px 10px; letter-spacing: 0; }
 .issue-present-btn-lead {
   font-size: 0.78rem; padding: 10px 18px;

@@ -87,6 +87,14 @@ const router = createRouter({
       name: 'internal-logo-mockups',
       component: () => import('@/views/LogoMockupsView.vue'),
     },
+    {
+      // The share card renders off-screen during a real capture, so it
+      // is the one part of the Issue nobody can look at while building
+      // it — and a card that lays out wrong still exports, silently.
+      path: '/internal/share-preview',
+      name: 'internal-share-preview',
+      component: () => import('@/views/ShareCardPreviewView.vue'),
+    },
 
     // Live league routes — your real connected leagues. URL is keyed
     // by the Supabase `leagues.id` UUID so the switcher can deep-link

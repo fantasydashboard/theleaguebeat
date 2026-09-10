@@ -79,21 +79,34 @@ export async function waitForImages(root: HTMLElement): Promise<void> {
   if (document.fonts?.ready) await document.fonts.ready
 }
 
-/** One frame → one PNG blob, at true 1080x1920 regardless of how small
- *  it is being previewed on screen. */
-export async function frameToPng(el: HTMLElement, scale = 2): Promise<Blob> {
+/**
+ * Any element → a PNG blob at exactly the size asked for.
+ *
+ * Sized explicitly rather than from the element, because callers render
+ * off-screen or CSS-scaled to fit a window, and a capture that inherits
+ * that comes out at preview size.
+ */
+export async function elementToPng(
+  el: HTMLElement,
+  width: number,
+  height: number,
+  scale = 2,
+): Promise<Blob> {
   await waitForImages(el)
   const blob = await toBlob(el, {
-    width: FRAME_W,
-    height: FRAME_H,
+    width,
+    height,
     pixelRatio: scale,
     cacheBust: true,
-    // The preview is CSS-scaled to fit the window; the capture must not
-    // inherit that, or every export comes out at preview size.
     style: { transform: 'none', margin: '0' },
   })
-  if (!blob) throw new Error('The browser returned no image for this slide.')
+  if (!blob) throw new Error('The browser returned no image for this card.')
   return blob
+}
+
+/** One vertical frame → one PNG blob, at true 1080x1920. */
+export function frameToPng(el: HTMLElement, scale = 2): Promise<Blob> {
+  return elementToPng(el, FRAME_W, FRAME_H, scale)
 }
 
 /* ─────────────────────────────────────────────────────────────────
