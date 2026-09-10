@@ -60,9 +60,15 @@ export function handoffHref(h: Handoff): string {
  * are running and the lineup lock is minutes away. Both beat the wire,
  * where the claims already processed and the next move is a week off.
  *
- * The draft grades are deliberately absent. The reader has just been
- * told how they drafted and there is nothing to be done about it —
- * a hand-off there is pure inventory.
+ * The draft-grades one is LAST because it is the weakest moment of the
+ * four, not because it does not belong. An earlier version left it out
+ * entirely on the grounds that the draft is past tense and there is
+ * nothing to act on. That is true of the grade and false of the reader:
+ * somebody who has just seen their roster ranked is about to ask who
+ * they should start, and before kickoff it is the only hand-off the
+ * page can carry — the preseason issue has no trades, no wire and no
+ * live matchups, so the whole pre-season window rendered nothing at
+ * all.
  */
 export const HANDOFFS: Handoff[] = [
   {
@@ -93,6 +99,16 @@ export const HANDOFFS: Handoff[] = [
     cta: 'See this week’s targets',
     campaign: 'wire',
   },
+  {
+    key: 'draft-grades',
+    tone: 'card',
+    body:
+      'Your draft is done. Ultimate Fantasy Dashboard builds your week one lineup ' +
+      'in your league’s exact scoring and tells you which of these picks are ' +
+      'actually worth starting. Same account; your leagues are already connected.',
+    cta: 'See your week one lineup',
+    campaign: 'preseason-lineup',
+  },
 ]
 
 /** At most this many in one issue. */
@@ -109,5 +125,10 @@ export const HANDOFF_CAP = 2
  */
 export function chooseHandoffs(available: readonly string[]): Handoff[] {
   const present = new Set(available)
+  // Both lineup pitches make the same ask, and they overlap for exactly
+  // one window: week one in progress, before any week has completed, when
+  // the page is still the preseason issue but games are running. The live
+  // one is the better moment, so the preseason one stands down.
+  if (present.has('live-matchups')) present.delete('draft-grades')
   return HANDOFFS.filter((h) => present.has(h.key)).slice(0, HANDOFF_CAP)
 }

@@ -24,12 +24,35 @@ describe('UFD hand-offs', () => {
   })
 
   it('fills the slots with whatever the week actually has', () => {
-    // A Wednesday with no trade should still get two, not one — and a
-    // quiet preseason page should get none rather than a filler.
+    // A Wednesday with no trade should still get two, not one.
     expect(chooseHandoffs(['the-wire', 'live-matchups']).map((h) => h.key))
       .toEqual(['live-matchups', 'the-wire'])
-    expect(chooseHandoffs(['favourite', 'the-field', 'schedule'])).toEqual([])
     expect(chooseHandoffs([])).toEqual([])
+  })
+
+  it('carries the preseason page, which has none of the in-season sections', () => {
+    // The preseason issue emits favourite, draft-grades, power-rankings,
+    // the-field, schedule and since-the-draft — not one of which was a
+    // hand-off key, so the entire pre-kickoff window rendered nothing.
+    // That is the highest-intent traffic of the year.
+    const preseason = ['favourite', 'draft-grades', 'power-rankings', 'the-field', 'schedule']
+    expect(chooseHandoffs(preseason).map((h) => h.key)).toEqual(['draft-grades'])
+
+    // Still nothing to say on a page with no draft and no live sections.
+    expect(chooseHandoffs(['favourite', 'the-field', 'schedule'])).toEqual([])
+  })
+
+  it('drops the preseason pitch the moment the live one is available', () => {
+    // Week one in progress, no week completed yet: the page is still the
+    // preseason issue AND games are running, so both are on offer. They
+    // make the same ask, and two lineup promos in one scroll is the
+    // banner blindness the cap exists to prevent.
+    const overlap = chooseHandoffs(['draft-grades', 'live-matchups'])
+    expect(overlap.map((h) => h.key)).toEqual(['live-matchups'])
+
+    // And a trade still outranks both.
+    expect(chooseHandoffs(['draft-grades', 'live-matchups', 'trades']).map((h) => h.key))
+      .toEqual(['trades', 'live-matchups'])
   })
 
   it('never promotes what UFD gives away and the issue already prints', () => {
@@ -40,8 +63,15 @@ describe('UFD hand-offs', () => {
     for (const free of ['power-rankings', 'the-field', 'standings', 'honours']) {
       expect(keys).not.toContain(free)
     }
-    // And the draft is past tense — nothing to act on.
-    expect(keys).not.toContain('draft-grades')
+  })
+
+  it('never promotes a paid tool on a section about the past alone', () => {
+    // draft-grades is the one hand-off attached to something already
+    // finished, so its copy has to point forward. A pitch about how you
+    // drafted would be inventory; one about who to start is a decision.
+    const draft = HANDOFFS.find((h) => h.key === 'draft-grades')!
+    expect(draft.cta.toLowerCase()).toContain('lineup')
+    expect(draft.body.toLowerCase()).toMatch(/week one|start/)
   })
 
   it('points at the front door, tagged for attribution', () => {
