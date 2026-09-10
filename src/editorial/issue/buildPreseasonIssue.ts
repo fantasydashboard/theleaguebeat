@@ -256,13 +256,16 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
     // is not. Ten identical "gets X less from Y" lines in a row also
     // read as a form letter, and alternating the framing breaks that.
     const leadWithStrength = t.rank <= Math.ceil(field / 2)
+    // "1 points a week" reads as a bug to anybody in the league, and
+    // these numbers land on exactly 1 often enough to matter.
+    const pts = (n: number) => `${n} point${n === 1 ? '' : 's'} a week`
     const strengthLine =
       t.bestPosition && t.bestPosition.vsLeague > 0
-        ? `${t.bestPosition.vsLeague} points a week clear of the league at ${t.bestPosition.position}.`
+        ? `${pts(t.bestPosition.vsLeague)} clear of the league at ${t.bestPosition.position}.`
         : null
     const weaknessLine =
       t.worstPosition && t.worstPosition.vsLeague < 0
-        ? `Thinnest at ${t.worstPosition.position} — ${Math.abs(t.worstPosition.vsLeague)} points a week behind the league.`
+        ? `Thinnest at ${t.worstPosition.position} — ${pts(Math.abs(t.worstPosition.vsLeague))} behind the league.`
         : null
     for (const line of leadWithStrength
       ? [strengthLine, weaknessLine]
