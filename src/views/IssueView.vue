@@ -68,12 +68,14 @@
           The League Beat
         </p>
         <h1 class="issue-title">
-          Issue {{ livePointsData.currentWeek }}
+          Issue {{ pointsIssueNumber }}
           <!-- Before kickoff the issue is not "Week 1" — week one has
                not happened. Naming it Preseason is the honest label and
-               it also tells a reader why there are no results in it. -->
+               it also tells a reader why there are no results in it.
+               After that it names the week the issue COVERS, not the
+               week the reader happens to be living in. -->
           <span class="issue-title-meta">
-            · {{ pointsStageStarted ? `Week ${livePointsData.currentWeek}` : 'Preseason' }}
+            · {{ pointsStageStarted ? `Week ${pointsIssueWeek}` : 'Preseason' }}
             · {{ livePointsData.currentSeason }}
           </span>
         </h1>
@@ -81,7 +83,7 @@
           <!-- "This week ... as it unfolds" is false before kickoff:
                nothing is unfolding. -->
           {{ pointsStageStarted
-            ? `This week in ${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, chronicled as it unfolds.`
+            ? `Week ${pointsIssueWeek} in ${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, chronicled.`
             : `${strictLeagueRecord?.league_name ?? livePointsData.leagueName}, before a snap of it has been played.` }}
         </p>
       </header>
@@ -874,7 +876,7 @@
 
     <!-- ─── FOOTER — end of issue ───────────────────────────────── -->
     <footer class="issue-footer">
-      <p class="issue-footer-end">End of Issue {{ issueNumber }}</p>
+      <p class="issue-footer-end">End of Issue {{ displayedIssueNumber }}</p>
       <p class="issue-footer-tagline">
         The League Beat · Your league story, chronicled.
       </p>
@@ -1093,6 +1095,49 @@ const pointsStageStarted = computed(() => {
   if (issue) return issue.week > 0
   return pointsSeasonStarted.value
 })
+
+/**
+ * Which issue this is, and which week it covers.
+ *
+ * Issue 1 is the preseason — the draft, the projections, the board
+ * before anything has happened. Issue 2 lands on the Tuesday after week
+ * one's Monday night game and is about week one. So the number is
+ * completed weeks plus one, and it comes from the ISSUE rather than
+ * from `leg`.
+ *
+ * `leg` gave the same answer only by coincidence, and only while
+ * Sleeper advances it on time. Reading the issue means the number
+ * cannot drift from the thing printed underneath it.
+ */
+const pointsIssueNumber = computed(() => {
+  const issue = assembledIssue.value
+  if (issue) return issue.week + 1
+  return Math.max(1, livePointsData.value?.currentWeek ?? 1)
+})
+
+/**
+ * The week the issue COVERS, which is not the week we are living in.
+ *
+ * On the Thursday of week two the live week is 2 but the issue is about
+ * week one — `buildWeeklyIssue` already sets `week` to the last one that
+ * finished, for exactly this reason ("publishing 'Week 6' on Tuesday
+ * about week 5's results is how an issue misdates itself"). The
+ * masthead was still reading the live week and undoing that.
+ */
+const pointsIssueWeek = computed(() => assembledIssue.value?.week ?? 0)
+
+/**
+ * The number printed anywhere on the page.
+ *
+ * The category path counts issues off `currentWeek - 1`; the points
+ * path counts them off the assembled issue. Both are right for their
+ * own pipeline and wrong for the other's, so the footer said "End of
+ * Issue 1" under a masthead reading "Issue 2" the moment week one
+ * closed. One source, whichever pipeline built the page.
+ */
+const displayedIssueNumber = computed(() =>
+  livePointsData.value ? pointsIssueNumber.value : issueNumber.value,
+)
 
 /**
  * The sections rendered as blocks down the page.
