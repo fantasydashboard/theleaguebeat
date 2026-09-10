@@ -2426,7 +2426,23 @@ function stripEmoji(name: string): string {
    LIVE DATA HYDRATION
 ───────────────────────────────────────────────────────────────── */
 
+/**
+ * Which load is the current one.
+ *
+ * Every path through loadIssue awaits the network, so two can be in
+ * flight at once — a league switch starts a second before the first has
+ * come back. Without this the slower one wins whenever it happens to
+ * finish last, and the page renders the league you just navigated away
+ * from. Symptom: switching leagues shows the previous league's issue
+ * until you leave the tab and come back, which remounts and re-runs it.
+ */
+let loadSeq = 0
+
 async function loadIssue() {
+  const token = ++loadSeq
+  /** True once a newer load has started — this one must not write. */
+  const superseded = () => token !== loadSeq
+
   if (isStrictLiveMode.value) {
     // Resolve by id, not by emptiness: a league connected moments ago
     // is absent from an already-populated store.
@@ -2519,6 +2535,7 @@ async function loadIssue() {
           // currentWeek so navigation knows where "latest" sits;
           // without this override the cover body for Issue 9
           // would read "Week 10" instead of "Week 9".
+          if (superseded()) return
           liveData.value = { ...snap.data, currentWeek: archivedWeek + 1 }
           const historyYears = (snap.data.seasonHistory ?? [])
             .map((s) => s.year)
@@ -2571,6 +2588,7 @@ async function loadIssue() {
     //                  graduates The Issue for points leagues)
     //   anything else → UnsupportedFormatPanel
     if (adapted.format === 'h2h-points') {
+      if (superseded()) return
       livePointsData.value = adapted
       livePointsEditorial.value = renderPointsMatchupsPage(adapted)
       if (leagueRowId && adapted.leagueName) {
@@ -2602,6 +2620,7 @@ async function loadIssue() {
       if (canSynthesizeIssue(adapted, archivedWeek)) {
         const synth = synthesizeIssue(adapted, archivedWeek)
         if (synth) {
+          if (superseded()) return
           liveData.value = synth
           // Publish the LIVE adapter's currentWeek to the store —
           // NOT the synth's synthetic `weekN + 1`. The synth value
@@ -2654,6 +2673,7 @@ async function loadIssue() {
       return
     }
 
+    if (superseded()) return
     liveData.value = adapted
     // Backfill a stale ESPN placeholder league_name once the real
     // name resolves. No-op for Yahoo / Sleeper / already-named ESPN
@@ -2715,9 +2735,12 @@ async function loadIssue() {
   } catch (err) {
     const label =
       platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper'
+    if (superseded()) return
     liveError.value = (err as Error).message || `Failed to load ${label} league data.`
   } finally {
-    liveLoading.value = false
+    // Only the newest load owns the spinner; an older one finishing
+    // must not clear it while the current one is still working.
+    if (!superseded()) liveLoading.value = false
   }
 }
 
@@ -2725,17 +2748,20 @@ onMounted(() => {
   void loadIssue()
 })
 
-// Watch for archive-route navigation (Issue 10 → ◀ Issue 9 etc.).
-// IssueView is the same component on both URLs, so the component
-// instance is reused — onMounted does NOT fire on a second visit.
-// Without this watcher, liveData stays stuck on whatever the
-// previous URL loaded, and the new "Issue N" page renders the
-// previous issue's standings. Re-running loadIssue resets state
-// and either reads the snapshot for week N or synthesizes it.
+// Re-load whenever the URL names a different issue OR a different
+// LEAGUE. IssueView is the same component on all of those URLs, so the
+// instance is reused and onMounted does NOT fire again.
+//
+// This originally watched only the week number, which covered archive
+// navigation (Issue 10 → ◀ Issue 9) and missed the far more common
+// case: switching leagues. `/leagues/A/the-issue` → `/leagues/B/the-issue`
+// changes neither the component nor the week, so nothing re-ran and
+// league B's page rendered league A's issue until you navigated to
+// another tab and back.
 watch(
-  () => route.params.weekNumber,
+  () => [route.params.leagueId, route.params.weekNumber] as const,
   (next, prev) => {
-    if (next === prev) return
+    if (next[0] === prev?.[0] && next[1] === prev?.[1]) return
     void loadIssue()
   },
 )
