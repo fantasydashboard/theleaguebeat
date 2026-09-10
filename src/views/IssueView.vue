@@ -962,7 +962,7 @@ import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { presentEnabled } from '@/composables/usePresentMode'
 import UfdHandoff from '@/components/issue/UfdHandoff.vue'
 import ShareCard from '@/components/issue/ShareCard.vue'
-import { chooseHandoffs } from '@/editorial/issue/handoff'
+import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
   shareFilename,
@@ -1302,7 +1302,8 @@ const handoffs = computed(() => {
   ]
   return chooseHandoffs(available)
 })
-const handoffFor = (key: string) => handoffs.value.find((h) => h.key === key)
+const handoffFor = (sectionId: string) =>
+  handoffs.value.find((h) => h.key === handoffKeyFor(sectionId))
 
 /* ── Shareable images ─────────────────────────────────────────────
    One section, one PNG, straight into a league chat. The card is

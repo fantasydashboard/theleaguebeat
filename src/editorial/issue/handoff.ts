@@ -93,10 +93,14 @@ export const HANDOFFS: Handoff[] = [
   {
     key: 'the-wire',
     tone: 'note',
+    // Stage-neutral on purpose: this same hand-off serves the preseason
+    // `since-the-draft` section, where "who scored most last week" names
+    // a week that has not happened.
     body:
       'That is what your league did. Ultimate Fantasy Dashboard ranks the wire by ' +
-      'what a player adds to your starting lineup, not by who scored most last week.',
-    cta: 'See this week’s targets',
+      'what a player would add to YOUR starting lineup — not by who is being added ' +
+      'everywhere else.',
+    cta: 'See your wire targets',
     campaign: 'wire',
   },
   {
@@ -111,8 +115,26 @@ export const HANDOFFS: Handoff[] = [
   },
 ]
 
+/**
+ * Section ids that mean the same thing to a hand-off.
+ *
+ * The preseason calls the waiver section `since-the-draft`; once
+ * waivers run for real the weekly issue calls it `the-wire`. Same
+ * reader, same decision, same UFD tool — only the season stage differs,
+ * so keying the pitch to one id left the whole preseason with a single
+ * hand-off on a page long enough to carry two.
+ */
+const SECTION_ALIASES: Record<string, string> = {
+  'since-the-draft': 'the-wire',
+}
+
 /** At most this many in one issue. */
 export const HANDOFF_CAP = 2
+
+/** The hand-off key a section answers to, if any. */
+export function handoffKeyFor(sectionId: string): string {
+  return SECTION_ALIASES[sectionId] ?? sectionId
+}
 
 /**
  * Which hand-offs to show, given what is actually on the page.
@@ -124,7 +146,7 @@ export const HANDOFF_CAP = 2
  * and three promos in others.
  */
 export function chooseHandoffs(available: readonly string[]): Handoff[] {
-  const present = new Set(available)
+  const present = new Set(available.map(handoffKeyFor))
   // Both lineup pitches make the same ask, and they overlap for exactly
   // one window: week one in progress, before any week has completed, when
   // the page is still the preseason issue but games are running. The live
