@@ -46,6 +46,7 @@ import { buildPreseasonIssue, type PreseasonIssueTeam } from './buildPreseasonIs
 import type { Issue } from './types'
 import type { CategoryLeagueDataDraftPick } from '../types'
 import type { LeagueTransaction } from '../transactions/types'
+import type { CareerRecord } from '@/editorial/points/recordBook'
 
 export interface LoadPreseasonIssueArgs {
   leagueName: string
@@ -66,6 +67,10 @@ export interface LoadPreseasonIssueArgs {
    * issue collapsed to whatever the page could render on its own.
    */
   rosterPositions?: string[]
+  /** Career totals for the record book, and how many seasons are
+   *  behind this one. Absent where a platform has no history walk. */
+  careers?: CareerRecord[]
+  seasonsPlayed?: number
 }
 
 /** One week's pairings from a raw Sleeper matchups payload. */
@@ -240,6 +245,8 @@ export async function loadPreseasonIssue(
     return buildPreseasonIssue({
       leagueName: args.leagueName,
       season,
+      careers: args.careers,
+      seasonsPlayed: args.seasonsPlayed,
       strength,
       graded,
       projected,

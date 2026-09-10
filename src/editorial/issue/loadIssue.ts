@@ -61,6 +61,10 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
       teamName: args.teamName,
       team: args.team,
       rosterPositions: data.rosterPositions,
+      careers: data.careerRecords,
+      // Completed seasons behind this one. `seasonHistory` only holds
+      // finished seasons, so its length IS the count.
+      seasonsPlayed: (data.seasonHistory ?? []).length,
     })
   }
 

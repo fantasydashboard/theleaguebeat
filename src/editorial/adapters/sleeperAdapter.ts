@@ -61,9 +61,11 @@ import { teamColorHash } from './colorHash'
 import { DEFAULT_END_WEEK_BY_SPORT } from '../detection/helpers'
 import {
   buildPointsSeasonHistory,
+  findFinal,
   type SleeperBracketMatch,
   type SleeperSeasonInput,
 } from '../points/seasonHistory'
+import type { CareerRecord } from '../points/recordBook'
 
 /* ─────────────────────────────────────────────────────────────────
    CATEGORY MAPPING
@@ -1467,7 +1469,11 @@ function buildWeeklyCatTallies(
    highest-record team). Basement is the lowest-record roster.
 ───────────────────────────────────────────────────────────────── */
 
-const MAX_HISTORY_DEPTH = 5
+// A decade. Five hops silently truncated a real eight-season league,
+// hiding three seasons and one manager's first two titles — and the
+// walk stops on its own when the chain ends, so the only cost is for
+// leagues that genuinely have that much history to show.
+const MAX_HISTORY_DEPTH = 10
 
 async function buildSeasonHistory(
   currentLeague: SleeperLeague,
@@ -2380,6 +2386,15 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
   const draft = buildSleeperDraft(raw, currentSeason)
   const seasonHistory = buildSleeperPointsSeasonHistory(raw)
+  const careerRecords = buildSleeperCareers(
+    { league: raw.league, rosters: raw.rosters, users: raw.users },
+    (raw.history ?? []).map((h) => ({
+      league: h.league,
+      rosters: h.rosters,
+      users: h.users,
+      winnersBracket: h.winnersBracket ?? [],
+    })),
+  )
 
   return {
     format: 'h2h-points',
@@ -2389,6 +2404,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     // On the contract so the preseason issue does not have to re-fetch
     // the league to learn its own lineup shape.
     rosterPositions: league.roster_positions ?? undefined,
+    careerRecords: careerRecords.length > 1 ? careerRecords : undefined,
     currentWeek,
     currentSeason,
     playoffCutoff,
@@ -2482,7 +2498,95 @@ export async function sleeperLeagueToPointsData(
  * needs, and pulling ~17 weeks per season would multiply the request
  * count for data nothing reads.
  */
-const HISTORY_DEPTH = 4
+// See MAX_HISTORY_DEPTH above — same reasoning, and the record book
+// is only as long as this walk reaches back.
+const HISTORY_DEPTH = 10
+
+/**
+ * Every manager's career across the seasons the walk reached.
+ *
+ * Built from data already fetched — `roster.settings` carries the final
+ * record and points for every past season, and the winners bracket
+ * names the champion. No extra requests.
+ *
+ * Keyed on OWNER, because that is the only thing that survives a rename,
+ * a promotion and a relegation. Managers who have left keep their
+ * totals: all-time means all-time, and a record does not stop counting
+ * because somebody went down a division. They just carry no `teamId`,
+ * which is how the record book knows not to hand them a live chase.
+ */
+function buildSleeperCareers(
+  current: { league: SleeperLeague; rosters: SleeperRoster[]; users: SleeperUser[] },
+  history: { league: SleeperLeague; rosters: SleeperRoster[]; users: SleeperUser[]; winnersBracket: SleeperBracketMatch[] }[],
+): CareerRecord[] {
+  const acc = new Map<string, CareerRecord>()
+  const currentOwners = new Map<string, string>()   // ownerId -> roster id
+  for (const r of current.rosters) {
+    if (r.owner_id) currentOwners.set(String(r.owner_id), String(r.roster_id))
+  }
+
+  const nameFor = (users: SleeperUser[], ownerId: string) => {
+    const u = users.find((x) => x.user_id === ownerId)
+    return ((u?.metadata as { team_name?: string } | undefined)?.team_name
+      || u?.display_name
+      || '').trim()
+  }
+
+  // Newest first, so the first name we see for a manager is their
+  // current one rather than whatever they were called in 2019.
+  const seasons = [
+    { ...current, winnersBracket: [] as SleeperBracketMatch[], complete: false },
+    ...history.map((h) => ({ ...h, complete: h.league.status === 'complete' })),
+  ]
+
+  for (const s of seasons) {
+    const rows = s.rosters
+      .filter((r) => r.owner_id)
+      .map((r) => ({
+        ownerId: String(r.owner_id),
+        rosterId: String(r.roster_id),
+        wins: r.settings?.wins ?? 0,
+        losses: r.settings?.losses ?? 0,
+        ties: r.settings?.ties ?? 0,
+        pf: (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100,
+      }))
+
+    for (const row of rows) {
+      let c = acc.get(row.ownerId)
+      if (!c) {
+        c = {
+          managerId: row.ownerId,
+          name: nameFor(s.users, row.ownerId) || `Manager ${row.ownerId.slice(0, 6)}`,
+          teamId: currentOwners.get(row.ownerId),
+          seasons: 0, wins: 0, losses: 0, ties: 0, pointsFor: 0, titles: 0, lasts: 0,
+        }
+        acc.set(row.ownerId, c)
+      }
+      c.seasons += 1
+      c.wins += row.wins
+      c.losses += row.losses
+      c.ties += row.ties
+      c.pointsFor += row.pf
+    }
+
+    // Honours only from seasons that actually finished. A live season
+    // has no champion and no last place, and inventing either would put
+    // a title on the board that nobody has won.
+    if (!s.complete || rows.length === 0) continue
+
+    const final = findFinal(s.winnersBracket)
+    const championRosterId = final?.w != null ? String(final.w) : null
+    if (championRosterId) {
+      const champ = rows.find((r) => r.rosterId === championRosterId)
+      if (champ) acc.get(champ.ownerId)!.titles += 1
+    }
+
+    const bottom = [...rows].sort((a, b) => a.wins - b.wins || a.pf - b.pf)[0]
+    if (bottom) acc.get(bottom.ownerId)!.lasts += 1
+  }
+
+  return [...acc.values()]
+}
 
 async function fetchSleeperHistory(league: SleeperLeague): Promise<
   { league: SleeperLeague; rosters: SleeperRoster[]; users: SleeperUser[]; winnersBracket: SleeperBracketMatch[] }[]

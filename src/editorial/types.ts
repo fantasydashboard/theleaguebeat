@@ -199,6 +199,9 @@ export interface CategoryLeaguePlayerPerformance {
 }
 
 /** Per-season summary — for the History page season list. */
+/** Re-exported so the contract is readable without chasing imports. */
+export type { CareerRecord } from './points/recordBook'
+
 export interface CategoryLeagueDataSeasonHistory {
   year: number
   championTeamId: string
@@ -586,6 +589,13 @@ export interface LeagueDataH2HPoints {
    * own lineup shape; each adapter answers in the same vocabulary.
    */
   rosterPositions?: string[]
+
+  /**
+   * Every manager's career in this league, across every season the
+   * platform will give us. Feeds the preseason record book — the only
+   * part of a preseason issue that is not a projection.
+   */
+  careerRecords?: CareerRecord[]
 
   // Teams (universal).
   teams: CategoryLeagueDataTeam[]

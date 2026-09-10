@@ -25,6 +25,7 @@ import { tierFor, type TeamStrength } from '../points/rosterStrength'
 import { scheduleWeight, type ProjectedSeasonRow } from '../points/projectedSeason'
 import type { WireFacts } from '../points/wireFacts'
 import type { Issue, IssueCard, IssueSection } from './types'
+import { buildRecordBook, type CareerRecord } from '../points/recordBook'
 import { orderSections } from './types'
 
 export interface PreseasonIssueTeam {
@@ -56,6 +57,12 @@ export interface PreseasonIssueInput {
   /** Headshot for a player id. Optional: without it a waiver slide
    *  shows the acquiring team's crest instead of a face. */
   playerImage?: (playerId: string) => string | null | undefined
+  /** Every manager's career, for the record book. Absent for platforms
+   *  or leagues with no history to read. */
+  careers?: CareerRecord[]
+  /** Completed seasons behind this one — the record book needs to know
+   *  whether there IS a history, not just whether rows came back. */
+  seasonsPlayed?: number
 }
 
 const sentenceCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
@@ -377,6 +384,40 @@ export function buildPreseasonIssue(input: PreseasonIssueInput): Issue | null {
         ...visual(input, a.teamId),
       })),
       priority: 50,
+    })
+  }
+
+  /* ── The record book ────────────────────────────────────────────
+     The only part of a preseason issue that is not a projection.
+     Everything above it is a forecast; this is the part that already
+     happened, and it is what a league that has played together for
+     years actually argues about. Silent when there is no history —
+     a first-year league gets no section rather than an empty one. */
+  const recordNotes = buildRecordBook(input.careers ?? [], {
+    seasonsPlayed: input.seasonsPlayed ?? 0,
+  })
+  if (recordNotes.length > 0) {
+    sections.push({
+      id: 'record-book',
+      eyebrow: 'The record book',
+      // The lead note is a race only when the gap is inside a season,
+      // so "not by much" is earned rather than decorative. Saying the
+      // leader is "one season from the top" had it backwards — they
+      // ARE the top, and that is exactly what is at stake.
+      headline: recordNotes[0].kind === 'race'
+        ? `${input.teamName(recordNotes[0].teamId ?? '')} holds the league record. Not by much.`
+        : 'What is already on the board.',
+      support:
+        'Every number above this is a forecast. These already happened, ' +
+        'and they move the moment the season starts.',
+      rows: recordNotes.map((n) => ({
+        label: input.teamName(n.teamId ?? '') || n.headline,
+        value: n.headline,
+        sub: n.detail,
+        teamId: n.teamId,
+        ...(n.teamId ? visual(input, n.teamId) : {}),
+      })),
+      priority: 45,
     })
   }
 
