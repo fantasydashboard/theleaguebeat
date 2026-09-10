@@ -90,3 +90,86 @@ describe('bridgePicks', () => {
     expect(original[0].playerId).toBe('3139477')
   })
 })
+
+describe('name fallback', () => {
+  // Sleeper's cross-references are stale where it matters: only 29% of
+  // the top 250 projected players carry an espn_id, and the gaps are
+  // the stars. Bridging on ids alone lost ~7 picks in 10, and which
+  // seven varied by team — one roster projected 75.9 points a week and
+  // another 17.9 in a league where nobody is below 100.
+  const blob = {
+    '1': { player_id: '1', espn_id: 4242, first_name: 'Old', last_name: 'Timer', position: 'RB' },
+    // No espn_id — exactly the 2023+ draft-class case.
+    '2': { player_id: '2', first_name: 'Bijan', last_name: 'Robinson', position: 'RB' },
+    '3': { player_id: '3', first_name: 'Marvin', last_name: 'Harrison', position: 'WR' },
+    // Two players, one name: must never be guessed.
+    '4': { player_id: '4', first_name: 'Ronald', last_name: 'Jones', position: 'RB' },
+    '5': { player_id: '5', first_name: 'Ronald', last_name: 'Jones', position: 'RB' },
+    // Same name, different position — not ambiguous.
+    '6': { player_id: '6', first_name: 'Ronald', last_name: 'Jones', position: 'WR' },
+  }
+  const bridge = buildPlayerIdBridge(blob, 'espn')
+
+  it('resolves a player the id map has never heard of', () => {
+    expect(bridge.byName('Bijan Robinson', 'RB')).toBe('2')
+  })
+
+  it('survives the spelling differences between two platforms', () => {
+    // ESPN writes the suffix, Sleeper does not. Accents, apostrophes
+    // and hyphens differ freely in both directions.
+    expect(bridge.byName('Marvin Harrison Jr.', 'WR')).toBe('3')
+    expect(bridge.byName('  MARVIN   HARRISON  ', 'wr')).toBe('3')
+  })
+
+  it('refuses to guess when a name is ambiguous', () => {
+    expect(bridge.byName('Ronald Jones', 'RB')).toBeUndefined()
+    // The collision is per position, so the receiver still resolves.
+    expect(bridge.byName('Ronald Jones', 'WR')).toBe('6')
+  })
+
+  it('resolves a bare name when it is unique, and only then', () => {
+    // A position narrows the search, but ESPN sometimes has none to
+    // give — see the 'Unknown' case below. Unique is the real bar.
+    expect(bridge.byName('Bijan Robinson')).toBe('2')
+    expect(bridge.byName('Bijan Robinson', '')).toBe('2')
+    // 'Ronald Jones' is two players across two positions, so a bare
+    // name cannot be resolved even though each position could be.
+    expect(bridge.byName('Ronald Jones')).toBeUndefined()
+  })
+
+  it('prefers the exact id over the name, and reports which did the work', () => {
+    const out = bridgePicks(
+      [
+        { playerId: '4242', playerName: 'Old Timer', position: 'RB' },
+        { playerId: '99999', playerName: 'Bijan Robinson', position: 'RB' },
+        { playerId: '88888', playerName: 'Ronald Jones', position: 'RB' },
+      ],
+      bridge,
+    )
+    expect(out.picks.map((p) => p.playerId)).toEqual(['1', '2', '88888'])
+    expect(out.byId).toBe(1)
+    expect(out.byName).toBe(1)
+    expect(out.bridged).toBe(2)
+  })
+})
+
+describe('picks with no usable position', () => {
+  const blob = {
+    '1': { player_id: '1', first_name: 'Bijan', last_name: 'Robinson', position: 'RB' },
+    '2': { player_id: '2', first_name: 'Ronald', last_name: 'Jones', position: 'RB' },
+    '3': { player_id: '3', first_name: 'Ronald', last_name: 'Jones', position: 'WR' },
+  }
+  const bridge = buildPlayerIdBridge(blob, 'espn')
+
+  it("resolves ESPN's 'Unknown' position by name alone", () => {
+    // getDraftWithPlayers writes 'Unknown' when its player lookup
+    // missed. Treating that as a real position fails every key.
+    expect(bridge.byName('Bijan Robinson', 'Unknown')).toBe('1')
+    expect(bridge.byName('Bijan Robinson')).toBe('1')
+  })
+
+  it('still refuses a name shared across positions', () => {
+    expect(bridge.byName('Ronald Jones', 'Unknown')).toBeUndefined()
+    expect(bridge.byName('Ronald Jones')).toBeUndefined()
+  })
+})
