@@ -112,12 +112,12 @@ export default async function handler(req) {
   const eyebrowText = latestIssue != null ? `Issue ${latestIssue}` : "This week's issue"
 
   // Brand tokens — mirror the league shell. Plain JS to avoid JSX in api.
-  const INK_1 = 'oklch(0.97 0.005 90)'
-  const INK_3 = 'oklch(0.55 0.010 90)'
-  const ACCENT_PRIMARY = 'oklch(0.78 0.18 92)'
-  const ACCENT_UP = 'oklch(0.74 0.18 145)'
-  const BG = 'oklch(0.08 0.014 90)'
-  const BG_PANEL = 'oklch(0.10 0.015 90)'
+  const INK_1 = '#f6f5f1'
+  const INK_3 = '#74716b'
+  const ACCENT_PRIMARY = '#e1b100'
+  const ACCENT_UP = '#53c75d'
+  const BG = '#020200'
+  const BG_PANEL = '#050301'
 
   const tree = h(
     'div',
@@ -129,7 +129,7 @@ export default async function handler(req) {
         flexDirection: 'column',
         justifyContent: 'space-between',
         background: BG,
-        backgroundImage: `radial-gradient(ellipse 800px 500px at 85% 15%, oklch(0.74 0.18 145 / 0.10), transparent 70%), radial-gradient(ellipse 700px 500px at 10% 95%, oklch(0.78 0.18 92 / 0.08), transparent 70%)`,
+        backgroundImage: `radial-gradient(ellipse 800px 500px at 85% 15%, rgba(83, 199, 93, 0.10), transparent 70%), radial-gradient(ellipse 700px 500px at 10% 95%, rgba(225, 177, 0, 0.08), transparent 70%)`,
         color: INK_1,
         padding: '64px 72px',
         fontFamily: '"Barlow", system-ui, sans-serif',
@@ -175,8 +175,8 @@ export default async function handler(req) {
           gap: '8px',
           padding: '6px 12px',
           borderRadius: '999px',
-          border: `1px solid oklch(0.74 0.18 145 / 0.35)`,
-          background: `oklch(0.74 0.18 145 / 0.10)`,
+          border: `1px solid rgba(83, 199, 93, 0.35)`,
+          background: `rgba(83, 199, 93, 0.10)`,
           color: ACCENT_UP,
           fontFamily: '"Barlow Condensed", "Barlow", sans-serif',
           fontSize: '16px',
@@ -185,7 +185,7 @@ export default async function handler(req) {
           textTransform: 'uppercase',
         },
       },
-        h('div', { style: { width: '8px', height: '8px', borderRadius: '50%', background: ACCENT_UP } }),
+        h('div', { style: { display: 'flex', width: '8px', height: '8px', borderRadius: '50%', background: ACCENT_UP } }),
         'Live issue',
       ),
     ),
@@ -202,6 +202,7 @@ export default async function handler(req) {
           letterSpacing: '0.20em',
           textTransform: 'uppercase',
           color: ACCENT_PRIMARY,
+          display: 'flex',
         },
       }, eyebrowText),
       h('div', {
@@ -235,7 +236,7 @@ export default async function handler(req) {
           alignItems: 'center',
           justifyContent: 'space-between',
           paddingTop: '24px',
-          borderTop: `1px solid oklch(0.20 0.015 90)`,
+          borderTop: `1px solid #19160e`,
         },
       },
       h('div', {
@@ -246,6 +247,7 @@ export default async function handler(req) {
           letterSpacing: '0.14em',
           textTransform: 'uppercase',
           color: INK_3,
+          display: 'flex',
         },
       }, 'Your league story, chronicled.'),
       h('div', {
