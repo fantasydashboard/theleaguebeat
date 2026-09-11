@@ -153,6 +153,11 @@ async function renderCardToPng(opts: {
     height: CARD_HEIGHT,
     pixelRatio: 1,
     cacheBust: true,
+    // Proxied images differ only in `?url=`, and html-to-image's
+    // resource cache strips the query by default — without this every
+    // crest on the card renders as whichever one loaded first. See the
+    // note in `exportSlides.elementToPng`.
+    includeQueryParams: true,
     // Inline external resources so the capture isn't broken by CORS.
     skipFonts: false,
   })

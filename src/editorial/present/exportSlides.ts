@@ -98,6 +98,15 @@ export async function elementToPng(
     height,
     pixelRatio: scale,
     cacheBust: true,
+    // EVERY proxied image shares one path — `/api/proxy-image` — and is
+    // told apart only by `?url=`. html-to-image's resource cache strips
+    // the query unless this is set, so all ten crests collapsed onto a
+    // single entry and rendered whichever one was fetched first. The
+    // record-book card went out with three teams in a fourth team's
+    // colours; a deck would have put one player's face on every slide.
+    // `cacheBust` does not cover it — the cache is read before the
+    // busting parameter is appended.
+    includeQueryParams: true,
     style: { transform: 'none', margin: '0' },
   })
   if (!blob) throw new Error('The browser returned no image for this card.')
