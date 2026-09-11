@@ -28,9 +28,10 @@ describe('the record book', () => {
     // 60 to 59 across eight seasons. This is the best line the league
     // has and nothing surfaced it.
     const out = buildRecordBook(REAL, { seasonsPlayed: 8 })
-    const wins = out.find((n) => n.headline.includes('all-time wins'))
+    const wins = out.find((n) => n.kind === 'race' && n.headline.endsWith('wins'))
     expect(wins).toBeDefined()
-    expect(wins!.headline).toBe('60 all-time wins')
+    // The value column takes a figure, not a sentence.
+    expect(wins!.headline).toBe('60 wins')
     expect(wins!.detail).toContain('1 win clear of Gridiron Man')
   })
 
@@ -54,7 +55,7 @@ describe('the record book', () => {
     const out = buildRecordBook(solo, { seasonsPlayed: 40 })
     const ms = out.find((n) => n.kind === 'milestone')
     expect(ms).toBeDefined()
-    expect(ms!.headline).toContain('12,000 career points')
+    expect(ms!.headline).toBe('12,000 pts')
   })
 
   it('leads with a contested record, not the most arithmetically urgent', () => {
@@ -149,7 +150,7 @@ describe('a milestone states where it stands', () => {
   it('says the rank, so a round number does not read as a league best', () => {
     // "147 from 8,000" sounds like a record until it says sixth.
     const out = buildRecordBook(REAL, { seasonsPlayed: 8 })
-    const ms = out.find((n) => n.kind === 'milestone' && n.headline.includes('career points'))!
+    const ms = out.find((n) => n.kind === 'milestone' && n.headline.endsWith('pts'))!
     expect(ms).toBeDefined()
     expect(ms.detail).toMatch(/\d+(st|nd|rd|th)-highest scorer/)
   })
@@ -162,10 +163,31 @@ describe('a milestone states where it stands', () => {
       mgr({ managerId: 'ghost', name: 'Ghost', teamId: undefined, pointsFor: 99999, wins: 200, seasons: 8 }),
     ]
     const out = buildRecordBook(withDeparted, { seasonsPlayed: 8 })
-    const ms = out.find((n) => n.kind === 'milestone' && n.headline.includes('career points'))
+    const ms = out.find((n) => n.kind === 'milestone' && n.headline.endsWith('pts'))
     if (ms) {
       const rank = parseInt(ms.detail.match(/(\d+)(?:st|nd|rd|th)-highest/)![1], 10)
       expect(rank).toBeGreaterThanOrEqual(2)
     }
+  })
+})
+
+describe('the value column holds a figure, not prose', () => {
+  it('keeps every headline short enough for a stat slot', () => {
+    // "207 from 10,000 career points" is a sentence. In the shareable
+    // card's stat column it squeezed team names to "Knights …" and
+    // pushed the detail — including the rank — off the row.
+    const out = buildRecordBook(REAL, { seasonsPlayed: 8 })
+    expect(out.length).toBeGreaterThan(0)
+    for (const n of out) {
+      expect(n.headline.length).toBeLessThanOrEqual(12)
+      expect(n.headline).toMatch(/^[\d,]+ (wins|pts|title|titles)$/)
+    }
+  })
+
+  it('moves the distance and the rank into the detail', () => {
+    const out = buildRecordBook(REAL, { seasonsPlayed: 8 })
+    const ms = out.find((n) => n.kind === 'milestone')!
+    expect(ms.detail).toMatch(/away/)
+    expect(ms.detail).toMatch(/all time|scorer all time/)
   })
 })

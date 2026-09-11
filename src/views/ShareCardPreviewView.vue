@@ -17,6 +17,10 @@
         <input v-model="asCards" type="checkbox" />
         render from <code>cards</code> rather than <code>rows</code>
       </label>
+      <label>
+        <input v-model="recordMode" type="checkbox" />
+        record book (4 rows, long detail)
+      </label>
       <p v-if="!isShareable(section)" class="scp-warn">
         Not shareable at this size — the Issue would not offer a button.
       </p>
@@ -47,6 +51,7 @@ import type { IssueSection } from '@/editorial/issue/types'
 
 const count = ref(10)
 const asCards = ref(true)
+const recordMode = ref(false)
 
 const TEAMS = [
   'The Aman-Ra Stars', 'Mighty Mallards', 'Scuttlebucs', 'Gridiron Man',
@@ -62,6 +67,19 @@ const section = computed<IssueSection>(() => {
     id: 'power-rankings',
     eyebrow: 'Power rankings',
     headline: 'Five teams have a case. Then it drops.',
+  }
+  if (recordMode.value) {
+    return {
+      id: 'record-book',
+      eyebrow: 'The record book',
+      headline: 'Swamp Pirates hold the league record. Not by much.',
+      rows: [
+        { label: 'Swamp Pirates', value: '64 wins', sub: 'Most in league history — 1 win clear of Howling Commandos.', logoColor: '#2b6cb0, #1a365d', logoInitials: 'SP' },
+        { label: 'Gotham City Rogues', value: '12,000 pts', sub: '85 away, about 1 week at their pace. 3rd-highest scorer all time.', logoColor: '#2b6cb0, #1a365d', logoInitials: 'GC' },
+        { label: 'Knights of the Round', value: '10,000 pts', sub: '207 away, about 2 weeks at their pace. 6th-highest scorer all time.', logoColor: '#2b6cb0, #1a365d', logoInitials: 'KR' },
+        { label: 'WillXposU', value: '50 wins', sub: '3 away — reachable this season. 4th-most wins all time.', logoColor: '#2b6cb0, #1a365d', logoInitials: 'WX' },
+      ],
+    } as IssueSection
   }
   if (asCards.value) {
     return {

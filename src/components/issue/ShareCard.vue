@@ -187,9 +187,15 @@ defineExpose({ frame, fit })
 /* Dropped rather than shrunk once rows get tight: a four-team name at
    full size beats a name and an unreadable note. */
 .sc-sub {
-  display: var(--sub-display, block); color: oklch(0.62 0.01 90); margin-top: 4px;
+  display: var(--sub-display, -webkit-box); color: oklch(0.62 0.01 90); margin-top: 6px;
   font-size: var(--sub, 23px);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.25;
+  /* Wraps to --sub-lines when the row is tall enough, clamps to one
+     and ellipses when it is not. */
+  white-space: var(--sub-wrap, nowrap);
+  -webkit-line-clamp: var(--sub-lines, 1);
+  -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
 }
 .sc-value {
   flex: none; font-weight: 800; font-variant-numeric: tabular-nums;

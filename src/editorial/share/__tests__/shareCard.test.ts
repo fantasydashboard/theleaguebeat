@@ -93,11 +93,24 @@ describe('shareable cards', () => {
     expect(parseInt(tight['--name'], 10)).toBeGreaterThanOrEqual(24)
 
     const roomy = rowScale(900, 8)
-    expect(roomy['--sub-display']).toBe('block')
+    expect(roomy['--sub-display']).toBe('-webkit-box')
   })
 
   it('does not turn three rows into three posters', () => {
-    expect(parseInt(rowScale(1100, 2)['--row-h'], 10)).toBeLessThanOrEqual(118)
+    expect(parseInt(rowScale(1100, 2)['--row-h'], 10)).toBeLessThanOrEqual(168)
+  })
+
+  it('lets the detail wrap once a row is tall enough to hold it', () => {
+    // A four-row record book was leaving ~430px empty while clipping
+    // the sentence that carries the all-time rank.
+    const tall = rowScale(900, 4)
+    expect(tall['--sub-lines']).toBe('2')
+    expect(tall['--sub-wrap']).toBe('normal')
+
+    // A crowded board still gets one line, so rows stay uniform.
+    const packed = rowScale(900, 12)
+    expect(packed['--sub-lines']).toBe('1')
+    expect(packed['--sub-wrap']).toBe('nowrap')
   })
 
   it('calls the full board what it is once it leaves the page', () => {

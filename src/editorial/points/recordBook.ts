@@ -64,9 +64,17 @@ export interface RecordNote {
   urgency: number
   managerId: string
   teamId?: string
-  /** "60 all-time wins" — the standing itself. */
+  /**
+   * The NUMBER, short enough to sit in a stat column: "64 wins",
+   * "12,000 pts", "2 titles".
+   *
+   * It used to carry the whole phrase — "207 from 10,000 career
+   * points" — which is prose in a slot built for a figure. On the
+   * shareable card it squeezed team names down to "Knights …" and
+   * pushed the detail off the row entirely.
+   */
   headline: string
-  /** "One clear of Gridiron Man." — why it matters now. */
+  /** The story: what it is, how far away, and where they rank. */
   detail: string
 }
 
@@ -154,11 +162,11 @@ export function buildRecordBook(
         urgency: gap,
         managerId: lead.managerId,
         teamId: lead.teamId,
-        headline: `${lead.wins} all-time wins`,
+        headline: `${lead.wins} wins`,
         detail:
           gap === 0
             ? `Level with ${second.name} at the top of the league's history.`
-            : `${plural(gap, 'win')} clear of ${second.name}, who is right behind them.`,
+            : `Most in league history — ${plural(gap, 'win')} clear of ${second.name}.`,
       })
     }
   }
@@ -175,10 +183,10 @@ export function buildRecordBook(
         urgency: weeks,
         managerId: lead.managerId,
         teamId: lead.teamId,
-        headline: `${Math.round(lead.pointsFor).toLocaleString()} all-time points`,
+        headline: `${Math.round(lead.pointsFor).toLocaleString()} pts`,
         detail:
-          `${Math.round(gap).toLocaleString()} clear of ${second.name} — about ` +
-          `${plural(Math.max(1, Math.round(weeks)), 'week')} of scoring.`,
+          `Most in league history — ${Math.round(gap).toLocaleString()} clear of ` +
+          `${second.name}, about ${plural(Math.max(1, Math.round(weeks)), 'week')} of scoring.`,
       })
     }
   }
@@ -197,12 +205,13 @@ export function buildRecordBook(
         urgency: winsAway,
         managerId: c.managerId,
         teamId: c.teamId,
-        headline: `${winsAway} from ${winTarget} career wins`,
+        headline: `${winTarget} wins`,
         detail:
+          `${winsAway} away — ` +
           (winsAway <= winsPerSeason
-            ? 'Reachable this season'
-            : 'On their record, a little over a season away') +
-          ` — ${ORD(winRank.get(c.managerId) ?? 0)}-most wins in the league's history.`,
+            ? 'reachable this season. '
+            : 'a little over a season, on their record. ') +
+          `${ORD(winRank.get(c.managerId) ?? 0)}-most wins all time.`,
       })
     }
 
@@ -217,10 +226,11 @@ export function buildRecordBook(
         urgency: weeksAway + 0.5,
         managerId: c.managerId,
         teamId: c.teamId,
-        headline: `${Math.round(pointsAway).toLocaleString()} from ${pointTarget.toLocaleString()} career points`,
+        headline: `${pointTarget.toLocaleString()} pts`,
         detail:
-          `About ${plural(Math.max(1, Math.round(weeksAway)), 'week')} at their pace — ` +
-          `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer in the league's history.`,
+          `${Math.round(pointsAway).toLocaleString()} away, about ` +
+          `${plural(Math.max(1, Math.round(weeksAway)), 'week')} at their pace. ` +
+          `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer all time.`,
       })
     }
   }

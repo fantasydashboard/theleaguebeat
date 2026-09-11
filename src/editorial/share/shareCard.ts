@@ -106,8 +106,11 @@ export const PAD_Y = 118
 /** Never smaller than this: below it a crest is a smudge and the name
  *  is unreadable at chat preview size, which defeats the whole card. */
 const MIN_ROW = 62
-/** Never larger than this: three rows should not become three posters. */
-const MAX_ROW = 118
+/** Never larger than this: three rows should not become three posters.
+ *  Raised from 118 once the sub-line was allowed to wrap — a four-row
+ *  card was leaving ~430px empty while clipping the very sentence that
+ *  explains the number. */
+const MAX_ROW = 168
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -131,6 +134,11 @@ export function rowScale(available: number, count: number): Record<string, strin
   // runs twelve and the League of Record ten, and the two cards looking
   // different is a worse outcome than a slightly smaller note.
   const showSub = h >= 78
+  // Two lines once a row is tall enough to hold them. The record book's
+  // detail — the distance AND the all-time rank — does not fit on one,
+  // and truncating it removes the part that stops a round number
+  // reading as a league best.
+  const subLines = h >= 120 ? 2 : 1
   return {
     '--row-h': `${h}px`,
     '--gap': `${Math.round(clamp(h * 0.26, 16, 28))}px`,
@@ -140,7 +148,9 @@ export function rowScale(available: number, count: number): Record<string, strin
     '--name': `${Math.round(clamp(h * (showSub ? 0.36 : 0.44), 24, 44))}px`,
     '--sub': `${Math.round(clamp(h * 0.23, 18, 27))}px`,
     '--value': `${Math.round(clamp(h * (showSub ? 0.35 : 0.42), 24, 42))}px`,
-    '--sub-display': showSub ? 'block' : 'none',
+    '--sub-display': showSub ? '-webkit-box' : 'none',
+    '--sub-lines': String(subLines),
+    '--sub-wrap': subLines > 1 ? 'normal' : 'nowrap',
   }
 }
 
