@@ -566,6 +566,27 @@
   .xh-chip-v { font-size: 46px; font-weight: 900; letter-spacing: -0.02em; margin-top: 4px; }
   .xh-chip-s { font-size: 22px; font-weight: 700; color: var(--pink); margin-top: 2px; }
 
+  /* ── X matchups ─────────────────────────────────────────────
+     Two teams per row, the split in the middle. The favorite's side
+     carries the gold number; nothing else competes with it. */
+  .xm-row {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px;
+    background: var(--panel); border-radius: 16px; padding: 14px 30px;
+    flex: 1; min-height: 0;
+  }
+  .xm-side { display: flex; align-items: center; gap: 20px; min-width: 0; }
+  .xm-side.right { flex-direction: row-reverse; }
+  .xm-name {
+    font-size: 36px; font-weight: 800; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .xm-split {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 52px;
+    display: flex; align-items: baseline; gap: 14px; flex: none;
+  }
+  .xm-split .fav { color: var(--gold); }
+  .xm-split .dash { color: var(--dim); font-size: 36px; }
+
   .xc-foot {
     display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
@@ -1296,6 +1317,62 @@ async function loadXOdds() {
 }
 
 /**
+ * Week matchups with a win split. ?wk=1 picks the week.
+ *
+ * Same normal approximation the campaign copy quotes: expected weekly
+ * points from the lineup model, sigma 25 a team. The site's matchup
+ * page runs its own engine; at coin-flip resolution they agree, and
+ * the card and the copy MUST agree with each other, which is the
+ * reason this shares the copy's math rather than inventing a third.
+ */
+async function loadXMatchups() {
+  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
+  const cfg = LEAGUES[key]
+  const wk = Number(params.get('wk') || 1)
+  const table = await rankedTeams(cfg)
+  const [ms, rosters] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${wk}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
+  ])
+  const ownerByRoster = Object.fromEntries(rosters.map((r) => [r.roster_id, r.owner_id]))
+  const byOwner = Object.fromEntries(table.map((t) => [t.owner, t]))
+  const groups = {}
+  for (const m of ms) {
+    if (m.matchup_id == null) continue   // byes invent phantom matchups
+    ;(groups[m.matchup_id] ||= []).push(m)
+  }
+  const SIGMA_DIFF = 25 * Math.SQRT2
+  const cdf = (z) => 0.5 * (1 + Math.tanh(Math.sqrt(Math.PI / 8) * z * (1 + 0.044715 * z * z * (Math.PI / 8))))
+  const pairs = Object.values(groups)
+    .map((pair) => {
+      const [a, b] = pair.map((m) => byOwner[ownerByRoster[m.roster_id]])
+      if (!a || !b) return null
+      const pA = Math.round(cdf((a.perWeek - b.perWeek) / SIGMA_DIFF) * 100)
+      // Favorite on the left, so the gold number always leads.
+      return pA >= 50 ? { fav: a, dog: b, p: pA } : { fav: b, dog: a, p: 100 - pA }
+    })
+    .filter(Boolean)
+    // Closest game last: the card builds tension downward.
+    .sort((x, y) => y.p - x.p)
+
+  const side = (t, right) => `
+    <span class="xm-side${right ? ' right' : ''}">
+      ${xcAv(t.team, t.avatar)}
+      <span class="xm-name">${esc(t.team)}</span>
+    </span>`
+  const rows = pairs.map((m) => `
+    <div class="xm-row">
+      ${side(m.fav, false)}
+      <span class="xm-split"><span class="fav">${m.p}</span><span class="dash">–</span><span>${100 - m.p}</span></span>
+      ${side(m.dog, true)}
+    </div>`).join('')
+
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name, title: 'The matchups', when: params.get('when') || `Week ${wk}`, rows,
+  })
+}
+
+/**
  * The record book.
  *
  * BAKED, and labelled "through 2025" on the card itself. These are
@@ -1448,6 +1525,7 @@ function fit() {
     else if (view === 'x-rank') await loadXRank()
     else if (view === 'x-odds') await loadXOdds()
     else if (view === 'x-record') await loadXRecord()
+    else if (view === 'x-matchups') await loadXMatchups()
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
