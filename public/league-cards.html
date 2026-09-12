@@ -14,6 +14,14 @@
     ?ratio=16x9      widescreen cut of any of the above
     ?export          renders 1:1 for a clean full-page capture
 
+  X CARDS (1920x1080, already widescreen, no ?ratio needed):
+
+    ?view=x-rank     the board, ranked by expected weekly points
+    ?view=x-odds     playoff odds, with the race drawn as a bar
+    ?view=x-record   all-time records, dated "through 2025"
+    &lg=ffl          second tier (x-rank and x-odds)
+    &rows=6          how many rows; six is what reads in a timeline
+
   ROSTERS ARE FETCHED LIVE from Sleeper's public API. Team names change
   constantly — mid-season, after a bad week, for a joke — and a graphic
   with last month's names in it is worse than no graphic. The endpoints
@@ -386,6 +394,184 @@
   body[data-export] .hint { display: none; }
   .hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
           font-size: 12px; color: #555; font-family: ui-monospace, monospace; }
+
+  /* ── X cards ──────────────────────────────────────────────────
+     Timeline cuts of the sections a reader actually gets: the
+     board, the record book, the playoff race.
+
+     SAME MASTHEAD, TYPE AND PALETTE AS THE PRODUCT, deliberately.
+     The campaign's whole claim is "this is what you will see", and
+     a card that looks like marketing instead of the page undoes
+     that in one scroll.
+
+     SIX ROWS, NOT TEN. X column-crops a feed image, so a full
+     ten-team board is a grey smudge until someone taps it. Six
+     rows sized this large read at timeline scale, which is the
+     only size that matters. */
+  .xc { display: flex; flex-direction: column; height: 100%; }
+  .xc-top { display: flex; align-items: baseline; justify-content: space-between; }
+  .xc-mark {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 30px;
+    letter-spacing: 0.24em; text-transform: uppercase;
+  }
+  .xc-league {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+  }
+  .xc-rule { height: 3px; background: var(--line); margin: 14px 0 22px; }
+  .xc-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
+  .xc-title { font-size: 64px; font-weight: 900; letter-spacing: -0.03em; line-height: 0.95; }
+  .xc-when {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 28px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--pink);
+  }
+  .xc-rows { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  /* Rows share the frame rather than stacking from the top, so a
+     four-row record book fills the same card a six-row board does
+     instead of trailing half a frame of dead space. */
+  .xc-row {
+    display: flex; align-items: center; gap: 24px; position: relative; overflow: hidden;
+    background: var(--panel); border-radius: 16px; padding: 14px 26px;
+    flex: 1; min-height: 0;
+  }
+  .xc-rank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 46px;
+    width: 60px; flex: none; color: var(--gold); text-align: center;
+  }
+  .xc-av {
+    width: 76px; height: 76px; border-radius: 14px; flex: none; overflow: hidden;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 800; font-size: 26px; color: var(--muted);
+  }
+  .xc-av img { width: 100%; height: 100%; object-fit: cover; }
+  /* Spans stack only when told to; inline by default the sub line
+     sat on top of the name. Same trap as `.names` above. */
+  .xc-lines { flex: 1; min-width: 0; }
+  .xc-lines > span { display: block; }
+  .xc-name {
+    font-size: 40px; font-weight: 800; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .xc-sub { font-size: 25px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .xc-stat { flex: none; text-align: right; min-width: 200px; }
+  .xc-stat b {
+    display: block; font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900; font-size: 46px; line-height: 1;
+  }
+  .xc-stat i {
+    display: block; font-style: normal; font-size: 19px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--dim); margin-top: 4px;
+  }
+  /* Fill behind the row, so the race is readable before the number is.
+     The stacking rule below must EXCLUDE the bar: as a direct child it
+     was being handed `position: relative` too, which dropped it back
+     into flow, ate a percentage of the row's width and truncated every
+     team name to "Gridiron …". */
+  .xc-bar { position: absolute; left: 0; top: 0; bottom: 0; background: oklch(0.30 0.06 92 / 0.55); }
+  .xc-row > *:not(.xc-bar) { position: relative; }
+  /* ── X hero ───────────────────────────────────────────────────
+     The ad shape: pitch on the left, the product itself tilted off
+     the right edge. Everything inside the phone is rendered LIVE
+     from the same Sleeper table the other cards use, rather than a
+     pasted screenshot — a football promo carrying a shot of the
+     baseball demo is exactly the kind of leak that gets noticed. */
+  body[data-hero] .safe { left: 0; top: 0; width: 100%; height: 100%; }
+  .xh { position: absolute; inset: 0; overflow: hidden; }
+  .xh-glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(72% 92% at 80% 46%, oklch(0.52 0.24 350 / 0.50), transparent 62%),
+      radial-gradient(46% 64% at 100% 12%, oklch(0.62 0.18 60 / 0.22), transparent 70%),
+      var(--bg);
+  }
+  .xh-dots {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(oklch(0.60 0.02 90 / 0.16) 1.5px, transparent 1.5px);
+    background-size: 26px 26px;
+  }
+  /* Vertically centered, like the reference: the pitch owns its half
+     of the frame instead of huddling in the top corner. */
+  .xh-copy { position: absolute; left: 5.5%; top: 50%; transform: translateY(-50%); width: 46%; }
+  .xh-logo { height: 92px; margin-bottom: 52px; display: block; }
+  .xh-h1 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 148px;
+    line-height: 0.88; text-transform: uppercase; margin: 0 0 40px;
+  }
+  .xh-sub { font-size: 38px; line-height: 1.32; color: var(--ink); opacity: 0.9; }
+  .xh-accent { font-size: 38px; font-style: italic; font-weight: 700; color: var(--pink); margin-top: 8px; }
+  .xh-plat { display: flex; align-items: center; gap: 34px; margin-top: 60px; }
+  .xh-plat img { height: 56px; }
+  .xh-plat b { width: 2px; height: 46px; background: var(--line); }
+
+  /* Bleeds off the right edge on purpose: a device fully inside the
+     frame reads as a screenshot, one running off it reads as depth. */
+  .xh-phone {
+    position: absolute; right: -60px; top: 50%; width: 620px; height: 1240px;
+    margin-top: -620px; padding: 13px; border-radius: 62px;
+    background: linear-gradient(160deg, oklch(0.42 0.01 90), oklch(0.22 0.01 90));
+    /* Shallower than the reference's tilt: at -18deg/-7deg the far
+       column of scores fell off the frame's right edge. */
+    transform: perspective(2400px) rotateY(-14deg) rotateZ(-5deg);
+    box-shadow: 0 60px 150px oklch(0 0 0 / 0.75);
+  }
+  .xh-screen {
+    width: 100%; height: 100%; border-radius: 50px; overflow: hidden;
+    background: var(--bg); display: flex; flex-direction: column;
+    /* Top clears the frame's cut so the masthead survives the bleed;
+       right is deeper than left because the rotateY pushes that edge
+       toward the frame boundary and was clipping every score. */
+    padding: 96px 52px 42px 32px;
+  }
+  .xh-mast {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 23px;
+    letter-spacing: 0.22em; text-transform: uppercase;
+  }
+  .xh-eyebrow {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 20px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--pink); margin-top: 30px;
+  }
+  .xh-title2 { font-size: 46px; font-weight: 900; letter-spacing: -0.02em; margin: 6px 0 24px; }
+  .xh-mini { display: flex; flex-direction: column; gap: 12px; }
+  .xh-mrow {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--panel); border-radius: 14px; padding: 11px 16px;
+  }
+  .xh-mrank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 30px;
+    color: var(--gold); width: 32px; text-align: center; flex: none;
+  }
+  .xh-mav {
+    width: 52px; height: 52px; border-radius: 10px; overflow: hidden; flex: none;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 800; font-size: 18px; color: var(--muted);
+  }
+  .xh-mav img { width: 100%; height: 100%; object-fit: cover; }
+  .xh-mname {
+    flex: 1; min-width: 0; font-size: 27px; font-weight: 800;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .xh-mpts { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 27px; flex: none; }
+
+  /* The pulled-out stat, same trick as the reference: one number
+     lifted off the device so it reads before the screen does. */
+  .xh-chip {
+    position: absolute; right: 430px; top: 60%;
+    background: oklch(0.13 0.012 90); border: 2px solid var(--line);
+    border-radius: 22px; padding: 22px 32px; box-shadow: 0 34px 80px oklch(0 0 0 / 0.7);
+  }
+  .xh-chip-k {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 20px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted);
+  }
+  .xh-chip-v { font-size: 46px; font-weight: 900; letter-spacing: -0.02em; margin-top: 4px; }
+  .xh-chip-s { font-size: 22px; font-weight: 700; color: var(--pink); margin-top: 2px; }
+
+  .xc-foot {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim);
+  }
+  .xc-free { color: var(--gold); }
 </style>
 </head>
 <body>
@@ -420,7 +606,8 @@ const TITLES = CHAMPIONS.reduce((m, c) => (m[c.owner] = (m[c.owner] || 0) + 1, m
 const params = new URLSearchParams(location.search)
 const view = params.get('view') || 'lor'
 const exporting = params.has('export')
-if (params.get('ratio') === '16x9') document.body.dataset.ratio = '16x9'
+// 16:9 is the X cards' native shape, so they never need ?ratio spelled out.
+if (params.get('ratio') === '16x9' || view.startsWith('x-')) document.body.dataset.ratio = '16x9'
 if (exporting) { document.body.dataset.export = ''; document.documentElement.dataset.export = '' }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -1033,6 +1220,204 @@ async function loadChamp() {
     </div>`
 }
 
+/* ── X cards ──────────────────────────────────────────────────────
+   Three 16:9 cuts for the timeline, built from the same live table
+   the vertical cards use. */
+
+function xcShell({ league, title, when, rows }) {
+  return `<div class="xc">
+    <div class="xc-top">
+      <span class="xc-mark">The League Beat</span>
+      <span class="xc-league">${esc(league)}</span>
+    </div>
+    <div class="xc-rule"></div>
+    <div class="xc-head">
+      <span class="xc-title">${esc(title)}</span>
+      <span class="xc-when">${esc(when)}</span>
+    </div>
+    <div class="xc-rows">${rows}</div>
+    <div class="xc-foot">
+      <span>theleaguebeat.com</span>
+      <span class="xc-free">Free for your league</span>
+    </div>
+  </div>`
+}
+
+function xcAv(team, avatar) {
+  const fallback = esc(initials(team))
+  return avatar
+    ? `<span class="xc-av"><img src="${esc(avatar)}" alt=""
+         onerror="this.replaceWith(document.createTextNode('${fallback}'))"></span>`
+    : `<span class="xc-av">${fallback}</span>`
+}
+
+const xcStat = (value, unit) => `<span class="xc-stat"><b>${esc(value)}</b><i>${esc(unit)}</i></span>`
+
+/** The board. Ranked by expected weekly points, which is the whole
+ *  point: it disagrees with the standings, and that is the post. */
+async function loadXRank() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  const teams = await rankedTeams(cfg)
+  const rows = teams.slice(0, Number(params.get('rows') || 6)).map((t, i) => {
+    // The best projected starter is the honest one-line "why here".
+    const best = [...t.nine].sort((a, b) => b.pts - a.pts)[0]
+    return `<div class="xc-row">
+      <span class="xc-rank">${i + 1}</span>
+      ${xcAv(t.team, t.avatar)}
+      <span class="xc-lines">
+        <span class="xc-name">${esc(t.team)}</span>
+        ${best ? `<span class="xc-sub">Built around ${esc(best.name)}</span>` : ''}
+      </span>
+      ${xcStat(t.perWeek.toFixed(1), 'proj pts/wk')}
+    </div>`
+  }).join('')
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name, title: 'Power rankings', when: params.get('when') || 'Week 1', rows,
+  })
+}
+
+/** The playoff race, with the bar doing the work the number can't at
+ *  timeline size. */
+async function loadXOdds() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  const teams = (await rankedTeams(cfg))
+    .filter((t) => t.odds)
+    .sort((a, b) => b.odds.playoffs - a.odds.playoffs)
+  const rows = teams.slice(0, Number(params.get('rows') || 6)).map((t) => `
+    <div class="xc-row">
+      <span class="xc-bar" style="width:${t.odds.playoffs}%"></span>
+      ${xcAv(t.team, t.avatar)}
+      <span class="xc-lines"><span class="xc-name">${esc(t.team)}</span></span>
+      ${xcStat(t.odds.playoffs + '%', 'make playoffs')}
+    </div>`).join('')
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name, title: 'Playoff odds', when: params.get('when') || 'Preseason', rows,
+  })
+}
+
+/**
+ * The record book.
+ *
+ * BAKED, and labelled "through 2025" on the card itself. These are
+ * settled career totals: walking eight seasons of history live would
+ * be forty-odd requests, and the moment week 1 closes the live
+ * numbers move while a card already posted does not. Dating the card
+ * makes it permanently true instead of quietly stale.
+ *
+ * Keyed on owner id rather than team name, for the same reason
+ * CHAMPIONS is: names move, and this league has already had one
+ * manager run two different franchises.
+ */
+const MARKERS = [
+  {
+    label: 'Most wins, all time',
+    owner: '414222972006453248', name: 'Mighty Mallards',
+    value: '60', unit: 'wins',
+    sub: 'Gridiron Man sits one back on 59. It can change hands in week 1.',
+  },
+  {
+    label: 'Most points, all time',
+    owner: '342904407941357568', name: 'Scuttlebucs',
+    value: '11,540', unit: 'points',
+    sub: 'Has outscored the league for eight years and never led it in wins.',
+  },
+  {
+    label: 'Most titles',
+    owner: '414190204908216320', name: 'Gridiron Man',
+    value: '2', unit: 'titles',
+    sub: 'Level with one manager since relegated. Nobody has more.',
+  },
+  {
+    label: 'Next milestone',
+    owner: '651270241543868416', name: 'The Juggernauts',
+    value: '8,000', unit: 'points',
+    sub: '147 away. Seventh-highest scorer in league history.',
+  },
+]
+
+async function loadXRecord() {
+  const now = await currentFranchises()
+  const rows = MARKERS.map((m) => {
+    // Resolve to the franchise they run TODAY; fall back to the name
+    // recorded here if the manager has left the league.
+    const f = now[m.owner] || { team: m.name, avatar: null }
+    return `<div class="xc-row">
+      ${xcAv(f.team, f.avatar)}
+      <span class="xc-lines">
+        <span class="xc-name">${esc(f.team)}</span>
+        <span class="xc-sub">${esc(m.label)}. ${esc(m.sub)}</span>
+      </span>
+      ${xcStat(m.value, m.unit)}
+    </div>`
+  }).join('')
+  document.getElementById('safe').innerHTML = xcShell({
+    league: LEAGUES.lor.name, title: 'The record book', when: 'Through 2025', rows,
+  })
+}
+
+/**
+ * The ad card: pitch left, product tilted off the right edge.
+ *
+ * Copy is all overridable so one view covers the whole campaign:
+ *   &h1=Your league|deserves a|newspaper
+ *   &sub=...  &accent=...  &chip=Most wins, all time|60 to 59|...
+ */
+async function loadXHero() {
+  document.body.dataset.hero = ''
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  // The whole table: anything short leaves dead screen at the bottom,
+  // and an empty screen in an ad reads as a mockup, not a product.
+  const teams = await rankedTeams(cfg)
+
+  const h1 = (params.get('h1') || 'Your league|deserves a|newspaper').split('|')
+  const sub = params.get('sub') || 'Power rankings, playoff odds, all-time records, the wire.'
+  const accent = params.get('accent') || 'Free for the whole league.'
+  const chip = (params.get('chip') || 'Most wins, all time|60 to 59|One game apart going into week 1').split('|')
+
+  const mini = teams.map((t, i) => `
+    <div class="xh-mrow">
+      <span class="xh-mrank">${i + 1}</span>
+      <span class="xh-mav">${t.avatar
+        ? `<img src="${esc(t.avatar)}" alt="">`
+        : esc(initials(t.team))}</span>
+      <span class="xh-mname">${esc(t.team)}</span>
+      <span class="xh-mpts">${t.perWeek.toFixed(1)}</span>
+    </div>`).join('')
+
+  document.getElementById('safe').innerHTML = `
+    <div class="xh">
+      <div class="xh-glow"></div>
+      <div class="xh-dots"></div>
+
+      <div class="xh-phone">
+        <div class="xh-screen">
+          <div class="xh-mast">The League Beat</div>
+          <div class="xh-eyebrow">${esc(cfg.name)}</div>
+          <div class="xh-title2">Power rankings</div>
+          <div class="xh-mini">${mini}</div>
+        </div>
+      </div>
+
+      <div class="xh-chip">
+        <div class="xh-chip-k">${esc(chip[0] || '')}</div>
+        <div class="xh-chip-v">${esc(chip[1] || '')}</div>
+        <div class="xh-chip-s">${esc(chip[2] || '')}</div>
+      </div>
+
+      <div class="xh-copy">
+        <img class="xh-logo" src="/tlb-logo-primary.png" alt="The League Beat">
+        <h1 class="xh-h1">${h1.map((l) => esc(l)).join('<br>')}</h1>
+        <div class="xh-sub">${esc(sub)}</div>
+        <div class="xh-accent">${esc(accent)}</div>
+        <div class="xh-plat">
+          <img src="/sleeper-logo.svg" alt="Sleeper">
+          <b></b>
+          <img src="/espn-logo.svg" alt="ESPN">
+        </div>
+      </div>
+    </div>`
+}
+
 function fit() {
   const f = document.getElementById('frame')
   if (exporting) {
@@ -1046,7 +1431,7 @@ function fit() {
   const scale = Math.min(1, window.innerWidth / f.offsetWidth, window.innerHeight / f.offsetHeight)
   f.style.transform = `translate(-50%, -50%) scale(${scale})`
   document.getElementById('hint').textContent =
-    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=rank&n=1..10 | lor|ffl|honours|seasons|title|down|up|champ  ?ratio=16x9  ?export`
+    `${f.offsetWidth}x${f.offsetHeight} @ ${(scale * 100).toFixed(0)}%  ·  ?view=rank&n=1..10 | lor|ffl|honours|seasons|title|down|up|champ  ·  X: x-rank|x-odds|x-record  ?ratio=16x9  ?export`
 }
 
 ;(async () => {
@@ -1059,6 +1444,10 @@ function fit() {
     else if (view === 'intro') loadIntro()
     else if (view === 'group') await loadGroup()
     else if (view === 'down' || view === 'up') loadSolo(view)
+    else if (view === 'x-hero') await loadXHero()
+    else if (view === 'x-rank') await loadXRank()
+    else if (view === 'x-odds') await loadXOdds()
+    else if (view === 'x-record') await loadXRecord()
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
