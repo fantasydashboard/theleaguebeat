@@ -551,6 +551,23 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .xh-mpts { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 27px; flex: none; }
+  /* Screens with few rows (record book, matchups) spread down the
+     device rather than inflating — four tower-height cards read as a
+     mockup; normal rows with air read as an app. */
+  .xh-mini.fill { flex: 1; justify-content: space-evenly; }
+  .xh-mini.fill .xh-mrow { padding: 22px 16px; }
+  .xh-msub { display: block; font-size: 19px; color: var(--muted); font-weight: 600; }
+  /* Matchup rows on the device: two crests, the split in the gold. */
+  .xh-vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+           background: var(--panel); border-radius: 14px; padding: 12px 16px; }
+  .xh-vs-side { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .xh-vs-side.right { flex-direction: row-reverse; }
+  .xh-vs-name { font-size: 21px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xh-vs-split { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 27px; flex: none; }
+  .xh-vs-split b { color: var(--gold); font-weight: 900; }
+  /* The front page, for the recap card. */
+  .xh-cover-head { font-size: 44px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.02; margin: 8px 0 16px; }
+  .xh-cover-sub { font-size: 23px; line-height: 1.4; color: var(--muted); margin-bottom: 26px; }
 
   /* The pulled-out stat, same trick as the reference: one number
      lifted off the device so it reads before the screen does. */
@@ -1325,11 +1342,8 @@ async function loadXOdds() {
  * the card and the copy MUST agree with each other, which is the
  * reason this shares the copy's math rather than inventing a third.
  */
-async function loadXMatchups() {
-  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
-  const cfg = LEAGUES[key]
-  const wk = Number(params.get('wk') || 1)
-  const table = await rankedTeams(cfg)
+/** Week pairings with a win split, favorite first, closest last. */
+async function weekWinSplits(cfg, wk, table) {
   const [ms, rosters] = await Promise.all([
     fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${wk}`).then((r) => r.json()),
     fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
@@ -1343,7 +1357,7 @@ async function loadXMatchups() {
   }
   const SIGMA_DIFF = 25 * Math.SQRT2
   const cdf = (z) => 0.5 * (1 + Math.tanh(Math.sqrt(Math.PI / 8) * z * (1 + 0.044715 * z * z * (Math.PI / 8))))
-  const pairs = Object.values(groups)
+  return Object.values(groups)
     .map((pair) => {
       const [a, b] = pair.map((m) => byOwner[ownerByRoster[m.roster_id]])
       if (!a || !b) return null
@@ -1354,6 +1368,14 @@ async function loadXMatchups() {
     .filter(Boolean)
     // Closest game last: the card builds tension downward.
     .sort((x, y) => y.p - x.p)
+}
+
+async function loadXMatchups() {
+  const key = params.get('lg') === 'ffl' ? 'ffl' : 'lor'
+  const cfg = LEAGUES[key]
+  const wk = Number(params.get('wk') || 1)
+  const table = await rankedTeams(cfg)
+  const pairs = await weekWinSplits(cfg, wk, table)
 
   const side = (t, right) => `
     <span class="xm-side${right ? ' right' : ''}">
@@ -1451,15 +1473,75 @@ async function loadXHero() {
   const accent = params.get('accent') || 'Free for the whole league.'
   const chip = (params.get('chip') || 'Most wins, all time|60 to 59|One game apart going into week 1').split('|')
 
-  const mini = teams.map((t, i) => `
-    <div class="xh-mrow">
-      <span class="xh-mrank">${i + 1}</span>
-      <span class="xh-mav">${t.avatar
-        ? `<img src="${esc(t.avatar)}" alt="">`
-        : esc(initials(t.team))}</span>
-      <span class="xh-mname">${esc(t.team)}</span>
-      <span class="xh-mpts">${t.perWeek.toFixed(1)}</span>
-    </div>`).join('')
+  // What the device shows: the section this card is selling.
+  //   &screen=rank (default) | odds | record | matchups | issue
+  const screen = params.get('screen') || 'rank'
+  const mav = (t) => `<span class="xh-mav">${t.avatar
+    ? `<img src="${esc(t.avatar)}" alt="">`
+    : esc(initials(t.team))}</span>`
+
+  let screenTitle = 'Power rankings'
+  let mini = ''
+  let fill = false
+
+  if (screen === 'odds') {
+    screenTitle = 'Playoff odds'
+    mini = [...teams]
+      .filter((t) => t.odds)
+      .sort((a, b) => b.odds.playoffs - a.odds.playoffs)
+      .map((t) => `
+        <div class="xh-mrow">
+          ${mav(t)}
+          <span class="xh-mname">${esc(t.team)}</span>
+          <span class="xh-mpts">${t.odds.playoffs}%</span>
+        </div>`).join('')
+  } else if (screen === 'record') {
+    screenTitle = 'The record book'
+    fill = true
+    const now = await currentFranchises()
+    mini = MARKERS.map((m) => {
+      const f = now[m.owner] || { team: m.name, avatar: null }
+      return `
+        <div class="xh-mrow">
+          ${mav(f)}
+          <span class="xh-mname">${esc(f.team)}<span class="xh-msub">${esc(m.label)}</span></span>
+          <span class="xh-mpts">${esc(m.value)} ${esc(m.unit)}</span>
+        </div>`
+    }).join('')
+  } else if (screen === 'matchups') {
+    screenTitle = 'The matchups'
+    fill = true
+    const pairs = await weekWinSplits(cfg, Number(params.get('wk') || 1), teams)
+    mini = pairs.map((m) => `
+      <div class="xh-vs">
+        <span class="xh-vs-side">${mav(m.fav)}<span class="xh-vs-name">${esc(m.fav.team)}</span></span>
+        <span class="xh-vs-split"><b>${m.p}</b>–${100 - m.p}</span>
+        <span class="xh-vs-side right">${mav(m.dog)}<span class="xh-vs-name">${esc(m.dog.team)}</span></span>
+      </div>`).join('')
+  } else if (screen === 'issue') {
+    screenTitle = ''
+    mini = `
+      <div class="xh-eyebrow" style="margin-top:0">Issue No. 2 · Week 1</div>
+      <div class="xh-cover-head">Sixty wins, fifty-nine, and one week to move it.</div>
+      <div class="xh-cover-sub">The all-time record enters the season one game wide.
+        Five verdicts inside, none of them gentle.</div>
+      <div class="xh-eyebrow">The board</div>
+      ${teams.slice(0, 4).map((t, i) => `
+        <div class="xh-mrow" style="margin-top:12px">
+          <span class="xh-mrank">${i + 1}</span>
+          ${mav(t)}
+          <span class="xh-mname">${esc(t.team)}</span>
+          <span class="xh-mpts">${t.perWeek.toFixed(1)}</span>
+        </div>`).join('')}`
+  } else {
+    mini = teams.map((t, i) => `
+      <div class="xh-mrow">
+        <span class="xh-mrank">${i + 1}</span>
+        ${mav(t)}
+        <span class="xh-mname">${esc(t.team)}</span>
+        <span class="xh-mpts">${t.perWeek.toFixed(1)}</span>
+      </div>`).join('')
+  }
 
   document.getElementById('safe').innerHTML = `
     <div class="xh">
@@ -1470,8 +1552,8 @@ async function loadXHero() {
         <div class="xh-screen">
           <div class="xh-mast">The League Beat</div>
           <div class="xh-eyebrow">${esc(cfg.name)}</div>
-          <div class="xh-title2">Power rankings</div>
-          <div class="xh-mini">${mini}</div>
+          ${screenTitle ? `<div class="xh-title2">${esc(screenTitle)}</div>` : '<div style="height:24px"></div>'}
+          <div class="xh-mini${fill ? ' fill' : ''}">${mini}</div>
         </div>
       </div>
 
