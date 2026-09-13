@@ -608,6 +608,30 @@
   .xm-split .fav { color: var(--gold); }
   .xm-split .dash { color: var(--dim); font-size: 36px; }
 
+  /* ── X headliners ───────────────────────────────────────────
+     Three faces, three gaps. The face is the poster; everything
+     else stays out of its way. */
+  .xhl-grid { display: flex; gap: 30px; flex: 1; min-height: 0; }
+  .xhl-card {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--panel); border-radius: 22px;
+  }
+  .xhl-face {
+    height: 380px; flex: none; display: grid; place-items: center; overflow: hidden;
+    background: radial-gradient(90% 90% at 50% 100%, oklch(0.24 0.05 92 / 0.8), oklch(0.13 0.012 90));
+  }
+  .xhl-face img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  .xhl-body { padding: 24px 28px 26px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .xhl-name { font-size: 42px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+  .xhl-team { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 24px; font-weight: 600; }
+  .xhl-team .xc-av { width: 44px; height: 44px; border-radius: 10px; font-size: 16px; }
+  .xhl-stat { margin-top: auto; display: flex; align-items: baseline; gap: 14px; }
+  .xhl-diff {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 64px;
+    color: var(--gold); line-height: 1;
+  }
+  .xhl-over { font-size: 21px; color: var(--dim); font-weight: 600; line-height: 1.25; }
+
   .xc-foot {
     display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
@@ -1581,6 +1605,94 @@ async function loadXHero() {
     </div>`
 }
 
+/**
+ * The week's headliners: the three players on THIS league's rosters
+ * who beat their position hardest, framed as next issue's subjects.
+ *
+ *   ?view=x-headliners&wk=1        (&lg=ffl for the second tier)
+ *
+ * "Outperformed their position" is measured against the average
+ * half-PPR score of that position's startable universe this week —
+ * top 12 QBs/TEs, top 24 RBs/WRs, NFL-wide. A flat 30-point game is
+ * not the story; 30 from a position that averaged 12 is.
+ *
+ * RUN IT TUESDAY. Sleeper's week stats accumulate live, so mid-week
+ * this shows the leaders of a week still being played.
+ */
+const STARTABLE = { QB: 12, RB: 24, WR: 24, TE: 12 }
+
+async function loadXHeadliners() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  const wk = Number(params.get('wk') || 1)
+  const table = await rankedTeams(cfg)              // primes _prCache
+  const [league, rosters, , proj] = _prCache[cfg.id]
+  const season = league.season
+
+  const stats = await fetch(
+    `https://api.sleeper.app/v1/stats/nfl/regular/${season}/${wk}`,
+  ).then((r) => r.json())
+
+  // Names and positions ride along from the projections sweep.
+  const meta = {}
+  for (const row of proj) {
+    meta[String(row.player_id)] = {
+      name: [row.player?.first_name, row.player?.last_name].filter(Boolean).join(' '),
+      pos: row.player?.position ?? '',
+    }
+  }
+
+  // Positional baselines from the whole NFL week, not this league.
+  const byPos = { QB: [], RB: [], WR: [], TE: [] }
+  for (const [id, s] of Object.entries(stats)) {
+    const pos = meta[id]?.pos
+    const pts = s?.pts_half_ppr
+    if (byPos[pos] && typeof pts === 'number') byPos[pos].push(pts)
+  }
+  const baseline = {}
+  for (const [pos, arr] of Object.entries(byPos)) {
+    const top = arr.sort((a, b) => b - a).slice(0, STARTABLE[pos])
+    baseline[pos] = top.length ? top.reduce((t, x) => t + x, 0) / top.length : 0
+  }
+
+  // Who owns whom, so the paper can say whose week it made.
+  const teamByOwner = Object.fromEntries(table.map((t) => [t.owner, t]))
+  const candidates = []
+  for (const r of rosters) {
+    const team = teamByOwner[r.owner_id]
+    if (!team) continue
+    for (const id of r.players || []) {
+      const m = meta[id]
+      const pts = stats[id]?.pts_half_ppr
+      if (!m || !baseline[m.pos] || typeof pts !== 'number') continue
+      candidates.push({ id, ...m, pts, team, diff: pts - baseline[m.pos] })
+    }
+  }
+  const top3 = candidates.sort((a, b) => b.diff - a.diff).slice(0, 3)
+
+  const cards = top3.map((p) => `
+    <div class="xhl-card">
+      <div class="xhl-face">
+        <img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt=""
+             onerror="this.remove()">
+      </div>
+      <div class="xhl-body">
+        <div class="xhl-name">${esc(p.name)}</div>
+        <div class="xhl-team">${xcAv(p.team.team, p.team.avatar)} ${esc(p.team.team)}</div>
+        <div class="xhl-stat">
+          <span class="xhl-diff">+${p.diff.toFixed(1)}</span>
+          <span class="xhl-over">over the average<br>starting ${esc(p.pos)} · ${p.pts.toFixed(1)} pts</span>
+        </div>
+      </div>
+    </div>`).join('')
+
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name,
+    title: params.get('title') || 'This week’s headliners',
+    when: params.get('when') || `Issue No. ${wk + 1}`,
+    rows: `<div class="xhl-grid">${cards}</div>`,
+  })
+}
+
 function fit() {
   const f = document.getElementById('frame')
   if (exporting) {
@@ -1612,6 +1724,7 @@ function fit() {
     else if (view === 'x-odds') await loadXOdds()
     else if (view === 'x-record') await loadXRecord()
     else if (view === 'x-matchups') await loadXMatchups()
+    else if (view === 'x-headliners') await loadXHeadliners()
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
