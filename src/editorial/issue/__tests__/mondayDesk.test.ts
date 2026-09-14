@@ -56,15 +56,62 @@ describe('the desk gate', () => {
 })
 
 describe('the still-alive rows', () => {
-  it('states the need off the platform projection, with the live odds', () => {
+  it('puts the leader first so crests and scores agree', () => {
     const desk = buildMondayDesk({ matchups: split, teamName: names })!
     const row = desk.alive[0]
-    // d leads 92.1–88.4? No: home c has 92.1, away d 88.4 — c leads.
-    // d needs c's projected final (96.0) minus d's 88.4 = 7.6.
-    expect(row.title).toBe('Team d need 7.6')
-    expect(row.sub).toContain('Team c lead by 3.7')
-    expect(row.sub).toContain('56% to win')
-    expect(row.score).toBe('92.1 – 88.4')
+    expect(row.left.name).toBe('Team c')
+    expect(row.left.points).toBe(92.1)
+    expect(row.left.leading).toBe(true)
+    expect(row.right.name).toBe('Team d')
+    expect(row.right.points).toBe(88.4)
+  })
+
+  it('states the need off the platform projection', () => {
+    // c leads with 92.1; d needs c's projected final (96.0) minus
+    // d's own 88.4 = 7.6.
+    const desk = buildMondayDesk({ matchups: split, teamName: names })!
+    expect(desk.alive[0].sub).toBe('Team d need 7.6')
+  })
+
+  it('names who a side is waiting on, and what the leader has coming', () => {
+    const desk = buildMondayDesk({
+      matchups: split,
+      teamName: names,
+      stillToPlay: (id) =>
+        id === 'd' ? [{ name: 'Rashee Rice', points: 10.9 }, { name: 'Bo Nix', points: 17.4 }] : [],
+    })!
+    // Biggest contributor first, and the flat-target phrasing because
+    // the leader has nobody left.
+    expect(desk.alive[0].sub).toBe('Team d need 7.6 from Bo Nix and Rashee Rice')
+
+    const race = buildMondayDesk({
+      matchups: split,
+      teamName: names,
+      stillToPlay: (id) =>
+        id === 'd'
+          ? [{ name: 'Bo Nix', points: 17.4 }]
+          : [{ name: 'Patrick Mahomes', points: 16.9 }],
+    })!
+    // Both sides live: saying only "need 7.6" would ignore the points
+    // the leader is about to add.
+    expect(race.alive[0].sub).toContain('with Patrick Mahomes still to play')
+  })
+
+  it('caps the names and counts the rest', () => {
+    const desk = buildMondayDesk({
+      matchups: split,
+      teamName: names,
+      stillToPlay: (id) =>
+        id === 'd'
+          ? [
+              { name: 'Bo Nix', points: 17.4 },
+              { name: 'Rashee Rice', points: 10.9 },
+              { name: 'Jaylen Waddle', points: 10.7 },
+              { name: 'Kenneth Walker', points: 13.3 },
+            ]
+          : [],
+    })!
+    expect(desk.alive[0].sub).toBe('Team d need 7.6 from Bo Nix and Kenneth Walker and 2 more')
   })
 })
 
@@ -136,5 +183,49 @@ describe('upset watch', () => {
       priorWeeks: 4,
     })!
     expect(favUp.alive.find((r) => r.matchupId === 'calm')!.watch).toBeUndefined()
+  })
+})
+
+describe('the done-and-dusted rows', () => {
+  const recordBefore = { a: { wins: 2, losses: 1, ties: 0 }, b: { wins: 1, losses: 2, ties: 0 } }
+
+  it('shows what each record becomes once the game counts', () => {
+    const desk = buildMondayDesk({
+      matchups: split,
+      teamName: names,
+      recordOf: (id) => recordBefore[id as 'a' | 'b'],
+    })!
+    const row = desk.decided[0]
+    expect(row.left.name).toBe('Team a')
+    expect(row.left.record).toBe('3-1')
+    expect(row.right.record).toBe('1-3')
+  })
+
+  it('leaves records off games still being played', () => {
+    // An unfinished game has no result to add to anybody's record.
+    const desk = buildMondayDesk({
+      matchups: split,
+      teamName: names,
+      recordOf: (id) => recordBefore[id as 'a' | 'b'],
+    })!
+    expect(desk.alive[0].left.record).toBeUndefined()
+    expect(desk.alive[0].right.record).toBeUndefined()
+  })
+
+  it('explains a locked game with the arithmetic that locked it', () => {
+    const desk = buildMondayDesk({
+      matchups: [
+        m('cooked', 'c', 'd', {
+          homePoints: 120, awayPoints: 90,
+          homeProjected: 121, awayProjected: 98,
+        }),
+        split[1],
+      ],
+      teamName: names,
+    })!
+    const locked = desk.decided.find((r) => r.matchupId === 'cooked')!
+    expect(locked.sub).toBe('Team d need 30 with 8 left to play')
+    // A final needs no such explanation.
+    expect(desk.decided.find((r) => r.matchupId === 'done')).toBeUndefined()
   })
 })

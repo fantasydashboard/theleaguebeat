@@ -75,8 +75,50 @@ export function teamsStillPlaying(
 
 interface ProjectionRow {
   player_id?: unknown
-  player?: { team?: unknown }
+  player?: { team?: unknown; first_name?: unknown; last_name?: unknown; position?: unknown }
   stats?: Record<string, unknown>
+}
+
+/** A starter whose game has not kicked off. */
+export interface PendingPlayer {
+  playerId: string
+  name: string
+  position?: string
+  /** His share of a week — what he is expected to add. */
+  points: number
+}
+
+/**
+ * `playerId → the player, when he still has a game coming`.
+ *
+ * Same gate as `buildRemainingIndex`, carrying the name so the desk
+ * can say WHO a team is waiting on rather than only how much.
+ */
+export function buildPendingIndex(
+  projections: readonly unknown[],
+  stillPlaying: ReadonlySet<string>,
+  pointsField = 'pts_half_ppr',
+): (playerId: string) => PendingPlayer | undefined {
+  const byId = new Map<string, PendingPlayer>()
+  for (const raw of projections ?? []) {
+    const row = raw as ProjectionRow
+    const id = row?.player_id
+    if (typeof id !== 'string' || !id) continue
+    const team = row?.player?.team
+    if (typeof team !== 'string' || !stillPlaying.has(team)) continue
+    const season = Number(row?.stats?.[pointsField])
+    if (!Number.isFinite(season) || season <= 0) continue
+    const name = [row.player?.first_name, row.player?.last_name]
+      .filter((p): p is string => typeof p === 'string' && !!p)
+      .join(' ')
+    byId.set(id, {
+      playerId: id,
+      name: name || id,
+      position: typeof row.player?.position === 'string' ? row.player.position : undefined,
+      points: season / WEEKS_PER_SEASON,
+    })
+  }
+  return (playerId: string) => byId.get(playerId)
 }
 
 /**

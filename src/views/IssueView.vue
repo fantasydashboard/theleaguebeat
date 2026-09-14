@@ -977,8 +977,10 @@ import { computePointsPowerScores } from '@/editorial/points/powerScore'
 import {
   teamsStillPlaying,
   buildRemainingIndex,
+  buildPendingIndex,
   projectSides,
   scheduleUrl,
+  type PendingPlayer,
 } from '@/editorial/points/liveRemaining'
 import { projectionsUrl } from '@/editorial/points/sleeperProjections'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
@@ -1324,6 +1326,11 @@ const mondayDesk = computed(() => {
     },
     priorWeeks,
     priorRank: (id) => rank.get(id),
+    recordOf: (id) => {
+      const s = (d.standings ?? []).find((row) => row.teamId === id)
+      return s ? { wins: s.catWins, losses: s.catLosses, ties: s.catTies } : undefined
+    },
+    stillToPlay: (id) => livePending.value[id],
     teamName: (id) => lookupTeam(id).name,
     team: (id) => lookupTeam(id),
   })
@@ -1339,10 +1346,13 @@ const mondayDesk = computed(() => {
  * no lineups.
  */
 const liveProjected = ref<LeagueDataPointsMatchup[] | null>(null)
+/** Starters a team is still waiting on, by team id. */
+const livePending = ref<Record<string, PendingPlayer[]>>({})
 let projSeq = 0
 
 async function hydrateLiveProjections() {
   liveProjected.value = null
+  livePending.value = {}
   const d = livePointsData.value
   const starters = d?.currentWeekStarters
   if (!d || !starters || Object.keys(starters).length === 0) return
@@ -1365,6 +1375,18 @@ async function hydrateLiveProjections() {
       startersByTeam: starters,
       remainingFor: remaining,
     })
+
+    // Who each side is waiting on, for copy that can name them.
+    const pendingOf = buildPendingIndex(
+      Array.isArray(projections) ? projections : [],
+      teamsStillPlaying(Array.isArray(schedule) ? schedule : [], d.currentWeek),
+    )
+    const pending: Record<string, PendingPlayer[]> = {}
+    for (const [teamId, ids] of Object.entries(starters)) {
+      const left = ids.map(pendingOf).filter((p): p is PendingPlayer => !!p)
+      if (left.length > 0) pending[teamId] = left
+    }
+    livePending.value = pending
   } catch {
     // Offline or rate-limited. The desk stays away.
   }

@@ -55,20 +55,39 @@ export interface MondayDeskInput {
   priorWeeks?: number
   /** Current board rank, for the watch sentence. */
   priorRank?: (teamId: string) => number | undefined
+  /** Record BEFORE this week counts, so the desk can show what each
+   *  side's record becomes once a decided game lands. */
+  recordOf?: (teamId: string) => { wins: number; losses: number; ties: number } | undefined
+  /** Starters whose NFL game has not kicked off, so the desk can name
+   *  who a side is waiting on rather than only how much it needs. */
+  stillToPlay?: (teamId: string) => readonly { name: string; points: number }[] | undefined
   teamName: (teamId: string) => string
   team?: (teamId: string) => MondayDeskTeam | undefined
 }
 
-export interface MondayDeskRow {
-  matchupId: string
-  title: string
-  sub: string
-  score: string
-  watch?: 'upset' | 'heist'
+/** One side of a game, as the row draws it. */
+export interface MondayDeskSide {
   teamId: string
+  name: string
+  points: number
+  /** Record once this game counts. Decided games only — an
+   *  unfinished one has no result to add. */
+  record?: string
+  leading: boolean
   logoUrl?: string
   logoColor?: string
   logoInitials?: string
+}
+
+export interface MondayDeskRow {
+  matchupId: string
+  /** Leader first, so the crests and the scores agree. */
+  left: MondayDeskSide
+  right: MondayDeskSide
+  /** The story. The names live on the sides, so this is only what
+   *  the scoreline cannot say by itself. */
+  sub: string
+  watch?: 'upset' | 'heist'
 }
 
 export interface MondayDesk {
@@ -107,10 +126,27 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
   // page, all-decided belongs to Tuesday's issue.
   if (decidedGames.length === 0 || aliveGames.length === 0) return null
 
-  const visual = (teamId: string) => {
+  /** A side, optionally carrying the record this game would give it. */
+  const side = (
+    teamId: string,
+    points: number,
+    leading: boolean,
+    outcome?: 'win' | 'loss',
+  ): MondayDeskSide => {
     const t = input.team?.(teamId)
+    const base = input.recordOf?.(teamId)
+    let record: string | undefined
+    if (base && outcome) {
+      const w = base.wins + (outcome === 'win' ? 1 : 0)
+      const l = base.losses + (outcome === 'loss' ? 1 : 0)
+      record = base.ties > 0 ? `${w}-${l}-${base.ties}` : `${w}-${l}`
+    }
     return {
       teamId,
+      name: input.teamName(teamId),
+      points: round1(points),
+      record,
+      leading,
       logoUrl: t?.avatarUrl,
       logoColor: t?.avatarColor,
       logoInitials: t?.ownerInitials,
@@ -140,47 +176,70 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     return Math.round(p * 100)
   }
 
+  /** "Mahomes and Rice" / "Mahomes, Rice and 2 more". */
+  const namePending = (teamId: string): string => {
+    const left = (input.stillToPlay?.(teamId) ?? [])
+      .slice()
+      .sort((a, b) => b.points - a.points)
+    if (left.length === 0) return ''
+    const shown = left.slice(0, 2).map((p) => p.name)
+    const rest = left.length - shown.length
+    const joined = shown.length === 2 ? `${shown[0]} and ${shown[1]}` : shown[0]
+    return rest > 0 ? `${joined} and ${rest} more` : joined
+  }
+
   const alive: MondayDeskRow[] = aliveGames.map((m) => {
     const homeLeads = m.homePoints >= m.awayPoints
     const leaderId = homeLeads ? m.homeTeamId : m.awayTeamId
     const trailerId = homeLeads ? m.awayTeamId : m.homeTeamId
-    const leaderName = input.teamName(leaderId)
-    const trailerName = input.teamName(trailerId)
-    const margin = round1(Math.abs(m.homePoints - m.awayPoints))
-    const trailerPoints = homeLeads ? m.awayPoints : m.homePoints
+    const leaderPts = homeLeads ? m.homePoints : m.awayPoints
+    const trailerPts = homeLeads ? m.awayPoints : m.homePoints
+    const margin = round1(leaderPts - trailerPts)
     const leaderProjected = homeLeads ? m.homeProjected : m.awayProjected
     const needs =
       leaderProjected !== undefined
-        ? Math.max(0, round1(leaderProjected - trailerPoints))
+        ? Math.max(0, round1(leaderProjected - trailerPts))
         : undefined
-    const trailerWinProb = homeLeads ? m.awayWinProb : m.homeWinProb
     const watch = watchFor(m)
+
+    // Who each side is still waiting on. When only the trailer has
+    // football left the ask is a flat target; when both do it is a
+    // race, and saying "needs 3.3" would quietly ignore the points
+    // the leader is about to add.
+    const trailerLeft = namePending(trailerId)
+    const leaderLeft = namePending(leaderId)
+
+    let story: string
+    if (needs === undefined) {
+      story = `${input.teamName(leaderId)} lead by ${margin}`
+    } else if (trailerLeft && leaderLeft) {
+      story =
+        `${input.teamName(trailerId)} need ${needs} from ${trailerLeft}, ` +
+        `with ${leaderLeft} still to play for ${input.teamName(leaderId)}`
+    } else if (trailerLeft) {
+      story = `${input.teamName(trailerId)} need ${needs} from ${trailerLeft}`
+    } else {
+      story = `${input.teamName(trailerId)} need ${needs}`
+    }
 
     if (watch) {
       const wr = input.priorRank?.(leaderId)
       const lr = input.priorRank?.(trailerId)
-      const rankBit = wr && lr ? `No. ${wr} lead No. ${lr}` : `${leaderName} lead`
+      const rankBit = wr && lr ? `No. ${wr} lead No. ${lr}` : `${input.teamName(leaderId)} lead`
       return {
         matchupId: m.id,
-        title: `${leaderName} lead ${trailerName}`,
-        sub: `${rankBit} · pregame chance ${pregamePct(m)}%`,
-        score: `${round1(Math.max(m.homePoints, m.awayPoints))} – ${round1(Math.min(m.homePoints, m.awayPoints))}`,
+        left: side(leaderId, leaderPts, true),
+        right: side(trailerId, trailerPts, false),
+        sub: `${rankBit} · pregame chance ${pregamePct(m)}% · ${story}`,
         watch,
-        ...visual(leaderId),
       }
     }
 
     return {
       matchupId: m.id,
-      title: needs !== undefined ? `${trailerName} need ${needs}` : `${trailerName} trail`,
-      sub: [
-        `${leaderName} lead by ${margin}`,
-        trailerWinProb !== undefined ? `${Math.round(trailerWinProb * 100)}% to win` : '',
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      score: `${round1(Math.max(m.homePoints, m.awayPoints))} – ${round1(Math.min(m.homePoints, m.awayPoints))}`,
-      ...visual(trailerId),
+      left: side(leaderId, leaderPts, true),
+      right: side(trailerId, trailerPts, false),
+      sub: story,
     }
   })
 
@@ -200,31 +259,41 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     const homeWon = m.homePoints >= m.awayPoints
     const winnerId = homeWon ? m.homeTeamId : m.awayTeamId
     const loserId = homeWon ? m.awayTeamId : m.homeTeamId
-    const margin = round1(Math.abs(m.homePoints - m.awayPoints))
+    const winnerPts = homeWon ? m.homePoints : m.awayPoints
+    const loserPts = homeWon ? m.awayPoints : m.homePoints
+    const margin = round1(winnerPts - loserPts)
+    const loserProjected = homeWon ? m.awayProjected : m.homeProjected
+    const loserLeft =
+      loserProjected !== undefined ? Math.max(0, round1(loserProjected - loserPts)) : undefined
+
+    // A final needs no explanation. A game that is merely over needs
+    // the arithmetic that makes it over.
+    const sub =
+      m.status === 'final'
+        ? `Final · won by ${margin}`
+        : loserLeft !== undefined
+          ? `${input.teamName(loserId)} need ${margin} with ${loserLeft} left to play`
+          : `Locked · ${input.teamName(winnerId)} by ${margin}`
+
     return {
       matchupId: m.id,
-      title:
-        m.status === 'final'
-          ? `${input.teamName(winnerId)} beat ${input.teamName(loserId)}`
-          : `${input.teamName(winnerId)} have it put away`,
-      sub: m.status === 'final' ? `by ${margin}` : `Up ${margin}, more than ${input.teamName(loserId)} have left`,
-      score: `${round1(Math.max(m.homePoints, m.awayPoints))} – ${round1(Math.min(m.homePoints, m.awayPoints))}`,
-      ...visual(winnerId),
+      left: side(winnerId, winnerPts, true, 'win'),
+      right: side(loserId, loserPts, false, 'loss'),
+      sub,
     }
   })
 
   // The headline promotes the live upset when there is one; otherwise
-  // the closest game carries it.
+  // it counts what is left and lets the rows tell each story once.
   const lead = alive[0]
-  let headline: string
-  let support: string
-  if (lead.watch) {
-    headline = lead.watch === 'heist' ? 'A heist is live.' : 'An upset is live.'
-    support = `${lead.title}. ${lead.sub}.`
-  } else {
-    headline = `${alive.length} game${alive.length === 1 ? '' : 's'} still alive.`
-    support = `${lead.title} — ${lead.sub}.`
-  }
+  const headline = lead.watch
+    ? lead.watch === 'heist'
+      ? 'A heist is live.'
+      : 'An upset is live.'
+    : `${alive.length} game${alive.length === 1 ? '' : 's'} still alive.`
+  const support = lead.watch
+    ? `${lead.left.name} lead ${lead.right.name}. ${lead.sub}.`
+    : `${decided.length} decided. ${lead.sub}.`
 
   return { headline, support, alive, decided }
 }

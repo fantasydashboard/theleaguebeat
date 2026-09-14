@@ -26,23 +26,45 @@ defineProps<{ desk: MondayDesk }>()
       <p class="desk-group-label">Still alive</p>
       <ul class="desk-rows" role="list">
         <li v-for="r in desk.alive" :key="r.matchupId" class="desk-row">
-          <span
-            class="desk-logo"
-            :style="{ background: r.logoColor ? `linear-gradient(135deg, ${r.logoColor})` : undefined }"
-          >
-            <img v-if="r.logoUrl" :src="r.logoUrl" class="avatar-image" alt="" />
-            <span v-else>{{ r.logoInitials }}</span>
-          </span>
-          <span class="desk-copy">
-            <span class="desk-title-line">
-              <b>{{ r.title }}</b>
-              <span v-if="r.watch" class="desk-pill" :class="`is-${r.watch}`">
-                {{ r.watch === 'heist' ? 'Heist watch' : 'Upset watch' }}
+          <span class="desk-game">
+            <span class="desk-side">
+              <span
+                class="desk-logo"
+                :style="{ background: r.left.logoColor ? `linear-gradient(135deg, ${r.left.logoColor})` : undefined }"
+              >
+                <img v-if="r.left.logoUrl" :src="r.left.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ r.left.logoInitials }}</span>
+              </span>
+              <span class="desk-name">
+                <b>{{ r.left.name }}</b>
+                <i v-if="r.left.record">{{ r.left.record }}</i>
               </span>
             </span>
-            <span class="desk-sub">{{ r.sub }}</span>
+            <span class="desk-line">
+              <b :class="{ 'is-lead': r.left.leading }">{{ r.left.points }}</b>
+              <span class="desk-dash">–</span>
+              <b :class="{ 'is-lead': r.right.leading }">{{ r.right.points }}</b>
+            </span>
+            <span class="desk-side is-right">
+              <span class="desk-name">
+                <b>{{ r.right.name }}</b>
+                <i v-if="r.right.record">{{ r.right.record }}</i>
+              </span>
+              <span
+                class="desk-logo"
+                :style="{ background: r.right.logoColor ? `linear-gradient(135deg, ${r.right.logoColor})` : undefined }"
+              >
+                <img v-if="r.right.logoUrl" :src="r.right.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ r.right.logoInitials }}</span>
+              </span>
+            </span>
           </span>
-          <span class="desk-score">{{ r.score }}</span>
+          <span class="desk-story">
+            <span v-if="r.watch" class="desk-pill" :class="`is-${r.watch}`">
+              {{ r.watch === 'heist' ? 'Heist watch' : 'Upset watch' }}
+            </span>
+            {{ r.sub }}
+          </span>
         </li>
       </ul>
     </div>
@@ -51,18 +73,40 @@ defineProps<{ desk: MondayDesk }>()
       <p class="desk-group-label">Done and dusted</p>
       <ul class="desk-rows" role="list">
         <li v-for="r in desk.decided" :key="r.matchupId" class="desk-row is-decided">
-          <span
-            class="desk-logo"
-            :style="{ background: r.logoColor ? `linear-gradient(135deg, ${r.logoColor})` : undefined }"
-          >
-            <img v-if="r.logoUrl" :src="r.logoUrl" class="avatar-image" alt="" />
-            <span v-else>{{ r.logoInitials }}</span>
+          <span class="desk-game">
+            <span class="desk-side">
+              <span
+                class="desk-logo"
+                :style="{ background: r.left.logoColor ? `linear-gradient(135deg, ${r.left.logoColor})` : undefined }"
+              >
+                <img v-if="r.left.logoUrl" :src="r.left.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ r.left.logoInitials }}</span>
+              </span>
+              <span class="desk-name">
+                <b>{{ r.left.name }}</b>
+                <i v-if="r.left.record">{{ r.left.record }}</i>
+              </span>
+            </span>
+            <span class="desk-line">
+              <b :class="{ 'is-lead': r.left.leading }">{{ r.left.points }}</b>
+              <span class="desk-dash">–</span>
+              <b :class="{ 'is-lead': r.right.leading }">{{ r.right.points }}</b>
+            </span>
+            <span class="desk-side is-right">
+              <span class="desk-name">
+                <b>{{ r.right.name }}</b>
+                <i v-if="r.right.record">{{ r.right.record }}</i>
+              </span>
+              <span
+                class="desk-logo"
+                :style="{ background: r.right.logoColor ? `linear-gradient(135deg, ${r.right.logoColor})` : undefined }"
+              >
+                <img v-if="r.right.logoUrl" :src="r.right.logoUrl" class="avatar-image" alt="" />
+                <span v-else>{{ r.right.logoInitials }}</span>
+              </span>
+            </span>
           </span>
-          <span class="desk-copy">
-            <span class="desk-title-line"><b>{{ r.title }}</b></span>
-            <span class="desk-sub">{{ r.sub }}</span>
-          </span>
-          <span class="desk-score">{{ r.score }}</span>
+          <span class="desk-story">{{ r.sub }}</span>
         </li>
       </ul>
     </div>
@@ -113,21 +157,43 @@ defineProps<{ desk: MondayDesk }>()
 
 .desk-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .desk-row {
-  display: flex; align-items: center; gap: 0.85rem;
-  background: oklch(0.15 0.012 90); border-radius: 12px; padding: 0.6rem 0.9rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  background: oklch(0.15 0.012 90); border-radius: 12px; padding: 0.7rem 0.9rem;
 }
-.desk-row.is-decided { opacity: 0.75; }
+.desk-row.is-decided { opacity: 0.78; }
+
+/* The scoreline: crest, name and record on each side, scores in the
+   middle. Leader on the left, so the crests and the numbers always
+   describe the same team in the same order. */
+.desk-game { display: flex; align-items: center; gap: 0.75rem; }
+.desk-side { display: flex; align-items: center; gap: 0.6rem; flex: 1; min-width: 0; }
+.desk-side.is-right { flex-direction: row-reverse; text-align: right; }
 .desk-logo {
-  width: 40px; height: 40px; border-radius: 10px; flex: none; overflow: hidden;
+  width: 38px; height: 38px; border-radius: 10px; flex: none; overflow: hidden;
   display: grid; place-items: center; background: oklch(0.24 0.02 90);
-  font-weight: 800; font-size: 0.8rem; color: oklch(0.62 0.01 90);
+  font-weight: 800; font-size: 0.75rem; color: oklch(0.62 0.01 90);
 }
 .desk-logo .avatar-image { width: 100%; height: 100%; object-fit: cover; }
-.desk-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-.desk-title-line { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
-.desk-title-line b {
-  font-weight: 800; color: oklch(0.97 0.005 90);
+.desk-name { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.desk-name b {
+  font-weight: 800; font-size: 0.95rem; color: oklch(0.97 0.005 90);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.desk-name i {
+  font-style: normal; font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 0.78rem; letter-spacing: 0.1em; color: oklch(0.62 0.01 90);
+}
+.desk-line {
+  flex: none; display: flex; align-items: baseline; gap: 0.45rem;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 1.25rem;
+  color: oklch(0.62 0.01 90);
+}
+.desk-line b.is-lead { color: oklch(0.85 0.17 92); }
+.desk-dash { color: oklch(0.48 0.01 90); font-size: 0.95rem; }
+
+.desk-story {
+  font-size: 0.85rem; color: oklch(0.62 0.01 90);
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
 }
 .desk-pill {
   flex: none; font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
@@ -136,10 +202,5 @@ defineProps<{ desk: MondayDesk }>()
   background: oklch(0.85 0.17 92); color: oklch(0.15 0.02 90);
 }
 .desk-pill.is-heist { background: #c81a4b; color: oklch(0.97 0.005 90); }
-.desk-sub { font-size: 0.85rem; color: oklch(0.62 0.01 90); }
-.desk-score {
-  flex: none; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
-  font-size: 1.15rem; color: oklch(0.97 0.005 90);
-}
 .desk-note { margin: 1rem 0 0; font-size: 0.8rem; color: oklch(0.48 0.01 90); }
 </style>
