@@ -973,7 +973,6 @@ import UfdHandoff from '@/components/issue/UfdHandoff.vue'
 import ShareCard from '@/components/issue/ShareCard.vue'
 import MondayDesk from '@/components/issue/MondayDesk.vue'
 import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
-import { computePointsPowerScores } from '@/editorial/points/powerScore'
 import {
   teamsStillPlaying,
   buildRemainingIndex,
@@ -1296,23 +1295,44 @@ const pointsSeasonStarted = computed(
  * part of no snapshot. Gates itself on evidence (some games decided,
  * some alive), so no weekday check appears here.
  */
+/**
+ * Team → rank, taken from whichever section of the current issue
+ * carries the ranked board. The preseason issue ranks the field in
+ * `the-field`; the weekly one in `power-rankings`.
+ */
+const issueBoardRank = computed(() => {
+  const sections = assembledIssue.value?.sections ?? []
+  for (const id of ['power-rankings', 'the-field']) {
+    const cards = sections.find((s) => s.id === id)?.cards
+    if (cards?.length) return new Map(cards.map((c) => [c.teamId, c.rank]))
+  }
+  return null
+})
+
 const mondayDesk = computed(() => {
   const d = livePointsData.value
   if (!d) return null
 
-  // The board the leader is climbing. Ranked from the league as it
-  // stands, which before the first close is the projection board.
-  const rank = new Map(
-    computePointsPowerScores(d).map((p, i) => [p.teamId, i + 1]),
-  )
+  // The board the leader is climbing.
+  //
+  // Read from the issue THIS PAGE IS SHOWING rather than recomputed,
+  // which settles two problems at once. In week one there are no
+  // completed weeks, so a power score computed from results would rank
+  // the room arbitrarily and hand out badges for nothing; the
+  // preseason issue's projection board is the honest pregame
+  // expectation and it is right there. And in season it guarantees the
+  // desk and the board a reader is scrolling past cannot disagree
+  // about who sits where.
+  const board = issueBoardRank.value
+  if (!board) return null
 
   return buildMondayDesk({
     // Hydrated matchups when the lazy fetch has landed, raw otherwise.
     // On Sleeper the raw ones carry no projection, so the desk stays
     // silent until `liveProjected` arrives rather than guessing.
     matchups: liveProjected.value ?? d.currentWeekMatchups ?? [],
-    priorRank: (id) => rank.get(id),
-    fieldSize: rank.size,
+    priorRank: (id) => board.get(id),
+    fieldSize: board.size,
     recordOf: (id) => {
       const s = (d.standings ?? []).find((row) => row.teamId === id)
       return s ? { wins: s.catWins, losses: s.catLosses, ties: s.catTies } : undefined
