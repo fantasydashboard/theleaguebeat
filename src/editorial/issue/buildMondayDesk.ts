@@ -68,6 +68,9 @@ export interface MondayDeskSide {
    *  stand now. Every row carries one either way — an empty slot on
    *  half the rows reads as missing data rather than a choice. */
   record?: string
+  /** Board rank going into the week, so a reader can see the climb
+   *  rather than be told it. */
+  rank?: number
   leading: boolean
   logoUrl?: string
   logoColor?: string
@@ -148,6 +151,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       name: input.teamName(teamId),
       points: round1(points),
       record,
+      rank: input.priorRank?.(teamId),
       leading,
       logoUrl: t?.avatarUrl,
       logoColor: t?.avatarColor,
@@ -243,9 +247,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
         matchupId: m.id,
         left: side(leaderId, leaderPts, !tied),
         right: side(trailerId, trailerPts, false),
-        sub: tied
-          ? `No. ${watch.leaderRank} level with No. ${watch.trailerRank} · ${story}`
-          : `No. ${watch.leaderRank} lead No. ${watch.trailerRank} · ${story}`,
+        sub: `${watch.gap} spots up the board · ${story}`,
         watch: watch.level,
       }
     }
@@ -299,9 +301,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       matchupId: m.id,
       left: side(winnerId, winnerPts, true, 'win'),
       right: side(loserId, loserPts, false, 'loss'),
-      sub: climbed
-        ? `No. ${input.priorRank!(winnerId)} beat No. ${input.priorRank!(loserId)} · ${sub}`
-        : sub,
+      sub: climbed ? `${climbed.gap} spots up the board · ${sub}` : sub,
       watch: climbed ? (climbed.heist ? 'heist' : 'upset') : undefined,
     }
   })

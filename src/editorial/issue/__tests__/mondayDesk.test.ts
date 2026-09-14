@@ -152,7 +152,10 @@ describe('upset watch', () => {
     })!
     const row = desk.alive.find((r) => r.matchupId === 'watch')!
     expect(row.watch).toBe('upset')
-    expect(row.sub).toContain('No. 8 lead No. 2')
+    // The ranks are on the names now; the row states the climb.
+    expect(row.sub).toContain('6 spots up the board')
+    expect(row.left.rank).toBe(8)
+    expect(row.right.rank).toBe(2)
     expect(desk.headline).toBe('An upset is live.')
   })
 
@@ -265,7 +268,8 @@ describe('an upset that already landed', () => {
     })!
     const row = desk.decided.find((r) => r.matchupId === 'upset')!
     expect(row.watch).toBe('upset')
-    expect(row.sub).toContain('No. 8 beat No. 2')
+    expect(row.sub).toContain('6 spots up the board')
+    expect(row.left.rank).toBe(8)
   })
 
   it('leads the desk when no upset is live', () => {

@@ -37,7 +37,11 @@ defineProps<{ desk: MondayDesk }>()
               </span>
               <span class="desk-name">
                 <b>{{ r.left.name }}</b>
-                <i v-if="r.left.record">{{ r.left.record }}</i>
+                <i v-if="r.left.rank || r.left.record">
+                  <template v-if="r.left.rank">No. {{ r.left.rank }}</template>
+                  <template v-if="r.left.rank && r.left.record"> · </template>
+                  <template v-if="r.left.record">{{ r.left.record }}</template>
+                </i>
               </span>
             </span>
             <span class="desk-line">
@@ -48,7 +52,11 @@ defineProps<{ desk: MondayDesk }>()
             <span class="desk-side is-right">
               <span class="desk-name">
                 <b>{{ r.right.name }}</b>
-                <i v-if="r.right.record">{{ r.right.record }}</i>
+                <i v-if="r.right.rank || r.right.record">
+                  <template v-if="r.right.rank">No. {{ r.right.rank }}</template>
+                  <template v-if="r.right.rank && r.right.record"> · </template>
+                  <template v-if="r.right.record">{{ r.right.record }}</template>
+                </i>
               </span>
               <span
                 class="desk-logo"
@@ -84,7 +92,11 @@ defineProps<{ desk: MondayDesk }>()
               </span>
               <span class="desk-name">
                 <b>{{ r.left.name }}</b>
-                <i v-if="r.left.record">{{ r.left.record }}</i>
+                <i v-if="r.left.rank || r.left.record">
+                  <template v-if="r.left.rank">No. {{ r.left.rank }}</template>
+                  <template v-if="r.left.rank && r.left.record"> · </template>
+                  <template v-if="r.left.record">{{ r.left.record }}</template>
+                </i>
               </span>
             </span>
             <span class="desk-line">
@@ -95,7 +107,11 @@ defineProps<{ desk: MondayDesk }>()
             <span class="desk-side is-right">
               <span class="desk-name">
                 <b>{{ r.right.name }}</b>
-                <i v-if="r.right.record">{{ r.right.record }}</i>
+                <i v-if="r.right.rank || r.right.record">
+                  <template v-if="r.right.rank">No. {{ r.right.rank }}</template>
+                  <template v-if="r.right.rank && r.right.record"> · </template>
+                  <template v-if="r.right.record">{{ r.right.record }}</template>
+                </i>
               </span>
               <span
                 class="desk-logo"
