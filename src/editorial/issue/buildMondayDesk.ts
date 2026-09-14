@@ -197,7 +197,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     const trailerId = homeLeads ? m.awayTeamId : m.homeTeamId
     const leaderPts = homeLeads ? m.homePoints : m.awayPoints
     const trailerPts = homeLeads ? m.awayPoints : m.homePoints
-    const margin = round1(leaderPts - trailerPts)
+    const behind = round1(leaderPts - trailerPts)
     const leaderProjected = homeLeads ? m.homeProjected : m.awayProjected
     const needs =
       leaderProjected !== undefined
@@ -205,39 +205,54 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
         : undefined
     const watch = watchFor(m)
 
-    // Who each side is still waiting on. When only the trailer has
-    // football left the ask is a flat target; when both do it is a
-    // race, and saying "needs 3.3" would quietly ignore the points
-    // the leader is about to add.
+    // Who each side is still waiting on.
     const trailerLeft = namePending(trailerId)
     const leaderLeft = namePending(leaderId)
+    const tied = leaderPts === trailerPts
 
+    // WHAT A TRAILING TEAM ACTUALLY NEEDS. When both sides still have
+    // players, "need 27.2 from Travis Kelce" is the wrong sentence:
+    // it measures Kelce against the LEADER'S PROJECTED FINAL, which
+    // quietly assumes the leader hits their number. The exact
+    // statement is a head-to-head — Kelce has to outscore the other
+    // side's remaining players by the deficit on the board right now.
+    // That is arithmetic with no forecast in it, and it is the
+    // sentence a manager is already saying out loud.
     let story: string
     if (needs === undefined) {
-      story = `${input.teamName(leaderId)} lead by ${margin}`
+      story = tied ? `Level at ${round1(leaderPts)}` : `${input.teamName(leaderId)} lead by ${behind}`
+    } else if (tied) {
+      // Nobody is behind, so nobody "needs" anything. It is a race
+      // between whoever each side has left.
+      story = trailerLeft && leaderLeft
+        ? `Level at ${round1(leaderPts)}. It comes down to ${trailerLeft} against ${leaderLeft}`
+        : `Level at ${round1(leaderPts)}, and only ` +
+          `${trailerLeft ? input.teamName(trailerId) : input.teamName(leaderId)} have anybody left`
     } else if (trailerLeft && leaderLeft) {
       story =
-        `${input.teamName(trailerId)} need ${needs} from ${trailerLeft}, ` +
-        `with ${leaderLeft} still to play for ${input.teamName(leaderId)}`
+        `${input.teamName(trailerId)} need ${trailerLeft} to outscore ` +
+        `${leaderLeft} by ${behind}`
     } else if (trailerLeft) {
-      story = `${input.teamName(trailerId)} need ${needs} from ${trailerLeft}`
+      story = `${input.teamName(trailerId)} need ${behind} from ${trailerLeft}`
     } else {
-      story = `${input.teamName(trailerId)} need ${needs}`
+      story = `${input.teamName(trailerId)} need ${behind}`
     }
 
     if (watch) {
       return {
         matchupId: m.id,
-        left: side(leaderId, leaderPts, true),
+        left: side(leaderId, leaderPts, !tied),
         right: side(trailerId, trailerPts, false),
-        sub: `No. ${watch.leaderRank} lead No. ${watch.trailerRank} · ${story}`,
+        sub: tied
+          ? `No. ${watch.leaderRank} level with No. ${watch.trailerRank} · ${story}`
+          : `No. ${watch.leaderRank} lead No. ${watch.trailerRank} · ${story}`,
         watch: watch.level,
       }
     }
 
     return {
       matchupId: m.id,
-      left: side(leaderId, leaderPts, true),
+      left: side(leaderId, leaderPts, !tied),
       right: side(trailerId, trailerPts, false),
       sub: story,
     }

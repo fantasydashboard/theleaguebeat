@@ -17,8 +17,8 @@ const split = [
   m('done', 'a', 'b', { status: 'final', homePoints: 141.2, awayPoints: 98.4 }),
   m('alive', 'c', 'd', {
     homePoints: 92.1, awayPoints: 88.4,
-    homeProjected: 96.0, awayProjected: 101.3,
-    homeWinProb: 0.44, awayWinProb: 0.56,
+    // c is done; d still has 12.9 coming.
+    homeProjected: 92.1, awayProjected: 101.3,
   }),
 ]
 
@@ -83,11 +83,11 @@ describe('the still-alive rows', () => {
     expect(row.right.points).toBe(88.4)
   })
 
-  it('states the need off the platform projection', () => {
-    // c leads with 92.1; d needs c's projected final (96.0) minus
-    // d's own 88.4 = 7.6.
+  it('states the deficit, not a number that assumes the leader hits theirs', () => {
+    // c is done on 92.1, so what d needs is the 3.7 on the board —
+    // no forecast involved.
     const desk = buildMondayDesk({ matchups: split, teamName: names })!
-    expect(desk.alive[0].sub).toBe('Team d need 7.6')
+    expect(desk.alive[0].sub).toBe('Team d need 3.7')
   })
 
   it('names who a side is waiting on, and what the leader has coming', () => {
@@ -99,7 +99,7 @@ describe('the still-alive rows', () => {
     })!
     // Biggest contributor first, and the flat-target phrasing because
     // the leader has nobody left.
-    expect(desk.alive[0].sub).toBe('Team d need 7.6 from Bo Nix and Rashee Rice')
+    expect(desk.alive[0].sub).toBe('Team d need 3.7 from Bo Nix and Rashee Rice')
 
     const race = buildMondayDesk({
       matchups: split,
@@ -109,9 +109,11 @@ describe('the still-alive rows', () => {
           ? [{ name: 'Bo Nix', points: 17.4 }]
           : [{ name: 'Patrick Mahomes', points: 16.9 }],
     })!
-    // Both sides live: saying only "need 7.6" would ignore the points
-    // the leader is about to add.
-    expect(race.alive[0].sub).toContain('with Patrick Mahomes still to play')
+    // Both sides live: the exact statement is a head-to-head against
+    // the leader's remaining players, not a chase of their projection.
+    expect(race.alive[0].sub).toBe(
+      'Team d need Bo Nix to outscore Patrick Mahomes by 3.7',
+    )
   })
 
   it('caps the names and counts the rest', () => {
@@ -128,7 +130,7 @@ describe('the still-alive rows', () => {
             ]
           : [],
     })!
-    expect(desk.alive[0].sub).toBe('Team d need 7.6 from Bo Nix and Kenneth Walker and 2 more')
+    expect(desk.alive[0].sub).toBe('Team d need 3.7 from Bo Nix and Kenneth Walker and 2 more')
   })
 })
 
@@ -287,5 +289,43 @@ describe('an upset that already landed', () => {
       fieldSize: 10,
     })!
     expect(desk.headline).toBe('An upset is live.')
+  })
+})
+
+describe('a tied game', () => {
+  // Nobody is behind, so nobody "needs" anything — it is a race
+  // between whoever each side has left.
+  const level = m('level', 'x', 'y', {
+    homePoints: 117.1, awayPoints: 117.1,
+    homeProjected: 130.4, awayProjected: 130.4,
+  })
+
+  it('calls it level and names the head-to-head', () => {
+    const desk = buildMondayDesk({
+      matchups: [split[0], level],
+      teamName: names,
+      stillToPlay: (id) =>
+        id === 'y' ? [{ name: 'Rashee Rice', points: 13.3 }] : [{ name: 'Kenneth Walker', points: 13.3 }],
+    })!
+    const row = desk.alive.find((r) => r.matchupId === 'level')!
+    expect(row.sub).toBe('Level at 117.1. It comes down to Rashee Rice against Kenneth Walker')
+  })
+
+  it('gives neither side the leader’s colour', () => {
+    const desk = buildMondayDesk({ matchups: [split[0], level], teamName: names })!
+    const row = desk.alive.find((r) => r.matchupId === 'level')!
+    expect(row.left.leading).toBe(false)
+    expect(row.right.leading).toBe(false)
+  })
+
+  it('says so when only one side has anybody left', () => {
+    const desk = buildMondayDesk({
+      matchups: [split[0], level],
+      teamName: names,
+      stillToPlay: (id) => (id === 'y' ? [{ name: 'Rashee Rice', points: 13.3 }] : []),
+    })!
+    expect(desk.alive.find((r) => r.matchupId === 'level')!.sub).toBe(
+      'Level at 117.1, and only Team y have anybody left',
+    )
   })
 })
