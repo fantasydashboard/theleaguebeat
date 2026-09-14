@@ -63,8 +63,10 @@ export interface MondayDeskSide {
   teamId: string
   name: string
   points: number
-  /** Record once this game counts. Decided games only — an
-   *  unfinished one has no result to add. */
+  /** The record this row is showing. On a decided game it is where
+   *  the side ENDS UP; on one still being played it is where they
+   *  stand now. Every row carries one either way — an empty slot on
+   *  half the rows reads as missing data rather than a choice. */
   record?: string
   leading: boolean
   logoUrl?: string
@@ -129,7 +131,8 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     const t = input.team?.(teamId)
     const base = input.recordOf?.(teamId)
     let record: string | undefined
-    if (base && outcome) {
+    if (base) {
+      // A decided game already counts; a live one has not landed yet.
       const w = base.wins + (outcome === 'win' ? 1 : 0)
       const l = base.losses + (outcome === 'loss' ? 1 : 0)
       record = base.ties > 0 ? `${w}-${l}-${base.ties}` : `${w}-${l}`

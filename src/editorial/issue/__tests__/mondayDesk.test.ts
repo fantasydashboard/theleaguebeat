@@ -192,15 +192,21 @@ describe('the done-and-dusted rows', () => {
     expect(row.right.record).toBe('1-3')
   })
 
-  it('leaves records off games still being played', () => {
-    // An unfinished game has no result to add to anybody's record.
+  it('shows the standing record on a game still being played', () => {
+    // Every row carries a record: where a decided side ends up, where
+    // a live one stands. A blank slot on half the rows reads as
+    // missing data rather than a deliberate difference.
     const desk = buildMondayDesk({
       matchups: split,
       teamName: names,
-      recordOf: (id) => recordBefore[id as 'a' | 'b'],
+      recordOf: (id) =>
+        ({ ...recordBefore, c: { wins: 2, losses: 1, ties: 0 }, d: { wins: 0, losses: 3, ties: 0 } })[
+          id as 'a' | 'b' | 'c' | 'd'
+        ],
     })!
-    expect(desk.alive[0].left.record).toBeUndefined()
-    expect(desk.alive[0].right.record).toBeUndefined()
+    // Unchanged by a game that has not landed.
+    expect(desk.alive[0].left.record).toBe('2-1')
+    expect(desk.alive[0].right.record).toBe('0-3')
   })
 
   it('explains a locked game with the arithmetic that locked it', () => {
