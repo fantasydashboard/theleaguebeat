@@ -116,73 +116,64 @@ describe('the still-alive rows', () => {
 })
 
 describe('upset watch', () => {
+  // Ten-team board, so the upset gap is four spots and the heist seven.
+  const board: Record<string, number> = { dog: 8, fav: 2, a: 3, b: 5 }
   const watchGame = m('watch', 'dog', 'fav', {
     homePoints: 101.2, awayPoints: 92.3,
     homeProjected: 104, awayProjected: 106,
-    homeWinProb: 0.55, awayWinProb: 0.45,
   })
+  const ranked = {
+    priorRank: (id: string) => board[id],
+    fieldSize: 10,
+  }
 
-  it('flags a pregame dog currently leading, with the receipt', () => {
+  it('flags a leader climbing far up the board, with the spots named', () => {
     const desk = buildMondayDesk({
-      matchups: [split[0], watchGame],
-      teamName: names,
-      priorPointsPerWeek: priors({ dog: 100, fav: 115, a: 110, b: 105 }),
-      priorWeeks: 4,
-      priorRank: (id) => ({ dog: 8, fav: 2, a: 3, b: 5 }[id]),
+      matchups: [split[0], watchGame], teamName: names, ...ranked,
     })!
     const row = desk.alive.find((r) => r.matchupId === 'watch')!
     expect(row.watch).toBe('upset')
-    expect(row.sub).toContain('No. 8')
-    expect(row.sub).toContain('No. 2')
-    expect(row.sub).toContain('34%')
-    // The headline promotes the live upset over the closest game.
+    expect(row.sub).toContain('No. 8 lead No. 2')
     expect(desk.headline).toBe('An upset is live.')
-    expect(desk.support).toContain('Team dog')
   })
 
-  it('escalates to heist watch under 25%', () => {
+  it('escalates a climb from the bottom to a heist', () => {
     const desk = buildMondayDesk({
       matchups: [split[0], watchGame],
       teamName: names,
-      priorPointsPerWeek: priors({ dog: 100, fav: 125 }),
-      priorWeeks: 4,
+      priorRank: (id) => ({ dog: 10, fav: 1 }[id]),
+      fieldSize: 10,
     })!
     expect(desk.alive.find((r) => r.matchupId === 'watch')!.watch).toBe('heist')
     expect(desk.headline).toBe('A heist is live.')
   })
 
-  it('sorts watch rows first, then closest games', () => {
-    const desk = buildMondayDesk({
-      matchups: [split[0], split[1], watchGame],
-      teamName: names,
-      priorPointsPerWeek: priors({ dog: 100, fav: 115 }),
-      priorWeeks: 4,
-    })!
-    expect(desk.alive[0].matchupId).toBe('watch')
-  })
-
-  it('never flags without enough prior weeks, and never flags the favorite', () => {
-    // One week of history is not an expectation.
-    const thin = buildMondayDesk({
-      matchups: [split[0], watchGame],
-      teamName: names,
-      priorPointsPerWeek: priors({ dog: 100, fav: 125 }),
-      priorWeeks: 1,
-    })!
-    expect(thin.alive.find((r) => r.matchupId === 'watch')!.watch).toBeUndefined()
-    expect(thin.headline).not.toMatch(/upset|heist/i)
-
-    // The favorite leading is the board working as intended.
-    const favUp = buildMondayDesk({
-      matchups: [split[0], m('calm', 'fav', 'dog', {
-        homePoints: 101, awayPoints: 92,
-        homeProjected: 106, awayProjected: 104,
+  it('never flags neighbours, and never flags the better team leading', () => {
+    // Two spots apart is not an upset in the making.
+    const near = buildMondayDesk({
+      matchups: [split[0], m('near', 'dog', 'fav', {
+        homePoints: 101, awayPoints: 92, homeProjected: 104, awayProjected: 106,
       })],
       teamName: names,
-      priorPointsPerWeek: priors({ dog: 100, fav: 125 }),
-      priorWeeks: 4,
+      priorRank: (id) => ({ dog: 4, fav: 2 }[id]),
+      fieldSize: 10,
     })!
-    expect(favUp.alive.find((r) => r.matchupId === 'calm')!.watch).toBeUndefined()
+    expect(near.alive.find((r) => r.matchupId === 'near')!.watch).toBeUndefined()
+
+    // The board's better team in front is the board working.
+    const calm = buildMondayDesk({
+      matchups: [split[0], m('calm', 'fav', 'dog', {
+        homePoints: 101, awayPoints: 92, homeProjected: 106, awayProjected: 104,
+      })],
+      teamName: names, ...ranked,
+    })!
+    expect(calm.alive.find((r) => r.matchupId === 'calm')!.watch).toBeUndefined()
+  })
+
+  it('stays quiet when there is no board to measure against', () => {
+    const desk = buildMondayDesk({ matchups: [split[0], watchGame], teamName: names })!
+    expect(desk.alive.find((r) => r.matchupId === 'watch')!.watch).toBeUndefined()
+    expect(desk.headline).not.toMatch(/upset|heist/i)
   })
 })
 
@@ -224,8 +215,19 @@ describe('the done-and-dusted rows', () => {
       teamName: names,
     })!
     const locked = desk.decided.find((r) => r.matchupId === 'cooked')!
-    expect(locked.sub).toBe('Team d need 30 with 8 left to play')
-    // A final needs no such explanation.
-    expect(desk.decided.find((r) => r.matchupId === 'done')).toBeUndefined()
+    expect(locked.sub).toBe('Team d need 30 with 8 left')
+    // A side with nothing at all left gets the shorter sentence, so
+    // four locked games do not read as one template.
+    const none = buildMondayDesk({
+      matchups: [
+        m('over', 'c', 'd', {
+          homePoints: 120, awayPoints: 90,
+          homeProjected: 120, awayProjected: 90,
+        }),
+        split[1],
+      ],
+      teamName: names,
+    })!
+    expect(none.decided.find((r) => r.matchupId === 'over')!.sub).toBe('Nothing left for Team d')
   })
 })

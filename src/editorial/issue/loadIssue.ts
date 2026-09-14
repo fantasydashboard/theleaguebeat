@@ -74,19 +74,6 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
   const weeks = [...new Set((data.weeklyScores ?? []).map((s) => s.week))]
   const coveredWeek = Math.max(...weeks)
 
-  // Pregame expectation for the upset gate: each team's scoring
-  // average across the weeks BEFORE the covered one. The covered
-  // week is excluded on principle — an upset must not partially
-  // justify itself with the very score that caused it.
-  const priorScores = (data.weeklyScores ?? []).filter((s) => s.week < coveredWeek)
-  const priorWeeksPlayed = new Set(priorScores.map((s) => s.week)).size
-  const priorTotals = new Map<string, { sum: number; n: number }>()
-  for (const s of priorScores) {
-    const t = priorTotals.get(s.teamId) ?? { sum: 0, n: 0 }
-    t.sum += s.points
-    t.n += 1
-    priorTotals.set(s.teamId, t)
-  }
 
   return buildWeeklyIssue({
     leagueName: args.leagueName,
@@ -95,11 +82,6 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
     // one in progress. Publishing "Week 6" on Tuesday about week 5's
     // results is how an issue ends up misdating itself.
     week: coveredWeek,
-    priorPointsPerWeek: (id: string) => {
-      const t = priorTotals.get(id)
-      return t && t.n > 0 ? t.sum / t.n : undefined
-    },
-    priorWeeksPlayed,
     regularSeasonEndWeek: data.regularSeasonEndWeek,
     playoffCutoff: data.playoffCutoff,
     power,

@@ -1300,17 +1300,8 @@ const mondayDesk = computed(() => {
   const d = livePointsData.value
   if (!d) return null
 
-  // Pregame record for the watch pill: all completed weeks. The
-  // in-flight week is never in weeklyScores, so no exclusion needed.
-  const scores = d.weeklyScores ?? []
-  const priorWeeks = new Set(scores.map((s) => s.week)).size
-  const totals = new Map<string, { sum: number; n: number }>()
-  for (const s of scores) {
-    const t = totals.get(s.teamId) ?? { sum: 0, n: 0 }
-    t.sum += s.points
-    t.n += 1
-    totals.set(s.teamId, t)
-  }
+  // The board the leader is climbing. Ranked from the league as it
+  // stands, which before the first close is the projection board.
   const rank = new Map(
     computePointsPowerScores(d).map((p, i) => [p.teamId, i + 1]),
   )
@@ -1320,12 +1311,8 @@ const mondayDesk = computed(() => {
     // On Sleeper the raw ones carry no projection, so the desk stays
     // silent until `liveProjected` arrives rather than guessing.
     matchups: liveProjected.value ?? d.currentWeekMatchups ?? [],
-    priorPointsPerWeek: (id) => {
-      const t = totals.get(id)
-      return t && t.n > 0 ? t.sum / t.n : undefined
-    },
-    priorWeeks,
     priorRank: (id) => rank.get(id),
+    fieldSize: rank.size,
     recordOf: (id) => {
       const s = (d.standings ?? []).find((row) => row.teamId === id)
       return s ? { wins: s.catWins, losses: s.catLosses, ties: s.catTies } : undefined

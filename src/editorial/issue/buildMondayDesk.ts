@@ -4,10 +4,11 @@
  * By Monday the week has split — most results are in, a few games
  * hang on the night's players — and the site's whole Monday question
  * is "who needs what". This block answers it in two lists and one
- * pill: STILL ALIVE (the need, the lead, the live odds), DONE AND
- * DUSTED (finals plus the games that are over in every sense but the
- * paperwork), and an UPSET WATCH pill on any live game where the
- * pregame underdog is currently ahead.
+ * pill: STILL ALIVE (what each side needs and who it is waiting on),
+ * DONE AND DUSTED (finals plus the games that are over in every
+ * sense but the paperwork, with the record each side ends up with),
+ * and an UPSET WATCH pill on any live game where a team from well
+ * down the board is currently ahead.
  *
  * EPHEMERAL BY DESIGN. Assembled from live matchups on open, stored
  * nowhere, part of no Issue object — so archives never carry a score
@@ -25,18 +26,12 @@
  * projecting 8 more is not a story with suspense in it.
  *
  * THE WATCH RULE is the upset detector's, applied mid-flight: the
- * current leader came in under 35% by prior-week scoring (under 25%
- * is the heist), stated with the rank framing and the pregame
- * percentage as the receipt. Tuesday's issue then confirms it as an
- * upset or records the escape — the desk is the cliffhanger, the
- * issue is the resolution.
+ * current leader sat far enough below the trailer on last week's
+ * board that holding on would be an upset (further still, a heist).
+ * Tuesday's issue then confirms it or records the escape — the desk
+ * is the cliffhanger, the issue is the resolution.
  */
-import {
-  winProbability,
-  UPSET_MAX_PROB,
-  HEIST_MAX_PROB,
-  MIN_PRIOR_WEEKS,
-} from '../points/upsets'
+import { upsetGap } from '../points/upsets'
 import type { LeagueDataPointsMatchup } from '../types'
 
 export interface MondayDeskTeam {
@@ -48,13 +43,11 @@ export interface MondayDeskTeam {
 
 export interface MondayDeskInput {
   matchups: readonly LeagueDataPointsMatchup[]
-  /** Scoring average over completed weeks, for the watch pill. The
-   *  in-flight week is never in `weeklyScores`, so no exclusion is
-   *  needed here — completed weeks ARE the pregame record. */
-  priorPointsPerWeek?: (teamId: string) => number | undefined
-  priorWeeks?: number
-  /** Current board rank, for the watch sentence. */
+  /** Board rank BEFORE this week, which is what a live leader is
+   *  being measured against. */
   priorRank?: (teamId: string) => number | undefined
+  /** Teams the board ranks, so the watch gap scales with the field. */
+  fieldSize?: number
   /** Record BEFORE this week counts, so the desk can show what each
    *  side's record becomes once a decided game lands. */
   recordOf?: (teamId: string) => { wins: number; losses: number; ties: number } | undefined
@@ -153,27 +146,28 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     }
   }
 
-  /** The watch level for a live game, when the priors can support one. */
-  const watchFor = (m: LeagueDataPointsMatchup): 'upset' | 'heist' | undefined => {
-    if (!input.priorPointsPerWeek || (input.priorWeeks ?? 0) < MIN_PRIOR_WEEKS) return undefined
+  /**
+   * The watch level for a live game: the leader is climbing this far
+   * up the board if the scoreline holds. Same rule the issue's upset
+   * section resolves it with on Tuesday.
+   */
+  const watchFor = (
+    m: LeagueDataPointsMatchup,
+  ): { level: 'upset' | 'heist'; gap: number; leaderRank: number; trailerRank: number } | undefined => {
+    if (!input.priorRank || !input.fieldSize) return undefined
     if (m.homePoints === m.awayPoints) return undefined
     const leaderId = m.homePoints > m.awayPoints ? m.homeTeamId : m.awayTeamId
     const trailerId = m.homePoints > m.awayPoints ? m.awayTeamId : m.homeTeamId
-    const leaderMean = input.priorPointsPerWeek(leaderId)
-    const trailerMean = input.priorPointsPerWeek(trailerId)
-    if (leaderMean === undefined || trailerMean === undefined) return undefined
-    const pregame = winProbability(leaderMean - trailerMean)
-    if (pregame >= UPSET_MAX_PROB) return undefined
-    return pregame < HEIST_MAX_PROB ? 'heist' : 'upset'
-  }
-
-  const pregamePct = (m: LeagueDataPointsMatchup): number => {
-    const leaderId = m.homePoints > m.awayPoints ? m.homeTeamId : m.awayTeamId
-    const trailerId = m.homePoints > m.awayPoints ? m.awayTeamId : m.homeTeamId
-    const p = winProbability(
-      (input.priorPointsPerWeek?.(leaderId) ?? 0) - (input.priorPointsPerWeek?.(trailerId) ?? 0),
-    )
-    return Math.round(p * 100)
+    const leaderRank = input.priorRank(leaderId)
+    const trailerRank = input.priorRank(trailerId)
+    const verdict = upsetGap(leaderRank, trailerRank, input.fieldSize)
+    if (!verdict || !leaderRank || !trailerRank) return undefined
+    return {
+      level: verdict.heist ? 'heist' : 'upset',
+      gap: verdict.gap,
+      leaderRank,
+      trailerRank,
+    }
   }
 
   /** "Mahomes and Rice" / "Mahomes, Rice and 2 more". */
@@ -223,15 +217,12 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     }
 
     if (watch) {
-      const wr = input.priorRank?.(leaderId)
-      const lr = input.priorRank?.(trailerId)
-      const rankBit = wr && lr ? `No. ${wr} lead No. ${lr}` : `${input.teamName(leaderId)} lead`
       return {
         matchupId: m.id,
         left: side(leaderId, leaderPts, true),
         right: side(trailerId, trailerPts, false),
-        sub: `${rankBit} · pregame chance ${pregamePct(m)}% · ${story}`,
-        watch,
+        sub: `No. ${watch.leaderRank} lead No. ${watch.trailerRank} · ${story}`,
+        watch: watch.level,
       }
     }
 
@@ -271,9 +262,11 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     const sub =
       m.status === 'final'
         ? `Final · won by ${margin}`
-        : loserLeft !== undefined
-          ? `${input.teamName(loserId)} need ${margin} with ${loserLeft} left to play`
-          : `Locked · ${input.teamName(winnerId)} by ${margin}`
+        : loserLeft === undefined
+          ? `Locked · ${input.teamName(winnerId)} by ${margin}`
+          : loserLeft === 0
+            ? `Nothing left for ${input.teamName(loserId)}`
+            : `${input.teamName(loserId)} need ${margin} with ${loserLeft} left`
 
     return {
       matchupId: m.id,
@@ -291,9 +284,12 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       ? 'A heist is live.'
       : 'An upset is live.'
     : `${alive.length} game${alive.length === 1 ? '' : 's'} still alive.`
+  const best = [...decided, ...alive]
+    .flatMap((r) => [r.left, r.right])
+    .sort((a, b) => b.points - a.points)[0]
   const support = lead.watch
     ? `${lead.left.name} lead ${lead.right.name}. ${lead.sub}.`
-    : `${decided.length} decided. ${lead.sub}.`
+    : `${decided.length} decided. ${best.name} lead the week on ${best.points}.`
 
   return { headline, support, alive, decided }
 }

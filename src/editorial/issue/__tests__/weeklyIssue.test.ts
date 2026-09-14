@@ -210,54 +210,43 @@ describe('buildWeeklyIssue', () => {
 })
 
 describe('the upset section', () => {
-  // Prior averages: 'e' scored 100 a week, 'b' 115 — an e win was a
-  // 33.6% shot. 'f' at 100 beating 'a' at 128 was a 21% heist.
-  const priors: Record<string, number> = { a: 128, b: 115, c: 110, d: 105, e: 100, f: 100 }
-  const withPriors = {
-    ...base,
-    power: six,
-    priorPointsPerWeek: (id: string) => priors[id],
-    priorWeeksPlayed: 4,
-  }
+  // Board before the week: a=1 … f=6, a six-team field, so the upset
+  // gap is three spots and the heist gap five.
+  const boardBefore = (id: string) => ({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }[id])
+  const withBoard = { ...base, power: six, previousPowerRank: boardBefore }
 
-  it('calls the upset with the receipt attached', () => {
+  it('names the climb, in spots, with the scoreline', () => {
     const issue = buildWeeklyIssue({
-      ...withPriors,
-      results: [final('1', 'e', 'b', 121.4, 110.1)],
-      previousPowerRank: (id) => ({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }[id]),
+      ...withBoard,
+      results: [final('1', 'e', 'b', 121.4, 110.1)],   // No. 5 over No. 2
     })!
     const upset = issue.sections.find((s) => s.id === 'upset')!
-    expect(upset).toBeDefined()
     expect(upset.eyebrow).toBe('The upset')
-    // The receipt: the pregame chance, stated so the claim is checkable.
-    expect(upset.headline).toContain('34%')
-    expect(upset.support).toContain('No. 5')
-    expect(upset.support).toContain('No. 2')
-    expect(upset.support).toContain('Team e')
+    expect(upset.headline).toBe('No. 5 took down No. 2.')
+    expect(upset.support).toContain('3 spots below')
+    expect(upset.rows[0].sub).toContain('3 spots up the board')
   })
 
-  it('escalates the eyebrow for a heist', () => {
+  it('escalates the eyebrow for a climb from the bottom', () => {
     const issue = buildWeeklyIssue({
-      ...withPriors,
-      results: [final('1', 'f', 'a', 130.0, 118.2)],
+      ...withBoard,
+      results: [final('1', 'f', 'a', 130.0, 118.2)],   // No. 6 over No. 1
     })!
-    const upset = issue.sections.find((s) => s.id === 'upset')!
-    expect(upset.eyebrow).toBe('The heist')
+    expect(issue.sections.find((s) => s.id === 'upset')!.eyebrow).toBe('The heist')
   })
 
-  it('prints nothing when the board was merely close', () => {
-    // d over c was a 46% shot. Calling that an upset teaches readers
-    // the section is filler.
+  it('prints nothing when neighbours trade places', () => {
+    // The objection to ranking-based upsets was that No. 2 over No. 1
+    // would qualify. The threshold is what stops it.
     const issue = buildWeeklyIssue({
-      ...withPriors,
-      results: [final('1', 'd', 'c', 121, 110)],
+      ...withBoard,
+      results: [final('1', 'b', 'a', 121, 110)],
     })!
     expect(issue.sections.find((s) => s.id === 'upset')).toBeUndefined()
   })
 
-  it('stays out of issues that cannot know the pregame odds', () => {
-    // No prior averages supplied — a caller that cannot rewind the
-    // scores gets no upset section rather than a guessed one.
+  it('stays out of issues with no board from before the week', () => {
+    // Week one has nothing to be upset against.
     const issue = buildWeeklyIssue({
       ...base,
       power: six,

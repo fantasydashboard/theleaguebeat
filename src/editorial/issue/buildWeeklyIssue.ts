@@ -56,12 +56,6 @@ export interface WeeklyIssueInput {
   transactions?: readonly LeagueTransaction[]
   /** Power ranking as of last week, for movement. */
   previousPowerRank?: (teamId: string) => number | undefined
-  /** Scoring average per week BEFORE the covered one, for the upset
-   *  gate. Never includes the covered week — an upset must not
-   *  partially justify itself. */
-  priorPointsPerWeek?: (teamId: string) => number | undefined
-  /** Completed weeks behind that average. */
-  priorWeeksPlayed?: number
   teamName: (teamId: string) => string
   team?: (teamId: string) => WeeklyIssueTeam | undefined
   playerImage?: (playerId: string) => string | null | undefined
@@ -139,27 +133,18 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
  * with it so the claim is checkable.
  */
 function upsetSection(input: WeeklyIssueInput): IssueSection | null {
-  if (!input.priorPointsPerWeek) return null
+  if (!input.previousPowerRank || input.power.length === 0) return null
   const upsets = detectUpsets({
     results: input.results,
-    priorPointsPerWeek: input.priorPointsPerWeek,
-    priorWeeks: input.priorWeeksPlayed ?? 0,
     priorRank: input.previousPowerRank,
+    fieldSize: input.power.length,
   })
   if (upsets.length === 0) return null
 
   const lead = upsets[0]
-  const pct = Math.round(lead.winProb * 100)
-  const rankBit =
-    lead.winnerRank && lead.loserRank
-      ? `No. ${lead.winnerRank} took down No. ${lead.loserRank}. `
-      : ''
-
   const rows: IssueRow[] = upsets.map((u) => ({
     label: `${input.teamName(u.winnerId)} over ${input.teamName(u.loserId)}`,
-    sub:
-      (u.winnerRank && u.loserRank ? `No. ${u.winnerRank} over No. ${u.loserRank} · ` : '') +
-      `a ${Math.round(u.winProb * 100)}% chance`,
+    sub: `No. ${u.winnerRank} beat No. ${u.loserRank} · ${u.gap} spots up the board`,
     value: `${round1(u.winnerPoints)} – ${round1(u.loserPoints)}`,
     ...visual(input, u.winnerId),
   }))
@@ -167,11 +152,11 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
   return {
     id: 'upset',
     eyebrow: lead.heist ? 'The heist' : 'The upset',
-    headline: `A ${pct}% chance, cashed.`,
+    headline: `No. ${lead.winnerRank} took down No. ${lead.loserRank}.`,
     support:
       `${input.teamName(lead.winnerId)} beat ${input.teamName(lead.loserId)} ` +
-      `by ${round1(lead.margin)}. ${rankBit}` +
-      `That is the board's number, and the board gets a rewrite this week.`,
+      `by ${round1(lead.margin)}, from ${lead.gap} spots below them on the board. ` +
+      `The board gets a rewrite this week.`,
     rows,
     priority: 15,
   }
