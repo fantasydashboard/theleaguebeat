@@ -1585,7 +1585,11 @@ async function weekWinSplits(cfg, wk, table) {
     ;(groups[m.matchup_id] ||= []).push(m)
   }
   const SIGMA_DIFF = 25 * Math.SQRT2
-  const cdf = (z) => 0.5 * (1 + Math.tanh(Math.sqrt(Math.PI / 8) * z * (1 + 0.044715 * z * z * (Math.PI / 8))))
+  // Standard tanh approximation of the normal CDF. An earlier version
+  // used √(π/8) with π/8 inside, which compressed every probability
+  // toward a coin flip (a 58% favorite printed 57). This matches
+  // editorial/points/upsets.ts, which is the reference.
+  const cdf = (z) => 0.5 * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (z + 0.044715 * z ** 3)))
   return Object.values(groups)
     .map((pair) => {
       const [a, b] = pair.map((m) => byOwner[ownerByRoster[m.roster_id]])

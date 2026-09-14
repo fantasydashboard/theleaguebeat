@@ -23,6 +23,7 @@ import { tierFor } from '../points/rosterStrength'
 import type { PointsPowerRow } from '../points/powerScore'
 import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
 import { buildWireFacts, describeCost, type WireFacts } from '../points/wireFacts'
+import { detectUpsets } from '../points/upsets'
 import type { LeagueTransaction } from '../transactions/types'
 import type { LeagueDataPointsMatchup } from '../types'
 import type { Issue, IssueCard, IssueRow, IssueSection } from './types'
@@ -55,6 +56,12 @@ export interface WeeklyIssueInput {
   transactions?: readonly LeagueTransaction[]
   /** Power ranking as of last week, for movement. */
   previousPowerRank?: (teamId: string) => number | undefined
+  /** Scoring average per week BEFORE the covered one, for the upset
+   *  gate. Never includes the covered week — an upset must not
+   *  partially justify itself. */
+  priorPointsPerWeek?: (teamId: string) => number | undefined
+  /** Completed weeks behind that average. */
+  priorWeeksPlayed?: number
   teamName: (teamId: string) => string
   team?: (teamId: string) => WeeklyIssueTeam | undefined
   playerImage?: (playerId: string) => string | null | undefined
@@ -119,6 +126,54 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
       )} took the closest game by ${margin}.`,
     rows,
     priority: 10,
+  }
+}
+
+/**
+ * The result the board said should not happen.
+ *
+ * Gated on pregame probability rather than rank distance — the top
+ * two of a tight board are a coin flip, and No. 2 over No. 1 is not
+ * a story. The ranks still write the sentence, because "No. 5 took
+ * down No. 2" is how the sentence goes; the probability is printed
+ * with it so the claim is checkable.
+ */
+function upsetSection(input: WeeklyIssueInput): IssueSection | null {
+  if (!input.priorPointsPerWeek) return null
+  const upsets = detectUpsets({
+    results: input.results,
+    priorPointsPerWeek: input.priorPointsPerWeek,
+    priorWeeks: input.priorWeeksPlayed ?? 0,
+    priorRank: input.previousPowerRank,
+  })
+  if (upsets.length === 0) return null
+
+  const lead = upsets[0]
+  const pct = Math.round(lead.winProb * 100)
+  const rankBit =
+    lead.winnerRank && lead.loserRank
+      ? `No. ${lead.winnerRank} took down No. ${lead.loserRank}. `
+      : ''
+
+  const rows: IssueRow[] = upsets.map((u) => ({
+    label: `${input.teamName(u.winnerId)} over ${input.teamName(u.loserId)}`,
+    sub:
+      (u.winnerRank && u.loserRank ? `No. ${u.winnerRank} over No. ${u.loserRank} · ` : '') +
+      `a ${Math.round(u.winProb * 100)}% chance`,
+    value: `${round1(u.winnerPoints)} – ${round1(u.loserPoints)}`,
+    ...visual(input, u.winnerId),
+  }))
+
+  return {
+    id: 'upset',
+    eyebrow: lead.heist ? 'The heist' : 'The upset',
+    headline: `A ${pct}% chance, cashed.`,
+    support:
+      `${input.teamName(lead.winnerId)} beat ${input.teamName(lead.loserId)} ` +
+      `by ${round1(lead.margin)}. ${rankBit}` +
+      `That is the board's number, and the board gets a rewrite this week.`,
+    rows,
+    priority: 15,
   }
 }
 
@@ -358,6 +413,7 @@ export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
 
   const sections = [
     resultsSection(input),
+    upsetSection(input),
     powerSection(input),
     playoffSection(input),
     tradesSection(input, wire),

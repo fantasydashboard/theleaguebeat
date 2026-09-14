@@ -208,3 +208,61 @@ describe('buildWeeklyIssue', () => {
     }
   })
 })
+
+describe('the upset section', () => {
+  // Prior averages: 'e' scored 100 a week, 'b' 115 — an e win was a
+  // 33.6% shot. 'f' at 100 beating 'a' at 128 was a 21% heist.
+  const priors: Record<string, number> = { a: 128, b: 115, c: 110, d: 105, e: 100, f: 100 }
+  const withPriors = {
+    ...base,
+    power: six,
+    priorPointsPerWeek: (id: string) => priors[id],
+    priorWeeksPlayed: 4,
+  }
+
+  it('calls the upset with the receipt attached', () => {
+    const issue = buildWeeklyIssue({
+      ...withPriors,
+      results: [final('1', 'e', 'b', 121.4, 110.1)],
+      previousPowerRank: (id) => ({ a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }[id]),
+    })!
+    const upset = issue.sections.find((s) => s.id === 'upset')!
+    expect(upset).toBeDefined()
+    expect(upset.eyebrow).toBe('The upset')
+    // The receipt: the pregame chance, stated so the claim is checkable.
+    expect(upset.headline).toContain('34%')
+    expect(upset.support).toContain('No. 5')
+    expect(upset.support).toContain('No. 2')
+    expect(upset.support).toContain('Team e')
+  })
+
+  it('escalates the eyebrow for a heist', () => {
+    const issue = buildWeeklyIssue({
+      ...withPriors,
+      results: [final('1', 'f', 'a', 130.0, 118.2)],
+    })!
+    const upset = issue.sections.find((s) => s.id === 'upset')!
+    expect(upset.eyebrow).toBe('The heist')
+  })
+
+  it('prints nothing when the board was merely close', () => {
+    // d over c was a 46% shot. Calling that an upset teaches readers
+    // the section is filler.
+    const issue = buildWeeklyIssue({
+      ...withPriors,
+      results: [final('1', 'd', 'c', 121, 110)],
+    })!
+    expect(issue.sections.find((s) => s.id === 'upset')).toBeUndefined()
+  })
+
+  it('stays out of issues that cannot know the pregame odds', () => {
+    // No prior averages supplied — a caller that cannot rewind the
+    // scores gets no upset section rather than a guessed one.
+    const issue = buildWeeklyIssue({
+      ...base,
+      power: six,
+      results: [final('1', 'e', 'b', 121.4, 110.1)],
+    })!
+    expect(issue.sections.find((s) => s.id === 'upset')).toBeUndefined()
+  })
+})
