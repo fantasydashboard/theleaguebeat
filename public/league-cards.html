@@ -678,34 +678,52 @@
      11pm". This is that sentence as a picture: incoming messages,
      each fretting about one player's line. The bubbles are openly
      dialogue — the NUMBERS in them are the real lines. */
-  .chat { display: flex; flex-direction: column; gap: 30px; flex: 1; min-height: 0; margin-top: 8px; }
-  .chat-when {
-    text-align: center; font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-    font-size: 22px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
+  .chat-page { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 60px 56px 44px; }
+  .chat-eyebrow {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--pink); margin-bottom: 10px;
   }
-  .msg { display: flex; gap: 18px; align-items: flex-end; max-width: 92%; }
+  .chat-title { font-size: 50px; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 24px; }
+  .chat { display: flex; flex-direction: column; gap: 22px; flex: 1; min-height: 0; }
+  /* The date divider, the way the app writes one. */
+  .chat-when {
+    text-align: center; font-size: 22px; color: var(--dim); font-weight: 600;
+  }
+  .chat-when b { font-weight: 800; }
+  .msg { display: flex; gap: 16px; align-items: flex-end; max-width: 88%; }
+  /* Your message: right side, app blue, no name, no face — it's you. */
+  .msg.you { margin-left: auto; justify-content: flex-end; }
   .msg-av {
-    width: 72px; height: 72px; border-radius: 50%; overflow: hidden; flex: none;
-    background: oklch(0.24 0.02 90); border: 2px solid var(--line);
+    width: 62px; height: 62px; border-radius: 50%; overflow: hidden; flex: none;
+    background: oklch(0.24 0.02 90);
   }
   .msg-av img { width: 100%; height: 115%; object-fit: cover; object-position: top; }
   .msg-body { min-width: 0; }
-  .msg-from {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 23px;
-    letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px 10px;
-  }
+  .msg-from { font-size: 21px; color: var(--dim); font-weight: 600; margin: 0 0 6px 14px; }
   .msg-bubble {
-    background: oklch(0.20 0.015 90); border-radius: 26px; border-bottom-left-radius: 6px;
-    padding: 22px 30px; font-size: 35px; font-weight: 600; line-height: 1.3; color: var(--ink);
+    background: #26252a; border-radius: 24px; border-bottom-left-radius: 6px;
+    padding: 18px 26px; font-size: 31px; font-weight: 500; line-height: 1.3; color: #f2f2f4;
   }
-  .msg-bubble b { color: var(--gold); font-weight: 800; }
-  /* The night hasn't happened yet. */
+  .msg.you .msg-bubble {
+    background: #0a84ff; border-bottom-left-radius: 24px; border-bottom-right-radius: 6px;
+  }
+  .msg-bubble b { font-weight: 800; color: inherit; }
+  .msg-receipt { text-align: right; font-size: 20px; color: var(--dim); font-weight: 600; margin: 6px 6px 0 0; }
+  /* The night hasn't happened yet: the rest of the league, mid-reply. */
   .msg-typing { display: flex; gap: 10px; padding: 26px 30px; }
   .msg-typing i {
     width: 14px; height: 14px; border-radius: 50%; background: var(--dim); display: block;
   }
   .msg-typing i:nth-child(2) { opacity: 0.7; }
   .msg-typing i:nth-child(3) { opacity: 0.4; }
+  .typing-avs { display: flex; flex: none; align-items: flex-end; }
+  .typing-avs .msg-av { width: 52px; height: 52px; border: 3px solid var(--bg); }
+  .typing-avs .msg-av + .msg-av { margin-left: -18px; }
+  .chat-foot {
+    text-align: center; font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
+    margin-top: auto; padding-top: 20px;
+  }
 
   /* ── The cover ──────────────────────────────────────────────
      A real front page, with the tells that make a cover read as a
@@ -1957,45 +1975,57 @@ async function loadXMnf() {
   }
 
   // The group chat. Dialogue is openly invented; the numbers are not.
+  // No masthead: the artifact IS a chat screenshot, and branding on a
+  // screenshot breaks the fiction. One dim domain line at the foot.
   document.body.dataset.ratio = '4x5'
   const surname = (p) => p.name.split(' ').slice(1).join(' ') || p.name
   // Mahomes' manager, not Mahomes's.
   const poss = (p) => surname(p) + (surname(p).endsWith('s') ? '’' : '’s')
   const L = (p) => `<b>${p.line.toFixed(1)}</b>`
+  const av = (p, cls = 'msg-av') => `<span class="${cls}"><img
+    src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt="" onerror="this.remove()"></span>`
+
+  // Four incoming, then YOURS — the most desperate message in the
+  // thread is the one you sent. Then the whole league starts typing.
+  const incoming = players.slice(0, 4)
+  const you = players[4] || players[players.length - 1]
   const scripts = [
     (p) => `Need ${L(p)} from ${esc(p.name)} and I win the week`,
     (p) => `Down ${L(p)} with ${esc(surname(p))} still to play. Feeling weirdly calm`,
     (p) => `${esc(p.name)} owes me ${L(p)} by 11pm`,
     (p, prev) => `${prev.line.toFixed(1)}?? I only need ${L(p)} from ${esc(surname(p))}`,
-    (p) => `${L(p)} from ${esc(p.name)} or nobody text me tomorrow`,
   ]
-  const msgs = players.map((p, i) => `
+  const msgs = incoming.map((p, i) => `
     <div class="msg">
-      <span class="msg-av"><img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt=""
-        onerror="this.remove()"></span>
+      ${av(p)}
       <span class="msg-body">
         <div class="msg-from">${esc(poss(p))} manager</div>
-        <div class="msg-bubble">${scripts[i % scripts.length](p, players[Math.max(0, i - 1)])}</div>
+        <div class="msg-bubble">${scripts[i % scripts.length](p, incoming[Math.max(0, i - 1)])}</div>
       </span>
     </div>`).join('')
 
-  document.getElementById('safe').innerHTML = xcShell({
-    league: params.get('league') || 'Leagues everywhere',
-    title: params.get('title') || 'What do you need to win tonight?',
-    when: params.get('when') || `Week ${wk} · MNF`,
-    rows: `
+  document.getElementById('safe').innerHTML = `
+    <div class="chat-page">
+      <div class="chat-eyebrow">Week ${wk} · Monday night</div>
+      <div class="chat-title">${esc(params.get('title') || 'What do you need to win tonight?')}</div>
       <div class="chat">
-        <div class="chat-when">Monday · ${esc(players[0]?.game || '')} · pregame</div>
+        <div class="chat-when"><b>Monday</b> 7:58 PM · ${esc(you?.game || '')}</div>
         ${msgs}
-        <div class="msg">
-          <span class="msg-av"></span>
+        <div class="msg you">
           <span class="msg-body">
-            <div class="msg-from">Everyone else</div>
+            <div class="msg-bubble">${L(you)} from ${esc(you.name)} or nobody text me tomorrow</div>
+            <div class="msg-receipt">Delivered</div>
+          </span>
+        </div>
+        <div class="msg">
+          <span class="typing-avs">${incoming.slice(0, 3).map((p) => av(p)).join('')}</span>
+          <span class="msg-body">
             <div class="msg-bubble msg-typing"><i></i><i></i><i></i></div>
           </span>
         </div>
-      </div>`,
-  })
+      </div>
+      <div class="chat-foot">theleaguebeat.com</div>
+    </div>`
 }
 
 /**
