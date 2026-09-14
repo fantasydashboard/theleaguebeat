@@ -635,78 +635,112 @@
   .xhl-over { font-size: 21px; color: var(--dim); font-weight: 600; line-height: 1.25; }
 
   /* ── The cover ──────────────────────────────────────────────
-     The issue's front page as a poster: masthead, one face, one
-     cover line, the rest of the week teased at the foot. */
-  .cov { position: absolute; inset: 0; display: flex; flex-direction: column; }
-  .cov-mast {
-    padding: 54px 56px 0; text-align: center;
-  }
-  .cov-mast .word {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 96px;
-    letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;
-  }
+     A real front page, with the tells that make a cover read as a
+     COVER: the subject breaking in front of the masthead, cover
+     lines in the corners, a barcode with a price (ours says FREE),
+     and the brand's crimson slash carrying the pitch at the foot. */
+  .cov { position: absolute; inset: 0; overflow: hidden; }
+  .cov-mast { position: absolute; left: 0; right: 0; top: 36px; text-align: center; z-index: 1; }
+  /* Dateline ABOVE the nameplate, newsstand style, so the face can
+     break the nameplate without beheading a sentence. */
   .cov-issue {
     display: flex; align-items: center; gap: 18px; justify-content: center;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
-    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-top: 14px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+    margin: 0 56px 12px;
   }
   .cov-issue b { color: var(--pink); font-weight: 800; }
   .cov-issue::before, .cov-issue::after { content: ''; flex: 1; height: 2px; background: var(--line); }
-  .cov-hero { position: relative; flex: 1; margin: 34px 0 0; overflow: hidden; }
-  /* A glow gives the face a stage; without it the transparent
-     headshot floats in dead black like a sticker. */
+  .cov-mast .word {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 106px;
+    letter-spacing: 0.03em; text-transform: uppercase; line-height: 1; white-space: nowrap;
+  }
+
+  /* The face layer sits OVER the masthead: a subject in front of the
+     nameplate is the single strongest magazine signal there is. */
+  .cov-hero { position: absolute; left: 0; right: 0; top: 0; bottom: 170px; z-index: 2;
+              pointer-events: none; overflow: hidden; }
   .cov-hero::before {
     content: ''; position: absolute; inset: 0;
     background:
-      radial-gradient(70% 55% at 50% 30%, oklch(0.34 0.09 92 / 0.55), transparent 70%),
-      radial-gradient(90% 70% at 50% 45%, oklch(0.30 0.12 350 / 0.28), transparent 75%);
+      radial-gradient(70% 50% at 50% 32%, oklch(0.34 0.09 92 / 0.50), transparent 70%),
+      radial-gradient(90% 70% at 50% 48%, oklch(0.30 0.12 350 / 0.26), transparent 75%);
   }
-  /* Sleeper headshots ship with acres of transparent padding, so the
-     raw image renders a small adrift head. Blow it up and pin it to
-     the top: cropping shoulders is a portrait, cropping hair is a
-     mistake. &zoom= adjusts per subject when a face sits oddly. */
+  /* Sleeper headshots ship with acres of transparent padding; blow
+     the image up and pin it high so the crown overlaps the masthead.
+     &zoom= adjusts per subject when a face sits oddly. */
   .cov-hero img {
-    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-    height: calc(1% * var(--cov-zoom, 112)); width: auto;
+    position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
+    height: calc(1% * var(--cov-zoom, 80)); width: auto;
   }
   .cov-hero::after {
     content: ''; position: absolute; inset: 0;
-    background: linear-gradient(180deg, transparent 30%, oklch(0.09 0.014 90 / 0.95) 76%, var(--bg));
+    background: linear-gradient(180deg, transparent 34%, oklch(0.09 0.014 90 / 0.95) 74%, var(--bg));
   }
-  .cov-lines { position: absolute; left: 56px; right: 56px; bottom: 36px; z-index: 1; }
+
+  /* Corner cover lines, the way a newsstand cover teases inside. */
+  .cov-tease {
+    position: absolute; z-index: 3; width: 300px; top: 330px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .cov-tease.left { left: 48px; }
+  .cov-tease.right { right: 48px; flex-direction: row-reverse; text-align: right; }
+  .cov-tease-face {
+    width: 92px; height: 92px; border-radius: 50%; overflow: hidden; flex: none;
+    border: 3px solid var(--gold); background: oklch(0.24 0.02 90);
+  }
+  .cov-tease-face img { width: 100%; height: 100%; object-fit: cover; }
+  .cov-tease-copy b {
+    display: block; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 30px; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1.05;
+  }
+  .cov-tease-copy span {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
+    color: var(--gold); letter-spacing: 0.06em;
+  }
+
+  .cov-lines { position: absolute; left: 56px; right: 56px; bottom: 320px; z-index: 3; }
   .cov-kicker {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
     letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); margin-bottom: 14px;
   }
-  .cov-head { font-size: 74px; font-weight: 900; letter-spacing: -0.025em; line-height: 0.98;
+  .cov-head { font-size: 76px; font-weight: 900; letter-spacing: -0.025em; line-height: 0.98;
               text-shadow: 0 4px 40px oklch(0 0 0 / 0.8); }
-  .cov-deck { font-size: 31px; color: var(--ink); opacity: 0.85; margin-top: 18px; line-height: 1.35; }
-  .cov-also {
-    display: flex; gap: 20px; padding: 30px 56px 26px; align-items: center;
+  .cov-deck { font-size: 31px; color: var(--ink); opacity: 0.85; margin-top: 18px; line-height: 1.35;
+              max-width: 820px; }
+
+  /* The pitch, as the logo's own crimson slash. */
+  .cov-banner {
+    position: absolute; left: 40px; right: 40px; bottom: 118px; z-index: 4;
+    background: #c81a4b; transform: skewX(-8deg);
+    padding: 26px 40px; display: flex; align-items: center; justify-content: center;
   }
-  .cov-also-tag {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 22px;
-    letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); flex: none;
-    width: 110px; line-height: 1.3;
+  .cov-banner span {
+    transform: skewX(8deg); display: block;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 34px;
+    letter-spacing: 0.03em; text-transform: uppercase; color: oklch(0.13 0.02 350);
+    font-style: italic; white-space: nowrap;
   }
-  .cov-also-row {
-    flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0;
-    background: var(--panel); border-radius: 14px; padding: 12px 18px;
-  }
-  .cov-also-face {
-    width: 58px; height: 58px; border-radius: 50%; overflow: hidden; flex: none;
-    background: oklch(0.24 0.02 90);
-  }
-  .cov-also-face img { width: 100%; height: 100%; object-fit: cover; }
-  .cov-also-name { min-width: 0; }
-  .cov-also-name b { display: block; font-size: 25px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cov-also-name span { font-size: 19px; color: var(--muted); }
   .cov-foot {
-    display: flex; justify-content: space-between; padding: 0 56px 40px;
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
-    letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim);
+    position: absolute; left: 56px; right: 48px; bottom: 34px; z-index: 4;
+    display: flex; justify-content: space-between; align-items: center;
   }
-  .cov-foot .free { color: var(--gold); }
+  .cov-foot .site {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 30px;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  }
+  /* Barcode: the skeuomorphic tell. The price slot says FREE. */
+  .cov-code { display: flex; align-items: center; gap: 16px; }
+  .cov-code .bars {
+    width: 150px; height: 52px; background-color: #e8e2d2;
+    background-image: repeating-linear-gradient(90deg, #17140f 0 3px, transparent 3px 6px,
+        #17140f 6px 11px, transparent 11px 13px, #17140f 13px 15px, transparent 15px 21px);
+    border: 6px solid #e8e2d2; border-left-width: 10px; border-right-width: 10px;
+  }
+  .cov-code .price {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 44px;
+    color: var(--gold); letter-spacing: 0.04em;
+  }
 
   .xc-foot {
     display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
@@ -1818,31 +1852,35 @@ async function loadXCover() {
          ? `The other nine teams are in here too.`
          : `If he’s rostered in your league, he just made your paper.`)
 
+  const banner = params.get('banner')
+    || 'Your league’s own magazine · New issue every week'
+
   document.getElementById('safe').innerHTML = `
     <div class="cov">
       <div class="cov-mast">
-        <div class="word">The League Beat</div>
         <div class="cov-issue">${pool === 'league'
           ? `<span>${esc(cfg.name)}</span><b>Issue No. ${wk + 1}</b><span>Week ${wk}</span>`
           : `<span>Week ${wk}</span><b>The cover stories</b><span>Leagues everywhere</span>`}</div>
+        <div class="word">The League Beat</div>
       </div>
       <div class="cov-hero">
         <img src="https://sleepercdn.com/content/nfl/players/${star.id}.jpg" alt="">
-        <div class="cov-lines">
-          <div class="cov-kicker">The cover story</div>
-          <div class="cov-head">${esc(h1)}</div>
-          <div class="cov-deck">${esc(deck)}</div>
-        </div>
       </div>
-      <div class="cov-also">
-        <div class="cov-also-tag">Also inside</div>
-        ${also.map((p) => `
-          <div class="cov-also-row">
-            <span class="cov-also-face"><img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt="" onerror="this.remove()"></span>
-            <span class="cov-also-name"><b>${esc(p.name)}</b><span>+${p.diff.toFixed(1)} on the position</span></span>
-          </div>`).join('')}
+      ${also.map((p, i) => `
+        <div class="cov-tease ${i === 0 ? 'left' : 'right'}">
+          <span class="cov-tease-face"><img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt="" onerror="this.remove()"></span>
+          <span class="cov-tease-copy"><b>${esc(p.name)}</b><span>+${p.diff.toFixed(1)} on the position</span></span>
+        </div>`).join('')}
+      <div class="cov-lines">
+        <div class="cov-kicker">The cover story</div>
+        <div class="cov-head">${esc(h1)}</div>
+        <div class="cov-deck">${esc(deck)}</div>
       </div>
-      <div class="cov-foot"><span>theleaguebeat.com</span><span class="free">Free for your league</span></div>
+      <div class="cov-banner"><span>${esc(banner)}</span></div>
+      <div class="cov-foot">
+        <span class="site">theleaguebeat.com</span>
+        <span class="cov-code"><span class="bars"></span><span class="price">FREE</span></span>
+      </div>
     </div>`
 }
 
