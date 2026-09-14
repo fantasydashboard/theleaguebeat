@@ -35,6 +35,18 @@ export interface IssueRow {
   /** A face, when the row is about a person. Vertical format gives a
    *  row its own screen, and a name alone on a screen is thin. */
   imageUrl?: string
+  /** A chase, drawn rather than described. "14 from 8,000" is a
+   *  number a reader has to do arithmetic on; a bar at 99.8% is the
+   *  same fact felt instantly. Only for rows where `value` is a
+   *  target being approached. */
+  progress?: {
+    /** Where they stand. */
+    value: number
+    /** What they are chasing. */
+    target: number
+    /** True when this row IS the record rather than chasing one. */
+    held?: boolean
+  }
 }
 
 /** One team, presented on its own. */

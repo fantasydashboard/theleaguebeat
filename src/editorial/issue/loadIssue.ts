@@ -75,6 +75,28 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
   const coveredWeek = Math.max(...weeks)
 
 
+  // Careers as they stood BEFORE the covered week, so the record
+  // book can report what moved. `careerRecords` already includes the
+  // in-progress season (Sleeper's roster.settings.wins updates as
+  // weeks close), so the week is backed out of both wins and points
+  // using the results the issue already has.
+  const covered = data.previousWeekMatchups ?? []
+  const wonThisWeek = new Set<string>()
+  const scoredThisWeek = new Map<string, number>()
+  for (const m of covered) {
+    if (m.status !== 'final') continue
+    scoredThisWeek.set(m.homeTeamId, m.homePoints)
+    scoredThisWeek.set(m.awayTeamId, m.awayPoints)
+    if (m.homePoints !== m.awayPoints) {
+      wonThisWeek.add(m.homePoints > m.awayPoints ? m.homeTeamId : m.awayTeamId)
+    }
+  }
+  const careersBefore = (data.careerRecords ?? []).map((c) => ({
+    ...c,
+    wins: c.wins - (c.teamId && wonThisWeek.has(c.teamId) ? 1 : 0),
+    pointsFor: c.pointsFor - (c.teamId ? (scoredThisWeek.get(c.teamId) ?? 0) : 0),
+  }))
+
   return buildWeeklyIssue({
     leagueName: args.leagueName,
     season: data.currentSeason,
@@ -93,6 +115,9 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
     })),
     results: data.previousWeekMatchups,
     transactions: data.transactions,
+    careers: data.careerRecords,
+    careersBefore,
+    seasonsPlayed: (data.seasonHistory ?? []).length,
     previousPowerRank: (() => {
       const prior = previousPowerRanks(data)
       return prior ? (id: string) => prior.get(id) : undefined

@@ -307,6 +307,15 @@
               </span>
               <span class="issue-wire-copy">
                 <span class="issue-wire-name">{{ row.label }}</span>
+                <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
+                     bar at 99.8% is the same fact felt on sight. -->
+                <span v-if="row.progress" class="issue-chase">
+                  <span
+                    class="issue-chase-fill"
+                    :class="{ 'is-held': row.progress.held }"
+                    :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
+                  ></span>
+                </span>
                 <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
               </span>
               <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
@@ -4119,6 +4128,20 @@ function collectUserIdentity() {
 .issue-wire-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .issue-wire-name { font-weight: 700; }
 .issue-wire-sub { font-size: 0.78rem; color: oklch(0.62 0.01 90); }
+
+/* The chase bar. Deliberately thin: it is a feeling about how close
+   somebody is, not a chart to read values off. Gold while chasing,
+   pink once the row IS the record. */
+.issue-chase {
+  display: block; height: 4px; border-radius: 999px; margin: 0.35rem 0 0.3rem;
+  background: oklch(0.26 0.02 90); overflow: hidden;
+}
+.issue-chase-fill {
+  display: block; height: 100%; border-radius: 999px;
+  background: oklch(0.85 0.17 92);
+  transition: width 0.6s ease;
+}
+.issue-chase-fill.is-held { background: oklch(0.70 0.27 350); }
 .issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
 
 /* ── ISSUE SECTION DENSITY ──────────────────────────────────────────

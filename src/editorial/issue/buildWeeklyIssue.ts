@@ -24,6 +24,8 @@ import type { PointsPowerRow } from '../points/powerScore'
 import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
 import { buildWireFacts, describeCost, type WireFacts } from '../points/wireFacts'
 import { detectUpsets } from '../points/upsets'
+import { buildWeeklyRecordBook } from '../points/recordWatch'
+import type { CareerRecord } from '../points/recordBook'
 import type { LeagueTransaction } from '../transactions/types'
 import type { LeagueDataPointsMatchup } from '../types'
 import type { Issue, IssueCard, IssueRow, IssueSection } from './types'
@@ -56,6 +58,12 @@ export interface WeeklyIssueInput {
   transactions?: readonly LeagueTransaction[]
   /** Power ranking as of last week, for movement. */
   previousPowerRank?: (teamId: string) => number | undefined
+  /** Careers including the week just covered, and as they stood
+   *  before it — the record book needs both tenses. */
+  careers?: readonly CareerRecord[]
+  careersBefore?: readonly CareerRecord[]
+  /** Completed seasons behind this one. */
+  seasonsPlayed?: number
   teamName: (teamId: string) => string
   team?: (teamId: string) => WeeklyIssueTeam | undefined
   playerImage?: (playerId: string) => string | null | undefined
@@ -159,6 +167,49 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
       `The board gets a rewrite this week.`,
     rows,
     priority: 15,
+  }
+}
+
+/**
+ * The record book: what moved on Sunday, what is close next week.
+ *
+ * PRIORITY IS DYNAMIC. A record that actually changed hands is news
+ * and sits above the rankings; a chase or a milestone is a preview
+ * and sits below the trades. The same section earns a different slot
+ * depending on whether it is reporting or forecasting, which is the
+ * honest way to rank it against everything else on the page.
+ */
+function recordSection(input: WeeklyIssueInput): IssueSection | null {
+  if (!input.careers || !input.careersBefore) return null
+  const notes = buildWeeklyRecordBook({
+    careers: input.careers,
+    before: input.careersBefore,
+    seasonsPlayed: input.seasonsPlayed ?? 0,
+  })
+  if (notes.length === 0) return null
+
+  const lead = notes[0]
+  const moved = lead.kind === 'moved'
+  const rows: IssueRow[] = notes.map((n) => ({
+    label: n.teamId ? input.teamName(n.teamId) : n.headline,
+    value: n.headline,
+    sub: n.detail,
+    progress: n.progress,
+    ...(n.teamId ? visual(input, n.teamId) : {}),
+  }))
+
+  return {
+    id: 'record-book',
+    eyebrow: 'The record book',
+    headline: moved
+      ? `${input.teamName(lead.teamId ?? '')} moved the all-time record.`
+      : lead.detail.split('.')[0] + '.',
+    support: moved
+      ? 'The league has a new line in its history, and it happened on Sunday.'
+      : 'Nothing here is a forecast about football. These are numbers already ' +
+        'on the board, close enough to move inside a week.',
+    rows,
+    priority: moved ? 18 : 35,
   }
 }
 
@@ -399,6 +450,7 @@ export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
   const sections = [
     resultsSection(input),
     upsetSection(input),
+    recordSection(input),
     powerSection(input),
     playoffSection(input),
     tradesSection(input, wire),
