@@ -247,7 +247,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
         matchupId: m.id,
         left: side(leaderId, leaderPts, !tied),
         right: side(trailerId, trailerPts, false),
-        sub: `${watch.gap} spots up the board · ${story}`,
+        sub: story,
         watch: watch.level,
       }
     }
@@ -301,7 +301,7 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       matchupId: m.id,
       left: side(winnerId, winnerPts, true, 'win'),
       right: side(loserId, loserPts, false, 'loss'),
-      sub: climbed ? `${climbed.gap} spots up the board · ${sub}` : sub,
+      sub,
       watch: climbed ? (climbed.heist ? 'heist' : 'upset') : undefined,
     }
   })
