@@ -2256,6 +2256,29 @@ function buildSleeperCurrentWeekMatchups(
 }
 
 /**
+ * Current week's starting lineups, by team id.
+ *
+ * Sleeper publishes no per-matchup projection, so this is what lets
+ * the Monday desk work out how much football a side has left (see
+ * `points/liveRemaining.ts`). Rosters with no `starters` array are
+ * omitted rather than given an empty lineup — "nobody left to play"
+ * and "we cannot read the lineup" must not look the same.
+ */
+function buildSleeperCurrentWeekStarters(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  currentWeek: number,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const m of matchupsByWeek[String(currentWeek)] ?? []) {
+    const starters = (m.starters ?? []).filter(
+      (id): id is string => typeof id === 'string' && !!id && id !== '0',
+    )
+    if (starters.length > 0) out[String(m.roster_id)] = starters
+  }
+  return out
+}
+
+/**
  * Previous week's matchups, unconditionally stamped 'final'. Unlike
  * the current week (which can't be honestly called closed from
  * per-roster point totals — see `weekMatchupStatus` above), a
@@ -2381,6 +2404,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     currentWeek,
     league.status === 'complete',
   )
+  const currentWeekStarters = buildSleeperCurrentWeekStarters(matchupsByWeek, currentWeek)
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
@@ -2411,6 +2435,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     regularSeasonEndWeek,
     teams,
     currentWeekMatchups,
+    currentWeekStarters,
     previousWeekMatchups,
     weeklyPointsAverage,
     standings,

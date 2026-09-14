@@ -607,6 +607,13 @@ export interface LeagueDataH2HPoints {
    *  them) degrade gracefully to the unsupported panel pattern. */
   currentWeekMatchups?: LeagueDataPointsMatchup[]
 
+  /** Current week's starting lineups, by team id. Lets the Monday
+   *  desk work out what each side still has coming (see
+   *  `points/liveRemaining.ts`) on platforms that publish no
+   *  per-matchup projection of their own. Optional: without it the
+   *  desk degrades to silence rather than guessing. */
+  currentWeekStarters?: Record<string, string[]>
+
   /** Previous week's matchups in finalized state. Drives Monday-
    *  morning recap framing on the Matchups page; absent on early-
    *  season visits. */

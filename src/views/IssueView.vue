@@ -950,7 +950,11 @@ import { categoriesFixtureToLeagueData } from '@/editorial/fixtureAdapter'
 import { sleeperLeagueToCategoryData } from '@/editorial/adapters/sleeperAdapter'
 import { espnLeagueToCategoryData } from '@/editorial/adapters/espnAdapter'
 import { yahooLeagueToCategoryData } from '@/editorial/adapters/yahooAdapter'
-import type { CategoryLeagueData, LeagueDataH2HPoints } from '@/editorial/types'
+import type {
+  CategoryLeagueData,
+  LeagueDataH2HPoints,
+  LeagueDataPointsMatchup,
+} from '@/editorial/types'
 import {
   renderPointsMatchupsPage,
   type RenderedPointsMatchupsCopy,
@@ -970,6 +974,13 @@ import ShareCard from '@/components/issue/ShareCard.vue'
 import MondayDesk from '@/components/issue/MondayDesk.vue'
 import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
 import { computePointsPowerScores } from '@/editorial/points/powerScore'
+import {
+  teamsStillPlaying,
+  buildRemainingIndex,
+  projectSides,
+  scheduleUrl,
+} from '@/editorial/points/liveRemaining'
+import { projectionsUrl } from '@/editorial/points/sleeperProjections'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
@@ -1303,7 +1314,10 @@ const mondayDesk = computed(() => {
   )
 
   return buildMondayDesk({
-    matchups: d.currentWeekMatchups ?? [],
+    // Hydrated matchups when the lazy fetch has landed, raw otherwise.
+    // On Sleeper the raw ones carry no projection, so the desk stays
+    // silent until `liveProjected` arrives rather than guessing.
+    matchups: liveProjected.value ?? d.currentWeekMatchups ?? [],
     priorPointsPerWeek: (id) => {
       const t = totals.get(id)
       return t && t.n > 0 ? t.sum / t.n : undefined
@@ -1314,6 +1328,47 @@ const mondayDesk = computed(() => {
     team: (id) => lookupTeam(id),
   })
 })
+
+/**
+ * Current-week matchups with a projected final per side.
+ *
+ * Lazy and best-effort: the projections payload is large, and the
+ * desk is the only thing that wants it in season, so the page never
+ * waits on this. Failure leaves the ref null and the desk simply
+ * does not appear — the same outcome as a platform that publishes
+ * no lineups.
+ */
+const liveProjected = ref<LeagueDataPointsMatchup[] | null>(null)
+let projSeq = 0
+
+async function hydrateLiveProjections() {
+  liveProjected.value = null
+  const d = livePointsData.value
+  const starters = d?.currentWeekStarters
+  if (!d || !starters || Object.keys(starters).length === 0) return
+  // Nothing in flight means nothing to project.
+  if (!(d.currentWeekMatchups ?? []).some((m) => m.status === 'live')) return
+
+  const token = ++projSeq
+  try {
+    const [schedule, projections] = await Promise.all([
+      fetch(scheduleUrl(d.currentSeason)).then((r) => (r.ok ? r.json() : [])),
+      fetch(projectionsUrl(Number(d.currentSeason))).then((r) => (r.ok ? r.json() : [])),
+    ])
+    if (token !== projSeq) return
+    const remaining = buildRemainingIndex(
+      Array.isArray(projections) ? projections : [],
+      teamsStillPlaying(Array.isArray(schedule) ? schedule : [], d.currentWeek),
+    )
+    liveProjected.value = projectSides({
+      matchups: d.currentWeekMatchups ?? [],
+      startersByTeam: starters,
+      remainingFor: remaining,
+    })
+  } catch {
+    // Offline or rate-limited. The desk stays away.
+  }
+}
 
 const hasLiveDeck = computed(() => {
   const d = livePointsData.value
@@ -2649,6 +2704,9 @@ async function loadIssue() {
       if (superseded()) return
       livePointsData.value = adapted
       livePointsEditorial.value = renderPointsMatchupsPage(adapted)
+      // Fire and forget: the desk fills in a beat later, and the page
+      // never waits on the projections payload.
+      void hydrateLiveProjections()
       if (leagueRowId && adapted.leagueName) {
         void leaguesStore.maybeBackfillLeagueName(leagueRowId, adapted.leagueName)
       }
