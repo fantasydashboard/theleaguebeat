@@ -135,6 +135,11 @@
         </div>
       </section>
 
+      <!-- The Monday desk: live endgame, only while the week is
+           split. Authenticated page only — the desk describes a
+           moment, and every archived surface describes a week. -->
+      <MondayDesk v-if="mondayDesk" :desk="mondayDesk" />
+
       <!-- Share. Sleeper only: a public reader has none of the
            cookies the ESPN and Yahoo adapters need, so those links
            were already failing for everyone but the person who made
@@ -962,6 +967,9 @@ import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { presentEnabled } from '@/composables/usePresentMode'
 import UfdHandoff from '@/components/issue/UfdHandoff.vue'
 import ShareCard from '@/components/issue/ShareCard.vue'
+import MondayDesk from '@/components/issue/MondayDesk.vue'
+import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
+import { computePointsPowerScores } from '@/editorial/points/powerScore'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
@@ -1269,6 +1277,44 @@ const pointsSeasonStarted = computed(
  * "are there games?" rule — so the button and the deck can never
  * disagree, and nobody clicks through to an empty presentation.
  */
+/**
+ * The Monday desk: the week's endgame, above the fold while the week
+ * is split. Ephemeral — assembled from live matchups on every open,
+ * part of no snapshot. Gates itself on evidence (some games decided,
+ * some alive), so no weekday check appears here.
+ */
+const mondayDesk = computed(() => {
+  const d = livePointsData.value
+  if (!d) return null
+
+  // Pregame record for the watch pill: all completed weeks. The
+  // in-flight week is never in weeklyScores, so no exclusion needed.
+  const scores = d.weeklyScores ?? []
+  const priorWeeks = new Set(scores.map((s) => s.week)).size
+  const totals = new Map<string, { sum: number; n: number }>()
+  for (const s of scores) {
+    const t = totals.get(s.teamId) ?? { sum: 0, n: 0 }
+    t.sum += s.points
+    t.n += 1
+    totals.set(s.teamId, t)
+  }
+  const rank = new Map(
+    computePointsPowerScores(d).map((p, i) => [p.teamId, i + 1]),
+  )
+
+  return buildMondayDesk({
+    matchups: d.currentWeekMatchups ?? [],
+    priorPointsPerWeek: (id) => {
+      const t = totals.get(id)
+      return t && t.n > 0 ? t.sum / t.n : undefined
+    },
+    priorWeeks,
+    priorRank: (id) => rank.get(id),
+    teamName: (id) => lookupTeam(id).name,
+    team: (id) => lookupTeam(id),
+  })
+})
+
 const hasLiveDeck = computed(() => {
   const d = livePointsData.value
   if (!d) return false
