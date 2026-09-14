@@ -634,6 +634,39 @@
   }
   .xhl-over { font-size: 21px; color: var(--dim); font-weight: 600; line-height: 1.25; }
 
+  /* ── X Monday night ─────────────────────────────────────────
+     The sweat card: who is still to play, and the line each of
+     them is expected to hit. */
+  .mnf-row {
+    display: flex; align-items: center; gap: 26px; position: relative;
+    background: var(--panel); border-radius: 16px; padding: 12px 30px 12px 16px;
+    flex: 1; min-height: 0; overflow: hidden;
+  }
+  .mnf-face {
+    width: 120px; height: 96px; flex: none; border-radius: 12px; overflow: hidden;
+    background: radial-gradient(80% 90% at 50% 100%, oklch(0.26 0.05 92 / 0.9), oklch(0.15 0.012 90));
+    display: grid; place-items: center;
+  }
+  .mnf-face img { width: 100%; height: 130%; object-fit: cover; object-position: top; }
+  .mnf-lines { flex: 1; min-width: 0; }
+  .mnf-lines b {
+    display: block; font-size: 38px; font-weight: 800; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mnf-lines span {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px;
+    color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .mnf-stat { flex: none; text-align: right; }
+  .mnf-stat b {
+    display: block; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 54px; line-height: 1; color: var(--gold);
+  }
+  .mnf-stat i {
+    display: block; font-style: normal; font-size: 18px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--dim); margin-top: 4px;
+  }
+
   /* ── The cover ──────────────────────────────────────────────
      A real front page, with the tells that make a cover read as a
      COVER: the subject breaking in front of the masthead, cover
@@ -1821,6 +1854,65 @@ async function loadXHeadliners() {
 }
 
 /**
+ * Monday night's sweat card: the biggest names still to play, and
+ * the line each is expected to hit.
+ *
+ *   ?view=x-mnf            (&wk=N to override; defaults to the live week)
+ *
+ * "The line" is the same basis as every other card in this file —
+ * season projection per week, half-PPR — so no two graphics can
+ * quote different numbers for the same player. Matchups come from
+ * the real schedule: any game this week dated a Monday.
+ */
+async function loadXMnf() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  await rankedTeams(cfg)                      // primes _prCache
+  const [league, , , proj] = _prCache[cfg.id]
+  const state = await fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json())
+  const wk = Number(params.get('wk') || state.week || 1)
+
+  const sched = await fetch(
+    `https://api.sleeper.app/schedule/nfl/regular/${league.season}`,
+  ).then((r) => r.json())
+  // Date-only strings parse as UTC midnight; getUTCDay is stable.
+  const monday = sched.filter(
+    (g) => g.week === wk && new Date(g.date).getUTCDay() === 1,
+  )
+  const gameByTeam = {}
+  for (const g of monday) {
+    gameByTeam[g.home] = `${g.away} @ ${g.home}`
+    gameByTeam[g.away] = `${g.away} @ ${g.home}`
+  }
+
+  const players = proj
+    .filter((r) => r.player?.team && gameByTeam[r.player.team])
+    .map((r) => ({
+      id: String(r.player_id),
+      name: [r.player.first_name, r.player.last_name].filter(Boolean).join(' '),
+      pos: r.player.position,
+      game: gameByTeam[r.player.team],
+      line: (r.stats?.pts_half_ppr ?? 0) / 17,
+    }))
+    .sort((a, b) => b.line - a.line)
+    .slice(0, Number(params.get('rows') || 5))
+
+  const rows = players.map((p) => `
+    <div class="mnf-row">
+      <span class="mnf-face"><img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt=""
+        onerror="this.remove()"></span>
+      <span class="mnf-lines"><b>${esc(p.name)}</b><span>${esc(p.game)} · ${esc(p.pos)}</span></span>
+      <span class="mnf-stat"><b>${p.line.toFixed(1)}</b><i>the line</i></span>
+    </div>`).join('')
+
+  document.getElementById('safe').innerHTML = xcShell({
+    league: params.get('league') || 'Leagues everywhere',
+    title: params.get('title') || 'What do you need tonight?',
+    when: params.get('when') || `Week ${wk} · Monday night`,
+    rows,
+  })
+}
+
+/**
  * The front page as a poster: the week's top headliner IS the cover.
  *
  *   ?view=x-cover&wk=1
@@ -1917,6 +2009,7 @@ function fit() {
     else if (view === 'x-matchups') await loadXMatchups()
     else if (view === 'x-headliners') await loadXHeadliners()
     else if (view === 'x-cover') await loadXCover()
+    else if (view === 'x-mnf') await loadXMnf()
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
