@@ -106,7 +106,12 @@ defineProps<{ desk: MondayDesk }>()
               </span>
             </span>
           </span>
-          <span class="desk-story">{{ r.sub }}</span>
+          <span class="desk-story">
+            <span v-if="r.watch" class="desk-pill" :class="`is-${r.watch}`">
+              {{ r.watch === 'heist' ? 'Heist' : 'Upset' }}
+            </span>
+            {{ r.sub }}
+          </span>
         </li>
       </ul>
     </div>

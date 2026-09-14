@@ -94,21 +94,27 @@ export interface MondayDesk {
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-/** Effectively over: final, near-certain, or the trailer cannot get
- *  there even hitting their whole remaining projection. */
+/**
+ * Over, in the only sense that survives contact with a Sunday:
+ * the game is final, or the trailing side has nobody left to play.
+ *
+ * An earlier version also retired games the trailer "could not"
+ * win — needing 18.9 with 10.9 projected. A projection is not a
+ * ceiling. Players beat their line by triple every week, and a desk
+ * that buries a game because the model dislikes it is telling a
+ * reader the thing they came to check is already settled when it
+ * is not. If somebody is still on the field, the game is live.
+ */
 function isDecided(m: LeagueDataPointsMatchup): boolean {
   if (m.status === 'final') return true
   if (m.status === 'upcoming') return false
-  const margin = Math.abs(m.homePoints - m.awayPoints)
-  if (margin === 0) return false
-  const prob = Math.max(m.homeWinProb ?? 0, m.awayWinProb ?? 0)
-  if (prob >= 0.97) return true
+  if (m.homePoints === m.awayPoints) return false
   const trailerHasHome = m.homePoints < m.awayPoints
   const trailerPoints = trailerHasHome ? m.homePoints : m.awayPoints
   const trailerProjected = trailerHasHome ? m.homeProjected : m.awayProjected
   if (trailerProjected === undefined) return false
-  const trailerRemaining = Math.max(0, trailerProjected - trailerPoints)
-  return trailerRemaining < margin
+  // Nothing left to come: the score cannot move.
+  return Math.max(0, trailerProjected - trailerPoints) === 0
 }
 
 export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
@@ -259,6 +265,9 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
     const loserProjected = homeWon ? m.awayProjected : m.homeProjected
     const loserLeft =
       loserProjected !== undefined ? Math.max(0, round1(loserProjected - loserPts)) : undefined
+    const climbed = input.priorRank && input.fieldSize
+      ? upsetGap(input.priorRank(winnerId), input.priorRank(loserId), input.fieldSize)
+      : undefined
 
     // A final needs no explanation. A game that is merely over needs
     // the arithmetic that makes it over.
@@ -275,24 +284,32 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       matchupId: m.id,
       left: side(winnerId, winnerPts, true, 'win'),
       right: side(loserId, loserPts, false, 'loss'),
-      sub,
+      sub: climbed
+        ? `No. ${input.priorRank!(winnerId)} beat No. ${input.priorRank!(loserId)} · ${sub}`
+        : sub,
+      watch: climbed ? (climbed.heist ? 'heist' : 'upset') : undefined,
     }
   })
 
   // The headline promotes the live upset when there is one; otherwise
   // it counts what is left and lets the rows tell each story once.
   const lead = alive[0]
+  const settled = decided.find((r) => r.watch)
   const headline = lead.watch
     ? lead.watch === 'heist'
       ? 'A heist is live.'
       : 'An upset is live.'
-    : `${alive.length} game${alive.length === 1 ? '' : 's'} still alive.`
+    : settled
+      ? `${settled.left.name} took one down.`
+      : `${alive.length} game${alive.length === 1 ? '' : 's'} still alive.`
   const best = [...decided, ...alive]
     .flatMap((r) => [r.left, r.right])
     .sort((a, b) => b.points - a.points)[0]
   const support = lead.watch
     ? `${lead.left.name} lead ${lead.right.name}. ${lead.sub}.`
-    : `${decided.length} decided. ${best.name} lead the week on ${best.points}.`
+    : settled
+      ? `${settled.sub}. ${best.name} lead the week on ${best.points}.`
+      : `${decided.length} decided. ${best.name} lead the week on ${best.points}.`
 
   return { headline, support, alive, decided }
 }

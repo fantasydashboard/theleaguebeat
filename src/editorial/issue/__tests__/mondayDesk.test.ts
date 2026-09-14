@@ -37,20 +37,37 @@ describe('the desk gate', () => {
     expect(buildMondayDesk({ matchups: [], teamName: names })).toBeNull()
   })
 
-  it('treats a lead bigger than the trailer has left as decided', () => {
-    // c leads by 30 and d projects 8 more. Status says live; the
-    // scoreboard says over.
+  it('keeps a game alive while anybody is still on the field', () => {
+    // c leads by 30 and d projects only 8 more. A projection is not a
+    // ceiling — players triple their line every week — so this stays
+    // in the live list. Retiring it would tell a reader the thing
+    // they came to check is settled when it is not.
     const desk = buildMondayDesk({
       matchups: [
-        m('cooked', 'c', 'd', {
+        split[0],
+        m('longshot', 'c', 'd', {
           homePoints: 120, awayPoints: 90,
           homeProjected: 121, awayProjected: 98,
+        }),
+      ],
+      teamName: names,
+    })!
+    expect(desk.alive.map((r) => r.matchupId)).toContain('longshot')
+    expect(desk.decided.map((r) => r.matchupId)).toEqual(['done'])
+  })
+
+  it('retires a game only when the trailer has nobody left', () => {
+    const desk = buildMondayDesk({
+      matchups: [
+        m('over', 'c', 'd', {
+          homePoints: 120, awayPoints: 90,
+          homeProjected: 124, awayProjected: 90,
         }),
         split[1],
       ],
       teamName: names,
     })!
-    expect(desk.decided.map((r) => r.matchupId)).toContain('cooked')
+    expect(desk.decided.map((r) => r.matchupId)).toContain('over')
     expect(desk.alive.map((r) => r.matchupId)).toEqual(['alive'])
   })
 })
@@ -209,31 +226,66 @@ describe('the done-and-dusted rows', () => {
     expect(desk.alive[0].right.record).toBe('0-3')
   })
 
-  it('explains a locked game with the arithmetic that locked it', () => {
+  it('says plainly that the trailer had nothing left', () => {
     const desk = buildMondayDesk({
-      matchups: [
-        m('cooked', 'c', 'd', {
-          homePoints: 120, awayPoints: 90,
-          homeProjected: 121, awayProjected: 98,
-        }),
-        split[1],
-      ],
-      teamName: names,
-    })!
-    const locked = desk.decided.find((r) => r.matchupId === 'cooked')!
-    expect(locked.sub).toBe('Team d need 30 with 8 left')
-    // A side with nothing at all left gets the shorter sentence, so
-    // four locked games do not read as one template.
-    const none = buildMondayDesk({
       matchups: [
         m('over', 'c', 'd', {
           homePoints: 120, awayPoints: 90,
-          homeProjected: 120, awayProjected: 90,
+          homeProjected: 124, awayProjected: 90,
         }),
         split[1],
       ],
       teamName: names,
     })!
-    expect(none.decided.find((r) => r.matchupId === 'over')!.sub).toBe('Nothing left for Team d')
+    expect(desk.decided.find((r) => r.matchupId === 'over')!.sub).toBe('Nothing left for Team d')
+    // A final says so instead.
+    expect(desk.decided.find((r) => r.matchupId === 'done')).toBeUndefined()
+  })
+})
+
+describe('an upset that already landed', () => {
+  // The real week 1: OverDrive were eighth and beat the second-ranked
+  // Mallards. That is an upset whether or not the night is over.
+  const board: Record<string, number> = { overdrive: 8, mallards: 2, c: 3, d: 4 }
+  const landed = [
+    m('upset', 'overdrive', 'mallards', {
+      status: 'final', homePoints: 144, awayPoints: 112.3,
+    }),
+    split[1],
+  ]
+
+  it('carries the pill into done and dusted, with the climb named', () => {
+    const desk = buildMondayDesk({
+      matchups: landed,
+      teamName: names,
+      priorRank: (id) => board[id],
+      fieldSize: 10,
+    })!
+    const row = desk.decided.find((r) => r.matchupId === 'upset')!
+    expect(row.watch).toBe('upset')
+    expect(row.sub).toContain('No. 8 beat No. 2')
+  })
+
+  it('leads the desk when no upset is live', () => {
+    const desk = buildMondayDesk({
+      matchups: landed,
+      teamName: names,
+      priorRank: (id) => board[id],
+      fieldSize: 10,
+    })!
+    expect(desk.headline).toBe('Team overdrive took one down.')
+  })
+
+  it('still yields the headline to one in progress', () => {
+    const desk = buildMondayDesk({
+      matchups: [
+        landed[0],
+        m('live', 'd', 'c', { homePoints: 95, awayPoints: 90, homeProjected: 99, awayProjected: 101 }),
+      ],
+      teamName: names,
+      priorRank: (id) => ({ ...board, d: 6, c: 1 }[id]),
+      fieldSize: 10,
+    })!
+    expect(desk.headline).toBe('An upset is live.')
   })
 })
