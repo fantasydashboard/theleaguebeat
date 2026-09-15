@@ -462,6 +462,13 @@ describe('a week in progress is not a week that happened', () => {
   const thursdayNight = (): Parameters<typeof buildSleeperPointsData>[0] => {
     const base = JSON.parse(JSON.stringify(raw))
     base.league.settings.leg = 1 // Sleeper's own current week
+    // On the Thursday of week one nobody has a record yet. The shared
+    // fixture carries a mid-season one, and leaving it here modelled a
+    // league that had somehow played fourteen games in week one — which
+    // is exactly the contradiction the current-week logic reads.
+    for (const r of base.rosters) {
+      r.settings = { ...r.settings, wins: 0, losses: 0, ties: 0 }
+    }
     const rosterIds: number[] = base.rosters.map((r: { roster_id: number }) => r.roster_id)
     base.matchupsByWeek = {
       '1': rosterIds.map((roster_id, i) => ({
@@ -494,5 +501,21 @@ describe('a week in progress is not a week that happened', () => {
     const week1 = out.weeklyScores!.filter((s) => s.week === 1)
     // Every roster, including the ones the old zero-filter would drop.
     expect(week1).toHaveLength(closed.rosters.length)
+  })
+
+  it('counts week one when the records say so and Sleeper has not caught up', () => {
+    // THE REAL TUESDAY. Sleeper had the NFL on week 2, every week-one
+    // result final and written to the rosters — and left the LEAGUE's
+    // `leg` on 1. Reading leg alone meant zero closed weeks, so the
+    // site served the preseason issue a day into the season.
+    const settled = thursdayNight()
+    settled.league.settings.leg = 1        // Sleeper, still behind
+    settled.rosters.forEach((r, i) => {
+      r.settings = { ...r.settings, wins: i % 2 === 0 ? 1 : 0, losses: i % 2 === 0 ? 0 : 1 }
+    })
+    const out = buildSleeperPointsData(settled)
+    expect(out.currentWeek).toBe(2)
+    expect(out.weeklyScores!.filter((s) => s.week === 1)).toHaveLength(settled.rosters.length)
+    expect(hasCompletedWeek(out)).toBe(true)
   })
 })

@@ -2237,6 +2237,44 @@ function weekMatchupStatus(
  *  flag says so and 'live' the rest of the time — the current week
  *  can never be honestly called closed from per-roster point totals
  *  alone (see `weekMatchupStatus`'s doc comment). */
+/**
+ * Completed weeks, read from the rosters' own records.
+ *
+ * Sleeper writes W/L/T only when a week finalises, so the total
+ * decided results divided by the field IS the number of weeks that
+ * have closed. Unlike `league.settings.leg` this cannot lag: it is
+ * written by the same event it describes.
+ */
+export function completedWeeksFromRecords(
+  rosters: readonly { settings?: { wins?: number; losses?: number; ties?: number } }[],
+): number {
+  if (rosters.length === 0) return 0
+  const decided = rosters.reduce(
+    (t, r) => t + (r.settings?.wins ?? 0) + (r.settings?.losses ?? 0) + (r.settings?.ties ?? 0),
+    0,
+  )
+  return Math.floor(decided / rosters.length)
+}
+
+/**
+ * The week this league is on.
+ *
+ * WHY NOT JUST `leg`. On the Tuesday after week one Sleeper had the
+ * NFL on week 2 with every result final — records written, points
+ * banked — while the LEAGUE's `settings.leg` still read 1. Deriving
+ * closed weeks from leg therefore produced zero of them, and the site
+ * served the preseason issue a day into the season.
+ *
+ * So take whichever source says the season is further along: leg,
+ * which can lead during byes, or the records, which cannot lag.
+ */
+export function sleeperCurrentWeek(
+  leg: number | undefined,
+  rosters: readonly { settings?: { wins?: number; losses?: number; ties?: number } }[],
+): number {
+  return clampWeek(Math.max(leg ?? 1, completedWeeksFromRecords(rosters) + 1))
+}
+
 function buildSleeperCurrentWeekMatchups(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   currentWeek: number,
@@ -2362,7 +2400,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     )
   }
   const currentSeason = seasonNum
-  const currentWeek = clampWeek(league.settings?.leg ?? 1)
+  const currentWeek = sleeperCurrentWeek(league.settings?.leg, raw.rosters)
 
   // Sleeper returns 0 for playoff_week_start when the commissioner
   // never configured playoffs — that means "not configured", not "no
@@ -2477,7 +2515,7 @@ export async function sleeperLeagueToPointsData(
     throw new Error(`Sleeper league ${leagueId} not found or has no rosters`)
   }
 
-  const currentWeek = clampWeek(league.settings?.leg ?? 1)
+  const currentWeek = sleeperCurrentWeek(league.settings?.leg, rosters)
   const matchupsByWeek = await fetchAllMatchupsAsRecord(leagueId, currentWeek)
 
   // Draft and bracket in parallel — independent of each other and of
