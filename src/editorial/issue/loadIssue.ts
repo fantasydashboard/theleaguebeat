@@ -43,10 +43,10 @@ export interface LoadIssueArgs {
   /** All-time series records. Arrives lazily; the issue is richer
    *  when it lands and correct without it. */
   headToHead?: HeadToHead
-  /** Preseason projected strength per team. Regresses a thin sample
-   *  toward what was expected, so week one is a ranking rather than
-   *  a scoreboard. */
-  priorStrength?: (teamId: string) => number | undefined
+  /** What each team's CURRENT roster projects to score in a week.
+   *  The board blends it with results, so it reads what a team has
+   *  done AND what it is now capable of. */
+  projectedStrength?: (teamId: string) => number | undefined
 }
 
 /** Whether a week has actually finished, which is what the weekly
@@ -81,7 +81,7 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
 
   // In season everything the issue needs is already on the contract —
   // no projections fetch, so this resolves immediately.
-  const power = computePointsPowerScores(data, { priorStrength: args.priorStrength })
+  const power = computePointsPowerScores(data, { projectedStrength: args.projectedStrength })
   const weeks = [...new Set((data.weeklyScores ?? []).map((s) => s.week))]
   const coveredWeek = Math.max(...weeks)
 

@@ -2210,7 +2210,7 @@ async function rebuildIssue() {
       ? (id: string) => projectionBoard.value?.get(id)
       : undefined,
     headToHead: headToHead.value ?? undefined,
-    priorStrength: projectionStrength.value
+    projectedStrength: projectionStrength.value
       ? (id: string) => projectionStrength.value?.get(id)
       : undefined,
     teamName: (id) => lookupTeam(id).name,

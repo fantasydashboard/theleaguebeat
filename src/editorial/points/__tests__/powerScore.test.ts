@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildAllPlay,
   computePointsPowerScores,
+  projectionWeightFor,
   POWER_WEIGHTS,
 } from '../powerScore'
 import { buildSleeperPointsData } from '@/editorial/adapters/sleeperAdapter'
@@ -215,44 +216,51 @@ describe('power score across real leagues', () => {
   }
 })
 
-describe('the preseason prior', () => {
+describe('what a roster projects, against what it has done', () => {
   const weekly = (weeks: number): PointsWeeklyScore[] => {
     const out: PointsWeeklyScore[] = []
     for (let w = 1; w <= weeks; w++) {
-      out.push({ teamId: 'projectedBest', week: w, points: 80 })
-      out.push({ teamId: 'projectedWorst', week: w, points: 120 })
+      out.push({ teamId: 'loadedRoster', week: w, points: 80 })
+      out.push({ teamId: 'thinRoster', week: w, points: 120 })
     }
     return out
   }
-  const prior = (id: string) => ({ projectedBest: 130, projectedWorst: 90 })[id]
+  /** The loaded roster projects well and is scoring badly. */
+  const projected = (id: string) => ({ loadedRoster: 130, thinRoster: 90 })[id]
+  const gap = (rows: ReturnType<typeof computePointsPowerScores>) =>
+    rows.find((r) => r.teamId === 'thinRoster')!.score -
+    rows.find((r) => r.teamId === 'loadedRoster')!.score
 
-  it('does not touch the board when no prior is supplied', () => {
+  it('does not touch the board when no projection is supplied', () => {
     // The guard this pins: weighting by zero multiplied an undefined
-    // prior, NaN'd the blend and clamped every score to 0.
+    // projection, NaN'd the blend and clamped every score to 0.
     const rows = computePointsPowerScores(leagueOf(weekly(4)))
     expect(rows.every((r) => r.score > 0)).toBe(true)
   })
 
-  it('leans on the projection while one week is all there is', () => {
-    // Every component is results-based, so after one game the board is
-    // just "who scored most on Sunday" — a team projected first and
-    // held to a bad week fell to eighth on one result.
-    const rows = computePointsPowerScores(leagueOf(weekly(1)), { priorStrength: prior })
-    const best = rows.find((r) => r.teamId === 'projectedBest')!
-    const worst = rows.find((r) => r.teamId === 'projectedWorst')!
-    // Outscored 80 to 120 and still close, because the projection is
-    // carrying two thirds of the weight in week one.
-    expect(worst.score - best.score).toBeLessThan(30)
+  it('carries the board while one week is all the evidence there is', () => {
+    // Every results component reads the same single game, so without
+    // this the board is "who scored most on Sunday" — a team projected
+    // first and held to one bad week fell to eighth on it.
+    const rows = computePointsPowerScores(leagueOf(weekly(1)), { projectedStrength: projected })
+    expect(gap(rows)).toBeLessThan(30)
   })
 
-  it('lets the results win once there are results', () => {
-    const early = computePointsPowerScores(leagueOf(weekly(1)), { priorStrength: prior })
-    const later = computePointsPowerScores(leagueOf(weekly(10)), { priorStrength: prior })
-    const gapAt = (rows: ReturnType<typeof computePointsPowerScores>) =>
-      rows.find((r) => r.teamId === 'projectedWorst')!.score -
-      rows.find((r) => r.teamId === 'projectedBest')!.score
-    // The team actually outscoring everybody pulls further clear as
-    // the projection fades.
-    expect(gapAt(later)).toBeGreaterThan(gapAt(early))
+  it('gives way to results as results accumulate', () => {
+    expect(gap(computePointsPowerScores(leagueOf(weekly(6)), { projectedStrength: projected })))
+      .toBeGreaterThan(
+        gap(computePointsPowerScores(leagueOf(weekly(1)), { projectedStrength: projected })),
+      )
+  })
+
+  it('never stops counting, because a roster is not fixed', () => {
+    // A preseason prior that decays to nothing cannot say "this team
+    // traded for a stud in November". The projection is the current
+    // roster, and it keeps a quarter of the weight forever.
+    const late = computePointsPowerScores(leagueOf(weekly(14)), { projectedStrength: projected })
+    const resultsOnly = computePointsPowerScores(leagueOf(weekly(14)))
+    expect(gap(late)).toBeLessThan(gap(resultsOnly))
+    expect(projectionWeightFor(14)).toBeCloseTo(0.25, 5)
+    expect(projectionWeightFor(1)).toBeCloseTo(2 / 3, 5)
   })
 })

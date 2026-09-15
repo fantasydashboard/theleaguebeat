@@ -34,30 +34,41 @@ export const POWER_WEIGHTS = {
 const RECENT_WEEKS = 3
 
 /**
- * How stubbornly the preseason projection holds on.
+ * How much of the board is what a roster PROJECTS to do, against what
+ * it has already done.
  *
- * WHY THERE IS A PRIOR AT ALL. Every component above is computed from
- * results, so after ONE week all four say the same thing and the
- * board is simply "who scored most on Sunday". A team projected first
- * and held to 112 fell to eighth on a single game, which is not a
- * power ranking — it is a scoreboard wearing one. Real rankings
- * regress a small sample toward what was expected, and let the
- * expectation fade as evidence arrives.
+ * WHY PROJECTION IS A STANDING COMPONENT, not a preseason prior that
+ * fades to nothing. The four components above are all computed from
+ * results, so after one week they say the same thing and the board is
+ * simply "who scored most on Sunday" — a team projected first and
+ * held to 112 fell to eighth on a single game. But the answer is not
+ * merely to regress early and forget: a fantasy roster is not fixed.
+ * Waivers, trades and injuries change what a team is capable of every
+ * week, and in November "this roster is now the best in the league"
+ * is real information that results from September cannot carry.
  *
- * The weight is k / (k + weeks): two thirds in week one, a third by
- * week four, a tenth by week nine. By mid-season the projection is
- * noise and the results are the story, which is the right ordering.
+ * So the projection never drops below a floor, and it counts for MORE
+ * while the evidence is thin: two thirds in week one, half by week
+ * two, a third by week four, settling at the floor from week six.
+ * Early it is carrying a board with nothing behind it; later it is
+ * the forward-looking quarter of a backward-looking measure.
+ *
+ * The projection is always the CURRENT roster, rebuilt each week —
+ * not a snapshot taken before the draft.
  */
-const PRIOR_K = 2
-export const priorWeightFor = (weeksPlayed: number) => PRIOR_K / (PRIOR_K + Math.max(0, weeksPlayed))
+const PROJECTION_K = 2
+const PROJECTION_FLOOR = 0.25
+export const projectionWeightFor = (weeksPlayed: number) =>
+  Math.max(PROJECTION_FLOOR, PROJECTION_K / (PROJECTION_K + Math.max(0, weeksPlayed)))
 
 export interface PowerScoreOptions {
   /**
-   * Preseason projected strength per team — any positive scale; it is
-   * normalised across the league. Omit and the board is results-only,
-   * which is correct once a season has evidence behind it.
+   * What each team's CURRENT roster projects to score in a week — any
+   * positive scale; it is normalised across the league. Omit and the
+   * board is results-only, which is what an adapter without
+   * projections degrades to.
    */
-  priorStrength?: (teamId: string) => number | undefined
+  projectedStrength?: (teamId: string) => number | undefined
 }
 
 export interface PointsPowerComponents {
@@ -189,19 +200,19 @@ export function computePointsPowerScores(
   // Normalised across whoever the BOARD covers — the teams with
   // scores — not `data.teams`, which an adapter may leave sparse and
   // which would silently disable the prior when it did.
-  const priorValues = opts.priorStrength
+  const projValues = opts.projectedStrength
     ? [...new Set(scores.map((s) => s.teamId))]
-        .map((id) => opts.priorStrength!(id))
+        .map((id) => opts.projectedStrength!(id))
         .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
     : []
-  const priorLo = priorValues.length ? Math.min(...priorValues) : 0
-  const priorHi = priorValues.length ? Math.max(...priorValues) : 0
-  const priorSpread = priorHi - priorLo
-  const priorOf = (teamId: string): number | undefined => {
-    if (!opts.priorStrength || priorSpread <= 0) return undefined
-    const v = opts.priorStrength(teamId)
+  const projLo = projValues.length ? Math.min(...projValues) : 0
+  const projHi = projValues.length ? Math.max(...projValues) : 0
+  const projSpread = projHi - projLo
+  const projectedOf = (teamId: string): number | undefined => {
+    if (!opts.projectedStrength || projSpread <= 0) return undefined
+    const v = opts.projectedStrength(teamId)
     if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
-    return clamp01((v - priorLo) / priorSpread)
+    return clamp01((v - projLo) / projSpread)
   }
 
   // Per-team mean score across the weeks they actually played, so a
@@ -276,16 +287,17 @@ export function computePointsPowerScores(
 
     // Regress toward the preseason projection while the sample is
     // thin. See PRIOR_K.
+    // What the roster projects to do, against what it has done.
     // Branch rather than weight-by-zero: `0 * undefined` is NaN, and
     // clamp01(NaN) is 0, which silently flattened every score on the
-    // board to zero when no prior was supplied.
-    const prior = priorOf(teamId)
+    // board to zero when no projection was supplied.
+    const projected = projectedOf(teamId)
     const blend =
-      prior === undefined
+      projected === undefined
         ? fromResults
         : (() => {
-            const w = priorWeightFor(weeks)
-            return (1 - w) * fromResults + w * prior
+            const w = projectionWeightFor(weeks)
+            return (1 - w) * fromResults + w * projected
           })()
 
     return {
