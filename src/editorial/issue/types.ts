@@ -46,9 +46,16 @@ export interface IssueRow {
     target: number
     /** True when this row IS the record rather than chasing one. */
     held?: boolean
-    /** The other side of a race, drawn on the same scale — a chase
-     *  with nobody to compare against is half a story. */
-    against?: { name: string; value: number }
+    /** The other side of a race, drawn at the SAME weight — a chase
+     *  with nobody to compare against is half a story, and a tie
+     *  rendered as one full bar plus a footnote does not look tied. */
+    against?: {
+      name: string
+      value: number
+      logoUrl?: string
+      logoColor?: string
+      logoInitials?: string
+    }
   }
 }
 

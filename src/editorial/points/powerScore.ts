@@ -48,15 +48,21 @@ const RECENT_WEEKS = 3
  * is real information that results from September cannot carry.
  *
  * So the projection never drops below a floor, and it counts for MORE
- * while the evidence is thin: two thirds in week one, half by week
- * two, a third by week four, settling at the floor from week six.
- * Early it is carrying a board with nothing behind it; later it is
- * the forward-looking quarter of a backward-looking measure.
+ * while the evidence is thin: an even split in week one, a third by
+ * week two, the floor from week three. Early it balances a board with
+ * one game behind it; later it is the forward-looking quarter of a
+ * backward-looking measure.
  *
  * The projection is always the CURRENT roster, rebuilt each week —
  * not a snapshot taken before the draft.
  */
-const PROJECTION_K = 2
+/**
+ * k = 1 makes week one an even split. At k = 2 the projection took two
+ * thirds, and a team that went 9-0 on all-play with the week's highest
+ * score came out SIXTH — technically defensible and impossible for a
+ * reader to accept. Half and half is the combination people mean.
+ */
+const PROJECTION_K = 1
 const PROJECTION_FLOOR = 0.25
 export const projectionWeightFor = (weeksPlayed: number) =>
   Math.max(PROJECTION_FLOOR, PROJECTION_K / (PROJECTION_K + Math.max(0, weeksPlayed)))

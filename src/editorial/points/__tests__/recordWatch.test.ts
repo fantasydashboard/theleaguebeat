@@ -42,7 +42,7 @@ describe('the chase keeps being reported', () => {
     // Both sides of the race, so the row can draw the comparison
     // rather than a lone bar the reader has to interpret.
     expect(race.progress).toEqual({ value: 60, target: 61 })
-    expect(race.against).toEqual({ name: 'Mighty Mallards', value: 61 })
+    expect(race.against).toEqual({ name: 'Mighty Mallards', value: 61, teamId: 'mallards' })
   })
 
   it('reports the gap closing', () => {

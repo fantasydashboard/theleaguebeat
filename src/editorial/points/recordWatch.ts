@@ -46,8 +46,9 @@ export interface WeeklyRecordNote {
    * actually being told.
    */
   progress?: { value: number; target: number; held?: boolean }
-  /** The other side of a race, drawn on the same scale. */
-  against?: { name: string; value: number }
+  /** The other side of a race, drawn on the same scale and at the
+   *  same weight — a tie has to LOOK tied. */
+  against?: { name: string; value: number; teamId?: string }
   /** Smaller sorts first. */
   urgency: number
 }
@@ -118,7 +119,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
             ? `Level with ${second.name} at the top of the league's history.`
             : `Alone at the top of the league's history, ${plural(gap, 'win')} clear of ${second.name}.`,
         progress: { value: lead.wins, target: lead.wins, held: true },
-        against: { name: second.name, value: second.wins },
+        against: { name: second.name, value: second.wins, teamId: second.teamId },
       })
     } else if (gap === 0 && lead.teamId && second.teamId) {
       // Drew level this week: news whoever got there first.
@@ -135,7 +136,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
         // A tie is the case that most needs both teams drawn: "level
         // with" is a claim ABOUT the other team, and a lone bar
         // leaves the reader to take it on trust.
-        against: { name: other.name, value: other.wins },
+        against: { name: other.name, value: other.wins, teamId: other.teamId },
       })
     } else if (gap > 0 && gap <= MAX_RACE_GAMES && second.teamId) {
       // The chase survived the week, which is itself the report.
@@ -154,7 +155,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
         headline: `${second.wins} wins`,
         detail: `${plural(gap, 'win')} behind ${lead.name}, who hold the record on ${lead.wins}. ${movement[0].toUpperCase()}${movement.slice(1)}.`,
         progress: { value: second.wins, target: lead.wins },
-        against: { name: lead.name, value: lead.wins },
+        against: { name: lead.name, value: lead.wins, teamId: lead.teamId },
       })
     }
   }
@@ -175,7 +176,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
       teamId: c.teamId,
       headline: `${target.toLocaleString()} pts`,
       detail:
-        `${Math.round(away)} away — ${Math.round((away / perGame) * 100)}% of an ordinary week. ` +
+        `${Math.round(away)} away, out of the ${Math.round(perGame)} they average a week. ` +
         `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer all time.`,
       // Against a week's scoring, so nearly-there and not-quite look
       // different. See the note on `progress`.

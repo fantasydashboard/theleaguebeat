@@ -256,10 +256,13 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
   if (upsets.length === 0) return null
 
   const lead = upsets[0]
+  // The headline already says "No. 7 took down No. 1" and the support
+  // already says how far below they sat. Rows repeating both was the
+  // same sentence three times in one section.
   const rows: IssueRow[] = upsets.map((u) => ({
-    label: `${input.teamName(u.winnerId)} over ${input.teamName(u.loserId)}`,
-    sub: `No. ${u.winnerRank} beat No. ${u.loserRank} · ${u.gap} spots up the board`,
-    value: `${round1(u.winnerPoints)} – ${round1(u.loserPoints)}`,
+    label: `No. ${u.winnerRank} ${input.teamName(u.winnerId)} over No. ${u.loserRank} ${input.teamName(u.loserId)}`,
+    sub: `by ${round1(u.margin)}`,
+    value: `${round1(u.winnerPoints).toFixed(1)} – ${round1(u.loserPoints).toFixed(1)}`,
     ...visual(input, u.winnerId),
   }))
 
@@ -301,7 +304,23 @@ function recordSection(input: WeeklyIssueInput): IssueSection | null {
     label: n.teamId ? input.teamName(n.teamId) : n.headline,
     value: n.headline,
     sub: n.detail,
-    progress: n.progress ? { ...n.progress, against: n.against } : undefined,
+    progress: n.progress
+      ? {
+          ...n.progress,
+          against: n.against
+            ? (() => {
+                const t = n.against.teamId ? input.team?.(n.against.teamId) : undefined
+                return {
+                  name: n.against.name,
+                  value: n.against.value,
+                  logoUrl: t?.avatarUrl,
+                  logoColor: t?.avatarColor,
+                  logoInitials: t?.ownerInitials,
+                }
+              })()
+            : undefined,
+        }
+      : undefined,
     ...(n.teamId ? visual(input, n.teamId) : {}),
   }))
 
@@ -349,7 +368,13 @@ function powerSection(input: WeeklyIssueInput): IssueSection | null {
     const rank = i + 1
     const rec = recordBy.get(p.teamId)
     const luck = luckBy.get(p.teamId)
-    const prior = input.previousPowerRank?.(p.teamId)
+    // Movement against last week's board, or — in the first weekly
+    // issue, where there is no last week — against the projection the
+    // preseason published. Labelled either way, so a reader is never
+    // guessing what the arrow is measured from.
+    const lastWeek = input.previousPowerRank?.(p.teamId)
+    const prior = lastWeek ?? input.fallbackPriorRank?.(p.teamId)
+    const moveLabel = lastWeek !== undefined ? 'since last week' : 'since preseason'
     const notes: string[] = []
 
     // WHAT THE ROW SAYS ABOUT THIS TEAM, not what all-play means.
@@ -378,7 +403,7 @@ function powerSection(input: WeeklyIssueInput): IssueSection | null {
       statLabel: 'power score',
       movement:
         prior !== undefined && prior !== rank
-          ? { places: prior - rank, label: 'since last week' }
+          ? { places: prior - rank, label: moveLabel }
           : undefined,
       chips: [
         ...(rec

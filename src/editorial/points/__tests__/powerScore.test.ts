@@ -261,6 +261,8 @@ describe('what a roster projects, against what it has done', () => {
     const resultsOnly = computePointsPowerScores(leagueOf(weekly(14)))
     expect(gap(late)).toBeLessThan(gap(resultsOnly))
     expect(projectionWeightFor(14)).toBeCloseTo(0.25, 5)
-    expect(projectionWeightFor(1)).toBeCloseTo(2 / 3, 5)
+    // An even split in week one. At two thirds a team that went 9-0
+    // on all-play with the week's best score landed sixth.
+    expect(projectionWeightFor(1)).toBeCloseTo(0.5, 5)
   })
 })

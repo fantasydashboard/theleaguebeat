@@ -292,6 +292,14 @@
               </span>
               <span class="standings-name">
                 {{ card.teamName }}
+                <!-- Movement was computed on every card and never
+                     drawn. A board with no arrows is a list. -->
+                <span
+                  v-if="card.movement"
+                  class="standings-move"
+                  :class="card.movement.places > 0 ? 'is-up' : 'is-down'"
+                  :title="card.movement.label"
+                >{{ card.movement.places > 0 ? '▲' : '▼' }}{{ Math.abs(card.movement.places) }}</span>
                 <small v-if="card.notes?.length" style="display:block;opacity:.62;font-weight:400">
                   {{ card.notes[0] }}
                 </small>
@@ -325,11 +333,27 @@
                     :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
                   ></span>
                 </span>
-                <!-- The other side of a race. A chase drawn without the
-                     team being chased is half a story. -->
-                <span v-if="row.progress?.against" class="issue-chase-rival">
-                  <span class="issue-chase-rival-bar"></span>
-                  {{ row.progress.against.name }} · {{ row.progress.against.value }}
+                <!-- The other side of a race, at the SAME weight. A tie
+                     drawn as one full bar plus a grey footnote does not
+                     look tied — it looks like somebody is ahead. -->
+                <span v-if="row.progress?.against" class="issue-rival">
+                  <span
+                    class="issue-rival-logo"
+                    :style="{ background: row.progress.against.logoColor ? `linear-gradient(135deg, ${row.progress.against.logoColor})` : undefined }"
+                  >
+                    <img v-if="row.progress.against.logoUrl" :src="row.progress.against.logoUrl" class="avatar-image" alt="" />
+                    <span v-else>{{ row.progress.against.logoInitials }}</span>
+                  </span>
+                  <span class="issue-rival-body">
+                    <span class="issue-rival-name">{{ row.progress.against.name }}</span>
+                    <span class="issue-chase">
+                      <span
+                        class="issue-chase-fill is-held"
+                        :style="{ width: `${Math.min(100, (row.progress.against.value / Math.max(row.progress.value, row.progress.against.value)) * 100)}%` }"
+                      ></span>
+                    </span>
+                  </span>
+                  <span class="issue-rival-value">{{ row.progress.against.value }}</span>
                 </span>
                 <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
               </span>
@@ -4296,8 +4320,11 @@ function collectUserIdentity() {
 .points-matchup-seed {
   margin: 2px 0 0;
   font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-  font-size: 0.78rem; letter-spacing: 0.08em;
+  font-size: 0.78rem; letter-spacing: 0.06em;
   color: oklch(0.62 0.01 90);
+  /* "No. 6 · 1-0" was breaking across two lines and orphaning the
+     record's second digit. */
+  white-space: nowrap;
 }
 .issue-sec-copy { flex: 1; min-width: 0; }
 .issue-sec-art { display: flex; flex: none; padding-top: 4px; }
@@ -4345,13 +4372,32 @@ function collectUserIdentity() {
   transition: width 0.6s ease;
 }
 .issue-chase-fill.is-held { background: oklch(0.70 0.27 350); }
-.issue-chase-rival {
-  display: flex; align-items: center; gap: 0.5rem;
-  font-size: 0.72rem; color: oklch(0.55 0.01 90); margin-bottom: 0.3rem;
+.standings-move {
+  display: inline-block; margin-left: 0.45rem;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 0.72rem; letter-spacing: 0.04em;
 }
-.issue-chase-rival-bar {
-  flex: none; width: 36px; height: 4px; border-radius: 999px;
-  background: oklch(0.70 0.27 350);
+.standings-move.is-up { color: oklch(0.74 0.18 145); }
+.standings-move.is-down { color: oklch(0.65 0.20 25); }
+
+.issue-rival {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.15rem 0 0.4rem;
+}
+.issue-rival-logo {
+  width: 26px; height: 26px; border-radius: 7px; flex: none; overflow: hidden;
+  display: grid; place-items: center; background: oklch(0.24 0.02 90);
+  font-weight: 800; font-size: 0.6rem; color: oklch(0.62 0.01 90);
+}
+.issue-rival-logo .avatar-image { width: 100%; height: 100%; object-fit: cover; }
+.issue-rival-body { flex: 1; min-width: 0; }
+.issue-rival-name {
+  display: block; font-size: 0.8rem; font-weight: 700;
+  color: oklch(0.85 0.008 90); margin-bottom: 0.2rem;
+}
+.issue-rival-value {
+  flex: none; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 0.95rem; color: oklch(0.85 0.008 90);
 }
 .issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
 
