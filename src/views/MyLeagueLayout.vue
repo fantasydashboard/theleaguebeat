@@ -41,7 +41,25 @@
         </div>
 
         <div class="league-bar-right">
-          <router-link to="/" class="league-bar-back">Back to homepage</router-link>
+          <!-- Was "Back to homepage", which was a dead control: `/`
+               redirects a signed-in user with leagues straight back to
+               a league issue, so the click landed you where you already
+               were. The sister product is the one thing a reader of
+               this page might actually want next — they have just been
+               told what happened and their next thought is what to do
+               about it. Front door, tagged, and only here: this is the
+               authenticated view, never the share page. -->
+          <a
+            class="league-bar-back"
+            href="https://www.ultimatefantasydashboard.com/?utm_source=theleaguebeat&utm_medium=header&utm_campaign=league-header"
+            target="_blank"
+            rel="noopener"
+          >
+            Ultimate Fantasy Dashboard
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path d="M7 17L17 7M17 7H8M17 7v9"/>
+            </svg>
+          </a>
           <router-link to="/demo-categories/connect" class="league-bar-cta">
             Connect another
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -810,12 +828,15 @@ onMounted(() => {
 }
 
 .league-bar-back {
+  display: inline-flex; align-items: center; gap: 5px;
   font-size: 0.82rem;
   color: oklch(0.55 0.010 90);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
   transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+.league-bar-back svg { opacity: 0.7; }
 @media (hover: hover) and (pointer: fine) {
   .league-bar-back:hover { color: var(--ink-1); }
 }
