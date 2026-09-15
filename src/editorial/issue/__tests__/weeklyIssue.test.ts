@@ -232,7 +232,11 @@ describe('the upset section', () => {
     expect(upset.eyebrow).toBe('The upset')
     expect(upset.headline).toBe('No. 5 took down No. 2.')
     expect(upset.support).toContain('3 spots below')
-    expect(upset.rows[0].sub).toContain('3 spots up the board')
+    // The row carries the scoreline and the margin. The headline and
+    // support already state the climb; repeating it here was the same
+    // sentence three times in one section.
+    expect(upset.rows[0].label).toBe('No. 5 Team e over No. 2 Team b')
+    expect(upset.rows[0].sub).toBe('by 11.3')
   })
 
   it('escalates the eyebrow for a climb from the bottom', () => {
