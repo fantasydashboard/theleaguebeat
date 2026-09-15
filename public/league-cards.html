@@ -2280,6 +2280,41 @@ function allPlayFrom(scores, keep) {
  * are written by the same event that closes a week.
  */
 /**
+ * The preseason ranking AS PUBLISHED, per league.
+ *
+ * WHY THIS IS HARDCODED. Week two's arrows have to measure from the
+ * board a viewer actually saw, and what they saw was the preseason
+ * countdown video — which ranked by playoff odds from the simulated
+ * seasons, not by roster projection. Those are different measures and
+ * they disagree: Black Panther was 6th on the video and 12th on the
+ * projection board, so an arrow drawn from the projection said "up
+ * two" about a team that had in fact fallen four.
+ *
+ * Recomputing the odds here is not an option — they came from 200,000
+ * simulated seasons run offline. So the published order is written
+ * down, exactly as it went out on 8 Sept.
+ *
+ * Dynasty Champs has no entry because it never had a preseason video;
+ * it falls back to the projection board, which is the only earlier
+ * ranking that league has.
+ *
+ * Matched on team name, which is what the video said out loud. A team
+ * that has renamed since simply gets no arrow rather than a wrong one.
+ */
+const PRESEASON = {
+  lor: [
+    'The Aman-Ra Stars', 'Mighty Mallards', 'Scuttlebucs', 'Gridiron Man',
+    'Chancla Warriors', 'The Juggernauts', 'Pigskin Prophtz', 'OverDrive',
+    'East Coast Enforcers', 'Game of Throws',
+  ],
+  ffl: [
+    'UCDUST', '🦅Go Birds🦅', 'Dom perignons', 'Aggresive Chickens',
+    'The Jabariz', 'Black Panther', 'HazeHunters', 'Cabuloso Pats',
+    'StreetGliders', 'HawkForceOne', 'Zenyatta', 'Primetime Primates',
+  ],
+}
+
+/**
  * The line under a team name: how far they have moved since last week.
  *
  * WHAT "LAST WEEK" MEANS IN WEEK TWO. There is no earlier results
@@ -2434,13 +2469,21 @@ async function powerBoard(cfg) {
     priorRank = new Map(prior.map((p, i) => [p.id, i + 1]))
   }
 
-  // Week two has no earlier results board, so the preseason projection
-  // ranking stands in — the board a reader actually saw last week.
-  // `table` is already sorted by projected points a week.
+  // Week two has no earlier RESULTS board. The published preseason
+  // countdown stands in where there was one, because that is the
+  // ranking a viewer is comparing against; otherwise the projection
+  // board, which is what the site falls back to.
   if (!priorRank) {
-    const seat = new Map(table.map((t, i) => [t.owner, i + 1]))
-    priorRank = new Map(rosters.map((r) => [String(r.roster_id), seat.get(r.owner_id)])
-      .filter(([, v]) => v !== undefined))
+    const published = PRESEASON[Object.keys(LEAGUES).find((k) => LEAGUES[k] === cfg)]
+    if (published) {
+      const seat = new Map(published.map((name, i) => [name, i + 1]))
+      priorRank = new Map(rows.map((r) => [r.teamId, seat.get(r.team)])
+        .filter(([, v]) => v !== undefined))
+    } else {
+      const seat = new Map(table.map((t, i) => [t.owner, i + 1]))
+      priorRank = new Map(rosters.map((r) => [String(r.roster_id), seat.get(r.owner_id)])
+        .filter(([, v]) => v !== undefined))
+    }
   }
 
   const ctx = { priorRank }
