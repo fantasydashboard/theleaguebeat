@@ -68,6 +68,13 @@
   body[data-ratio="16x9"] .frame { width: 1920px; height: 1080px; }
   /* Magazine-cover shape: 4:5, the largest portrait X shows uncropped. */
   body[data-ratio="4x5"] .frame { width: 1080px; height: 1350px; }
+  /* Full bleed. `.safe` insets to 83% x 81% because the VIDEO cards
+     are overlays with a presenter and a caption strip to clear — a
+     print cover has neither, and inheriting that inset left every
+     4:5 card painting inside a box that stopped at 88% of the frame.
+     That was the dead band under the cover and the chat card, and it
+     read as a layout choice rather than the bug it was. */
+  body[data-ratio="4x5"] .safe { left: 0; top: 0; width: 100%; height: 100%; }
 
   /* Taller than the ground-rules card: a full roster is the content, not
      an overlay, so it uses more of the screen. Still clear of the caption
@@ -749,7 +756,7 @@
 
   /* The face layer sits OVER the masthead: a subject in front of the
      nameplate is the single strongest magazine signal there is. */
-  .cov-hero { position: absolute; left: 0; right: 0; top: 0; bottom: 170px; z-index: 2;
+  .cov-hero { position: absolute; left: 0; right: 0; top: 0; bottom: 96px; z-index: 2;
               pointer-events: none; overflow: hidden; }
   .cov-hero::before {
     content: ''; position: absolute; inset: 0;
@@ -771,11 +778,11 @@
 
   /* Corner cover lines, the way a newsstand cover teases inside. */
   .cov-tease {
-    position: absolute; z-index: 3; width: 300px; top: 330px;
+    position: absolute; z-index: 3; width: 266px; top: 470px;
     display: flex; align-items: center; gap: 14px;
   }
-  .cov-tease.left { left: 48px; }
-  .cov-tease.right { right: 48px; flex-direction: row-reverse; text-align: right; }
+  .cov-tease.left { left: 34px; }
+  .cov-tease.right { right: 34px; flex-direction: row-reverse; text-align: right; }
   .cov-tease-face {
     width: 92px; height: 92px; border-radius: 50%; overflow: hidden; flex: none;
     border: 3px solid var(--gold); background: oklch(0.24 0.02 90);
@@ -786,11 +793,12 @@
     font-size: 30px; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1.05;
   }
   .cov-tease-copy span {
+    display: block; white-space: nowrap;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
     color: var(--gold); letter-spacing: 0.06em;
   }
 
-  .cov-lines { position: absolute; left: 56px; right: 56px; bottom: 320px; z-index: 3; }
+  .cov-lines { position: absolute; left: 56px; right: 56px; bottom: 232px; z-index: 3; }
   .cov-kicker {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
     letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); margin-bottom: 14px;
@@ -802,7 +810,7 @@
 
   /* The pitch, as the logo's own crimson slash. */
   .cov-banner {
-    position: absolute; left: 40px; right: 40px; bottom: 118px; z-index: 4;
+    position: absolute; left: 40px; right: 40px; bottom: 112px; z-index: 4;
     background: #c81a4b; transform: skewX(-8deg);
     padding: 26px 40px; display: flex; align-items: center; justify-content: center;
   }
@@ -2078,10 +2086,11 @@ async function loadXCover() {
       <div class="cov-hero">
         <img src="https://sleepercdn.com/content/nfl/players/${star.id}.jpg" alt="">
       </div>
+      <div class="cov-grain"></div>
       ${also.map((p, i) => `
         <div class="cov-tease ${i === 0 ? 'left' : 'right'}">
           <span class="cov-tease-face"><img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt="" onerror="this.remove()"></span>
-          <span class="cov-tease-copy"><b>${esc(p.name)}</b><span>+${p.diff.toFixed(1)} on the position</span></span>
+          <span class="cov-tease-copy"><b>${esc(p.name)}</b><span>+${p.diff.toFixed(1)} over the field</span></span>
         </div>`).join('')}
       <div class="cov-lines">
         <div class="cov-kicker">The cover story</div>
