@@ -86,21 +86,68 @@ function visual(input: WeeklyIssueInput, teamId: string) {
    SECTIONS — each returns null when it has not earned its place.
 ───────────────────────────────────────────────────────────────── */
 
-/** What happened. The lead in week one, and always worth carrying. */
+/**
+ * What happened.
+ *
+ * LEADS WITH ITS BEST HOOK, not with the same one every week. "Who
+ * scored most" is true every week by definition, so a section that
+ * always opens on it opens on the least rare thing on the page — and
+ * because this section also led every issue, all three leagues
+ * published the same shape of cover on the same morning.
+ *
+ * So the headline is whichever of the week's angles is actually
+ * unusual: a game decided by under a point, a team that scored near
+ * the top and still lost, a hiding. The highest score is the floor,
+ * not the default.
+ */
 function resultsSection(input: WeeklyIssueInput): IssueSection | null {
   const finals = (input.results ?? []).filter((m) => m.status === 'final')
   if (finals.length === 0) return null
 
-  const scores = finals.flatMap((m) => [
-    { teamId: m.homeTeamId, points: m.homePoints },
-    { teamId: m.awayTeamId, points: m.awayPoints },
-  ])
-  const top = [...scores].sort((a, b) => b.points - a.points)[0]
-  const closest = [...finals].sort(
-    (a, b) =>
-      Math.abs(a.homePoints - a.awayPoints) - Math.abs(b.homePoints - b.awayPoints),
-  )[0]
-  const margin = round1(Math.abs(closest.homePoints - closest.awayPoints))
+  const scores = [...finals.flatMap((m) => [
+    { teamId: m.homeTeamId, points: m.homePoints, won: m.homePoints >= m.awayPoints },
+    { teamId: m.awayTeamId, points: m.awayPoints, won: m.awayPoints > m.homePoints },
+  ])].sort((a, b) => b.points - a.points)
+  const top = scores[0]
+  const byMargin = [...finals].sort(
+    (a, b) => Math.abs(a.homePoints - a.awayPoints) - Math.abs(b.homePoints - b.awayPoints),
+  )
+  const closest = byMargin[0]
+  const widest = byMargin[byMargin.length - 1]
+  const closestMargin = round1(Math.abs(closest.homePoints - closest.awayPoints))
+  const widestMargin = round1(Math.abs(widest.homePoints - widest.awayPoints))
+  const nameOf = (m: LeagueDataPointsMatchup, wantWinner: boolean) => {
+    const homeWon = m.homePoints >= m.awayPoints
+    return input.teamName(homeWon === wantWinner ? m.homeTeamId : m.awayTeamId)
+  }
+
+  // The unluckiest side of the week: scored near the top of the board
+  // and lost anyway. Only counts in the top third — losing with the
+  // sixth-best score is just losing.
+  const unlucky = scores.find((s, i) => !s.won && i < Math.max(1, Math.floor(scores.length / 3)))
+
+  let headline: string
+  let support: string
+  if (closestMargin < 1) {
+    headline = `${nameOf(closest, true)} won it by ${closestMargin}.`
+    support =
+      `The closest game the league has had this season. ` +
+      `${input.teamName(top.teamId)} put up the week's best on ${round1(top.points)}.`
+  } else if (unlucky) {
+    headline = `${input.teamName(unlucky.teamId)} scored ${round1(unlucky.points)} and lost.`
+    support =
+      `The ${ordinal(scores.indexOf(unlucky) + 1)}-best score in the league, and it bought nothing. ` +
+      `${input.teamName(top.teamId)} led the week on ${round1(top.points)}.`
+  } else if (widestMargin >= 60) {
+    headline = `${nameOf(widest, true)} beat ${nameOf(widest, false)} by ${widestMargin}.`
+    support =
+      `The widest margin of the week. ` +
+      `${input.teamName(top.teamId)} put up the best score on ${round1(top.points)}.`
+  } else {
+    headline = `${input.teamName(top.teamId)} put up ${round1(top.points)}.`
+    support =
+      `The week's highest score. ${nameOf(closest, true)} took the closest game by ${closestMargin}.`
+  }
 
   // `lead` is the LEFT gutter — a rank, a slot, a grade. Putting a
   // stat label there printed "margin" down the left edge of every
@@ -110,25 +157,23 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
     const winner = homeWon ? m.homeTeamId : m.awayTeamId
     const loser = homeWon ? m.awayTeamId : m.homeTeamId
     const margin = round1(Math.abs(m.homePoints - m.awayPoints))
+    // Rank going INTO the week. Using the board this result produced
+    // would let a win quietly justify its own number.
+    const wr = input.previousPowerRank?.(winner)
+    const lr = input.previousPowerRank?.(loser)
+    const named =
+      wr && lr
+        ? `No. ${wr} ${input.teamName(winner)} beat No. ${lr} ${input.teamName(loser)}`
+        : `${input.teamName(winner)} beat ${input.teamName(loser)}`
     return {
-      label: `${input.teamName(winner)} beat ${input.teamName(loser)}`,
+      label: named,
       sub: margin === 0 ? 'Tied' : `by ${margin}`,
-      value: `${round1(Math.max(m.homePoints, m.awayPoints))} – ${round1(Math.min(m.homePoints, m.awayPoints))}`,
+      value: `${round1(Math.max(m.homePoints, m.awayPoints)).toFixed(1)} – ${round1(Math.min(m.homePoints, m.awayPoints)).toFixed(1)}`,
       ...visual(input, winner),
     }
   })
 
-  return {
-    id: 'results',
-    eyebrow: 'The week',
-    headline: `${input.teamName(top.teamId)} put up ${round1(top.points)}.`,
-    support:
-      `The week's highest score. ${input.teamName(
-        closest.homePoints >= closest.awayPoints ? closest.homeTeamId : closest.awayTeamId,
-      )} took the closest game by ${margin}.`,
-    rows,
-    priority: 10,
-  }
+  return { id: 'results', eyebrow: 'The week', headline, support, rows, priority: 10 }
 }
 
 /**
@@ -429,6 +474,49 @@ function playoffSection(input: WeeklyIssueInput): IssueSection | null {
  *
  * Better silence than an issue that opens on "nothing happened".
  */
+/**
+ * Which story earns the cover.
+ *
+ * RARITY, NOT SECTION ORDER. The results section always led, and its
+ * headline was always the week's highest score — a thing that happens
+ * every week by definition. So every league published the same shape
+ * of cover on the same morning, which is the loudest way a generated
+ * page announces itself.
+ *
+ * A record changing hands happens once or twice a season. A game
+ * inside a point, about as often. Those earn the front; "somebody
+ * scored the most" is the floor. Whichever section owns the rarest
+ * thing that actually happened is moved to the top, and the page
+ * leads with it.
+ *
+ * Note the scores are about HOW OFTEN, not how loud. A blowout is
+ * more spectacular than an upset and rarer than a high score, and
+ * sits between them.
+ */
+function promoteCover(sections: IssueSection[], input: WeeklyIssueInput): void {
+  const finals = (input.results ?? []).filter((m) => m.status === 'final')
+  const margins = finals.map((m) => Math.abs(m.homePoints - m.awayPoints))
+  const closest = margins.length ? Math.min(...margins) : Infinity
+  const widest = margins.length ? Math.max(...margins) : 0
+
+  const has = (id: string) => sections.find((s) => s.id === id)
+  const record = has('record-book')
+  const upset = has('upset')
+
+  const candidates: { id: string; score: number }[] = []
+  // A record that MOVED, not one merely being chased.
+  if (record && record.priority === 18) candidates.push({ id: 'record-book', score: 100 })
+  if (upset) candidates.push({ id: 'upset', score: upset.eyebrow === 'The heist' ? 90 : 55 })
+  if (closest < 1) candidates.push({ id: 'results', score: 85 })
+  else if (widest >= 60) candidates.push({ id: 'results', score: 60 })
+  else candidates.push({ id: 'results', score: 10 })
+
+  const winner = candidates.sort((a, b) => b.score - a.score)[0]
+  if (!winner) return
+  const lead = has(winner.id)
+  if (lead) lead.priority = 0
+}
+
 export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
   // WHICH PROCESSING PERIOD THE WIRE COVERS.
   //
@@ -458,6 +546,7 @@ export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
   ].filter((s): s is IssueSection => s !== null)
 
   if (sections.length === 0) return null
+  promoteCover(sections, input)
 
   const weeksPlayed = input.power[0]?.weeksPlayed ?? input.week
   return {

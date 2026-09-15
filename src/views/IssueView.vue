@@ -201,12 +201,15 @@
            it arrives the legacy sections below carry the page. -->
       <template v-if="issueBody.length">
         <section
-          v-for="sec in issueBody"
+          v-for="(sec, secIndex) in issueBody"
           :key="sec.id"
           :id="`issue-${sec.id}`"
           class="section issue-sec"
         >
-          <div class="issue-sec-top">
+          <!-- The cover already said this section's piece. Repeating
+               the eyebrow, headline and support four hundred pixels
+               later was the page's loudest generated tell. -->
+          <div v-if="!isCoverSection(secIndex)" class="issue-sec-top">
             <!-- Identity marks, deliberately a fraction of the cover
                  portrait. A page where every section shouts at cover
                  volume is a page with no hierarchy. -->
@@ -1182,13 +1185,17 @@ const displayedIssueNumber = computed(() =>
  * is what a magazine does anyway: the cover announces it, the page
  * inside carries the story.
  */
-const issueBody = computed(() => {
-  const sections = assembledIssue.value?.sections ?? []
-  const lead = sections[0]
-  if (!lead) return []
-  const leadHasContent = !!(lead.rows?.length || lead.cards?.length)
-  return leadHasContent ? sections : sections.slice(1)
-})
+/**
+ * The body renders EVERY section, including the one on the cover —
+ * a lead story with rows still owes the reader those rows. What it
+ * must not do is print the cover's sentence again, so the template
+ * suppresses the header on index 0. Returning `slice(1)` instead
+ * would silently drop the lead's content; keeping the header was
+ * what made every issue open with the same line twice.
+ */
+const issueBody = computed(() => assembledIssue.value?.sections ?? [])
+/** Whether a section is the one already stated on the cover. */
+const isCoverSection = (i: number) => i === 0 && !!issueLead.value
 
 const pointsCover = computed(() => {
   const lead = issueLead.value
@@ -2052,10 +2059,20 @@ watch(
   { immediate: true },
 )
 
+/**
+ * Draft night, until football makes it history.
+ *
+ * "Five running backs came off the board between picks 7 and 11" is
+ * the story of the preseason and stale the moment a week has been
+ * played — it was still running in week two on all three leagues,
+ * under results that had superseded it. Once there are real games to
+ * write about, the draft is an archive page, not a section.
+ */
 const showPointsDraft = computed(
   () =>
     !!livePointsData.value &&
     hasDraftData.value &&
+    !pointsSeasonStarted.value &&
     pointsCover.value?.eyebrow !== 'The draft',
 )
 
