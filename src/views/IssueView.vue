@@ -377,42 +377,44 @@
                   <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
                        bar is the same fact felt on sight.
 
-                       The team one rung up rides at the END of the
-                       track, because that is where the thing being
-                       chased belongs. The gap number sits with its
-                       crest rather than in the sentence below. -->
-                  <span v-if="row.progress" class="issue-chase-line">
-                    <span class="issue-chase">
-                      <span
-                        class="issue-chase-fill"
-                        :class="{ 'is-held': row.progress.held }"
-                        :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
-                      ></span>
-                    </span>
-                    <span v-if="row.progress.neighbour" class="issue-ahead">
-                      <span
-                        class="issue-ahead-logo"
-                        :style="{ background: row.progress.neighbour.logoColor ? `linear-gradient(135deg, ${row.progress.neighbour.logoColor})` : undefined }"
-                        :title="row.progress.neighbour.name"
-                      >
-                        <img
-                          v-if="row.progress.neighbour.logoUrl"
-                          :src="row.progress.neighbour.logoUrl"
-                          class="avatar-image"
-                          alt=""
-                        />
-                        <span v-else>{{ row.progress.neighbour.logoInitials }}</span>
-                      </span>
-                      <span
-                        class="issue-ahead-gap"
-                        :class="{ 'is-clear': row.progress.neighbour.leader }"
-                      >{{ row.progress.neighbour.leader ? '+' : '−'
-                        }}{{ row.progress.neighbour.gap.toLocaleString() }}</span>
-                    </span>
+                       The bar measures ONE thing: distance to the
+                       number at the end of the row. Nothing else sits
+                       on this line — a crest parked between the track
+                       and the target read as though the bar were
+                       measuring the gap to that team instead. -->
+                  <span v-if="row.progress" class="issue-chase">
+                    <span
+                      class="issue-chase-fill"
+                      :class="{ 'is-held': row.progress.held }"
+                      :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
+                    ></span>
                   </span>
                   <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
                 </span>
                 <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
+                <!-- The team one rung up, AFTER the target — a separate
+                     fact on a separate scale, so it sits past the
+                     number rather than inside the bar's line. -->
+                <span v-if="row.progress?.neighbour" class="issue-ahead">
+                  <span
+                    class="issue-ahead-logo"
+                    :style="{ background: row.progress.neighbour.logoColor ? `linear-gradient(135deg, ${row.progress.neighbour.logoColor})` : undefined }"
+                    :title="row.progress.neighbour.name"
+                  >
+                    <img
+                      v-if="row.progress.neighbour.logoUrl"
+                      :src="row.progress.neighbour.logoUrl"
+                      class="avatar-image"
+                      alt=""
+                    />
+                    <span v-else>{{ row.progress.neighbour.logoInitials }}</span>
+                  </span>
+                  <span
+                    class="issue-ahead-gap"
+                    :class="{ 'is-clear': row.progress.neighbour.leader }"
+                  >{{ row.progress.neighbour.leader ? '+' : '−'
+                    }}{{ row.progress.neighbour.gap.toLocaleString() }}</span>
+                </span>
               </template>
             </li>
           </ol>
@@ -4429,12 +4431,15 @@ function collectUserIdentity() {
 }
 .issue-chase-fill.is-held { background: oklch(0.70 0.27 350); }
 
-/* The track and whoever is next up the list, on one line. The crest
-   sits past the end of the bar because that is where the thing being
-   chased is. */
-.issue-chase-line { display: flex; align-items: center; gap: 0.55rem; }
-.issue-chase-line .issue-chase { flex: 1; min-width: 0; }
-.issue-ahead { display: flex; align-items: center; gap: 0.35rem; flex: none; }
+/* Whoever is next up the list. Sits at the far right of the row,
+   PAST the target number, because it is a different measurement on a
+   different scale — the bar is distance to a round number, this is
+   distance to a team. Between the two they read as one quantity. */
+.issue-ahead {
+  display: flex; align-items: center; gap: 0.35rem; flex: none;
+  padding-left: 0.8rem; margin-left: 0.15rem;
+  border-left: 1px solid oklch(0.20 0.015 90);
+}
 .issue-ahead-logo {
   width: 22px; height: 22px; border-radius: 6px; flex: none; overflow: hidden;
   display: grid; place-items: center;
