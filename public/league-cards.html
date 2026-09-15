@@ -401,6 +401,11 @@
   body[data-export] .shell { display: block; overflow: hidden; margin: 0; }
   body[data-export] .frame { position: relative; left: 0; top: 0; transform-origin: top left; }
   body[data-export] .hint { display: none; }
+  /* A scrollbar steals CSS pixels from the content box, which knocks
+     the sheet's zoom off by a few physical pixels and shifts every
+     slice. Hide it — nothing here is scrolled by hand. */
+  html[data-export] { scrollbar-width: none; }
+  html[data-export]::-webkit-scrollbar { display: none; }
   .hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
           font-size: 12px; color: #555; font-family: ui-monospace, monospace; }
 
@@ -841,6 +846,89 @@
     color: var(--gold); letter-spacing: 0.04em;
   }
 
+  /* ── Week countdown ───────────────────────────────────────────
+     The opening plate and one card per team, worst first. Same
+     palette and type as the issue, because these are that issue
+     read aloud. */
+  .wk-intro { height: 100%; display: grid; place-items: center; text-align: center; }
+  .wk-intro-crest {
+    width: 360px; height: 360px; object-fit: contain; border-radius: 40px; margin: 0 auto 44px;
+    display: block;
+  }
+  .wk-intro-league {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 34px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  }
+  .wk-intro-title {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 150px;
+    line-height: 0.88; text-transform: uppercase;
+  }
+  .wk-intro-title em { font-style: normal; color: var(--gold); display: block; }
+
+  .wk { height: 100%; display: flex; flex-direction: column; }
+  .wk-top {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  }
+  .wk-top b { color: var(--pink); font-weight: 800; }
+  .wk-body { flex: 1; display: flex; align-items: center; gap: 48px; min-height: 0; }
+  .wk-rank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 500px;
+    line-height: 0.78; color: var(--gold); flex: none; letter-spacing: -0.04em;
+    /* A fixed column, not shrink-to-fit. These play as a sequence, and
+       a "1" is half the width of a "10" — left to itself the whole
+       card slides sideways on the last reveal. */
+    width: 440px; text-align: center;
+  }
+  .wk-main { flex: 1; min-width: 0; }
+  .wk-id { display: flex; align-items: center; gap: 28px; margin-bottom: 26px; }
+  .wk-crest {
+    width: 156px; height: 156px; border-radius: 24px; flex: none; overflow: hidden;
+    background: oklch(0.24 0.02 90); display: grid; place-items: center;
+    font-weight: 800; font-size: 34px; color: var(--muted);
+  }
+  .wk-crest img { width: 100%; height: 100%; object-fit: cover; }
+  .wk-team { font-size: 96px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+  .wk-move {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 30px;
+    letter-spacing: 0.1em; margin-top: 10px;
+  }
+  .wk-move.up { color: oklch(0.74 0.18 145); }
+  .wk-move.down { color: oklch(0.65 0.20 25); }
+  .wk-move.flat { color: var(--dim); }
+  .wk-stats { display: flex; gap: 60px; margin-bottom: 38px; }
+  .wk-stat b {
+    display: block; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 78px; line-height: 1;
+  }
+  .wk-stat i {
+    display: block; font-style: normal; font-size: 23px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--dim); margin-top: 6px;
+  }
+  /* Last week's game, the way the Monday desk draws one. */
+  .wk-last {
+    display: flex; align-items: center; gap: 22px;
+    background: var(--panel); border-radius: 22px; padding: 26px 34px;
+  }
+  .wk-last-tag {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
+    letter-spacing: 0.2em; text-transform: uppercase; flex: none;
+  }
+  .wk-last-tag.won { color: oklch(0.74 0.18 145); }
+  .wk-last-tag.lost { color: oklch(0.65 0.20 25); }
+  .wk-last-copy { flex: 1; min-width: 0; font-size: 38px; font-weight: 700;
+                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wk-last-score {
+    flex: none; font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 48px;
+  }
+  .wk-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
+  }
+  .wk-foot .free { color: var(--gold); }
+
   .xc-foot {
     display: flex; justify-content: space-between; align-items: center; margin-top: 20px;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px;
@@ -864,6 +952,8 @@ const LEAGUES = {
   // relegated team's last season lives in the OTHER tier's table.
   lor: { id: '1389692138421239808', prev: '1186844188245356544', name: 'League of Record', eyebrow: 'Top flight',  crest: '/league/lor-logo.png', divisions: true },
   ffl: { id: '1389738108437680128', prev: '1257084943821967360', name: 'Futures Football League', eyebrow: 'Second tier', crest: '/league/ffl-logo.png', divisions: false },
+  // No local crest for this one; Sleeper's own league avatar stands in.
+  dc: { id: '1312950142000697344', prev: '1186825886808555520', name: 'Dynasty Champs', eyebrow: 'Dynasty', crest: 'https://sleepercdn.com/avatars/595d5a2c123d2262155b707e3c1cd31f', divisions: false },
 }
 
 // Settled history — keyed on OWNER, because team names move.
@@ -880,9 +970,11 @@ const TITLES = CHAMPIONS.reduce((m, c) => (m[c.owner] = (m[c.owner] || 0) + 1, m
 
 const params = new URLSearchParams(location.search)
 const view = params.get('view') || 'lor'
-const exporting = params.has('export')
+const exporting = params.has('export') || view === 'wk-sheet'
 // 16:9 is the X cards' native shape, so they never need ?ratio spelled out.
-if (params.get('ratio') === '16x9' || view.startsWith('x-')) document.body.dataset.ratio = '16x9'
+if (params.get('ratio') === '16x9' || view.startsWith('x-') || view.startsWith('wk-')) {
+  document.body.dataset.ratio = '16x9'
+}
 if (exporting) { document.body.dataset.export = ''; document.documentElement.dataset.export = '' }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -2105,7 +2197,259 @@ async function loadXCover() {
     </div>`
 }
 
+/* ── The site's power board, ported ───────────────────────────────
+   These cards sit beside the issue, so they must not compute a
+   DIFFERENT ranking from it. This mirrors editorial/points/powerScore
+   exactly: all-play .35, scoring .25, record .20, recent .20, blended
+   with what the roster projects at max(0.25, 1/(1+weeks)) — an even
+   split in week one, settling to a quarter by week three.
+
+   If that file changes, this changes with it. A graphic and a page
+   disagreeing about who is first is the drift this whole layer exists
+   to prevent. */
+const PW = { allPlay: 0.35, scoring: 0.25, record: 0.20, recent: 0.20 }
+const RECENT_WEEKS = 3
+const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0)
+const pct = (w, l, t) => (w + l + t <= 0 ? 0.5 : (w + t / 2) / (w + l + t))
+
+function allPlayFrom(scores, keep) {
+  const byWeek = new Map()
+  for (const s of scores) {
+    if (keep && !keep(s.week)) continue
+    const list = byWeek.get(s.week) ?? []
+    list.push(s)
+    byWeek.set(s.week, list)
+  }
+  const out = new Map()
+  for (const list of byWeek.values()) {
+    for (const a of list) {
+      const row = out.get(a.teamId) ?? { wins: 0, losses: 0, ties: 0 }
+      out.set(a.teamId, row)
+      for (const b of list) {
+        if (b.teamId === a.teamId) continue
+        if (a.points > b.points) row.wins++
+        else if (a.points < b.points) row.losses++
+        else row.ties++
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * The board for a league, matching the site.
+ *
+ * `weeklyScores` counts CLOSED weeks only. Sleeper's league `leg` lags
+ * — it still read 1 on the Tuesday after week one, with every result
+ * final — so completed weeks come from the rosters' own records, which
+ * are written by the same event that closes a week.
+ */
+async function powerBoard(cfg) {
+  await rankedTeams(cfg)                          // primes _prCache
+  const [league, rosters, users] = _prCache[cfg.id]
+  const decided = rosters.reduce(
+    (t, r) => t + (r.settings?.wins ?? 0) + (r.settings?.losses ?? 0) + (r.settings?.ties ?? 0), 0)
+  const closedWeeks = rosters.length ? Math.floor(decided / rosters.length) : 0
+  if (closedWeeks < 1) return { rows: [], closedWeeks: 0, results: new Map() }
+
+  const weeks = await Promise.all(
+    Array.from({ length: closedWeeks }, (_, i) =>
+      fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${i + 1}`).then((r) => r.json())),
+  )
+  const scores = []
+  const results = new Map()          // teamId -> last closed week's game
+  weeks.forEach((ms, i) => {
+    const wk = i + 1
+    for (const m of ms) scores.push({ teamId: String(m.roster_id), week: wk, points: m.points ?? 0 })
+    if (wk !== closedWeeks) return
+    const groups = {}
+    for (const m of ms) { if (m.matchup_id == null) continue; (groups[m.matchup_id] ||= []).push(m) }
+    for (const pair of Object.values(groups)) {
+      if (pair.length !== 2) continue
+      const [a, b] = pair
+      const [w, l] = (a.points ?? 0) >= (b.points ?? 0) ? [a, b] : [b, a]
+      results.set(String(w.roster_id), { won: true, own: w.points ?? 0, opp: l.points ?? 0, oppId: String(l.roster_id) })
+      results.set(String(l.roster_id), { won: false, own: l.points ?? 0, opp: w.points ?? 0, oppId: String(w.roster_id) })
+    }
+  })
+
+  const played = [...new Set(scores.map((s) => s.week))].sort((a, b) => a - b)
+  const cutoff = played[Math.max(0, played.length - RECENT_WEEKS)]
+  const ap = allPlayFrom(scores)
+  const rp = allPlayFrom(scores, (w) => w >= cutoff)
+
+  const meanOf = new Map()
+  for (const id of new Set(scores.map((s) => s.teamId))) {
+    const mine = scores.filter((s) => s.teamId === id)
+    meanOf.set(id, mine.reduce((t, s) => t + s.points, 0) / mine.length)
+  }
+  const means = [...meanOf.values()]
+  const leagueMean = means.reduce((t, m) => t + m, 0) / means.length
+  const stdev = Math.sqrt(means.reduce((t, m) => t + (m - leagueMean) ** 2, 0) / means.length)
+
+  // NO PROJECTION COMPONENT HERE, deliberately.
+  //
+  // The site's board blends results with what the CURRENT roster
+  // projects to score. This page has no player projections — the only
+  // per-manager number it holds is career points a week, which is a
+  // different quantity: it says who has been good for years, not who
+  // is good now. Blending it in put a 2-7 all-play team top of Dynasty
+  // Champs and buried a 9-0 East Coast in fifth, which is the exact
+  // complaint that got the board recalibrated in the first place.
+  //
+  // So this board is results only. Stated plainly rather than faked.
+
+  const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+  const rows = rosters.map((r) => {
+    const id = String(r.roster_id)
+    const a = ap.get(id) ?? { wins: 0, losses: 0, ties: 0 }
+    const rr = rp.get(id) ?? a
+    const mean = meanOf.get(id) ?? 0
+    const scoring = stdev > 0 ? clamp01(0.5 + (mean - leagueMean) / (4 * stdev)) : 0.5
+    const w = r.settings?.wins ?? 0, l = r.settings?.losses ?? 0, t = r.settings?.ties ?? 0
+    const record = w + l + t > 0 ? clamp01((w + t / 2) / (w + l + t)) : pct(a.wins, a.losses, a.ties)
+    const fromResults =
+      PW.allPlay * pct(a.wins, a.losses, a.ties) + PW.scoring * scoring +
+      PW.record * record + PW.recent * pct(rr.wins, rr.losses, rr.ties)
+    const u = byId[r.owner_id] || {}
+    const md = u.metadata || {}
+    return {
+      teamId: id,
+      // NEVER `display_name` — that is a Sleeper username, and these
+      // plates get posted. A team without a set name gets a number.
+      team: (md.team_name || `Team ${r.roster_id}`).trim(),
+      avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
+      score: Math.round(clamp01(fromResults) * 1000) / 10,
+      allPlay: `${a.wins}-${a.losses}`,
+      record: `${w}-${l}${t ? `-${t}` : ''}`,
+      perWeek: Math.round(mean * 10) / 10,
+    }
+  }).sort((x, y) => y.score - x.score)
+  rows.forEach((r, i) => { r.rank = i + 1 })
+  return { rows, closedWeeks, results, nameOf: new Map(rows.map((r) => [r.teamId, r.team])) }
+}
+
+/**
+ * The Week N countdown: an opening plate, then one card per team,
+ * worst first.
+ *
+ *   ?view=wk-intro&lg=lor|ffl|dc&wk=2   the plate
+ *   ?view=wk-rank&lg=lor&n=1            one card, n counting UP from last
+ *   ?view=wk-sheet&lg=lor               all of them stacked, for export
+ *
+ * `n` counts up from last place because that is the order these get
+ * revealed. The rank printed on the card is the real one.
+ */
+function wkIntroHtml(cfg, wk) {
+  return `
+    <div class="wk-intro">
+      <div>
+        <img class="wk-intro-crest" src="${esc(cfg.crest)}" alt="">
+        <div class="wk-intro-league">${esc(cfg.name)}</div>
+        <div class="wk-intro-title">Week ${wk}<em>Power rankings</em></div>
+      </div>
+    </div>`
+}
+
+function wkRankHtml(cfg, wk, board, n) {
+  const row = board.rows[board.rows.length - n]
+  if (!row) return `<div class="err">No team at ${n} from bottom.</div>`
+
+  // Last week's game, drawn the way the Monday desk draws one.
+  const last = board.results.get(row.teamId)
+  const oppName = last ? board.nameOf.get(last.oppId) ?? 'their opponent' : ''
+  const lastHtml = last
+    ? `<div class="wk-last">
+         <span class="wk-last-tag ${last.won ? 'won' : 'lost'}">${last.won ? 'Won' : 'Lost'}</span>
+         <span class="wk-last-copy">${last.won ? 'beat' : 'lost to'} ${esc(oppName)}</span>
+         <span class="wk-last-score">${last.own.toFixed(1)} – ${last.opp.toFixed(1)}</span>
+       </div>`
+    : ''
+
+  return `
+    <div class="wk">
+      <div class="wk-top">
+        <span>${esc(cfg.name)}</span>
+        <span><b>Week ${wk}</b> · Power rankings</span>
+      </div>
+      <div class="wk-body">
+        <div class="wk-rank">${row.rank}</div>
+        <div class="wk-main">
+          <div class="wk-id">
+            <span class="wk-crest">${row.avatar
+              ? `<img src="${esc(row.avatar)}" alt="">`
+              : esc(initials(row.team))}</span>
+            <div>
+              <div class="wk-team">${esc(row.team)}</div>
+              <div class="wk-move flat">of ${board.rows.length}</div>
+            </div>
+          </div>
+          <div class="wk-stats">
+            <span class="wk-stat"><b>${row.score}</b><i>power score</i></span>
+            <span class="wk-stat"><b>${row.allPlay}</b><i>all-play</i></span>
+            <span class="wk-stat"><b>${row.perWeek}</b><i>points a week</i></span>
+            <span class="wk-stat"><b>${row.record}</b><i>record</i></span>
+          </div>
+          ${lastHtml}
+        </div>
+      </div>
+      <div class="wk-foot">
+        <span>theleaguebeat.com</span><span class="free">Free for your league</span>
+      </div>
+    </div>`
+}
+
+const wkCfg = () => LEAGUES[params.get('lg')] ?? LEAGUES.lor
+const wkWeek = () => Number(params.get('wk') || 2)
+
+async function loadWkIntro() {
+  document.getElementById('safe').innerHTML = wkIntroHtml(wkCfg(), wkWeek())
+}
+
+async function loadWkRank() {
+  const cfg = wkCfg()
+  const board = await powerBoard(cfg)
+  document.getElementById('safe').innerHTML = board.rows.length
+    ? wkRankHtml(cfg, wkWeek(), board, Number(params.get('n') || 1))
+    : '<div class="err">No completed week yet, so there is no board to count down.</div>'
+}
+
+/**
+ * Every plate for one league, stacked.
+ *
+ * WHY A SHEET EXISTS. Capturing these one URL at a time is a navigate
+ * and a screenshot per team — thirty-odd round trips for three
+ * leagues, each one a chance to catch a card mid-fetch. Stacked, the
+ * whole countdown is one render and one capture, then sliced into
+ * frames. Same markup as the single views, so they cannot drift.
+ */
+async function loadWkSheet() {
+  const cfg = wkCfg()
+  const wk = wkWeek()
+  const board = await powerBoard(cfg)
+  if (board.rows.length === 0) {
+    document.getElementById('safe').innerHTML = '<div class="err">No completed week yet.</div>'
+    return
+  }
+  const plate = (inner) => `<div class="frame"><div class="safe">${inner}</div></div>`
+  const cards = [plate(wkIntroHtml(cfg, wk))]
+  for (let n = 1; n <= board.rows.length; n++) cards.push(plate(wkRankHtml(cfg, wk, board, n)))
+  const shell = document.getElementById('shell')
+  shell.innerHTML = cards.join('')
+  document.body.dataset.sheet = String(board.rows.length + 1)
+
+  // ZOOM THE SHEET TO THE WINDOW, don't let the window shrink the
+  // sheet. A capture is taken at `innerWidth × devicePixelRatio`
+  // physical pixels; on a window wider than 1920 CSS px the frames
+  // land short of that and the slices come out soft. `zoom` (not
+  // `transform`) because it changes layout too, so the page height
+  // still matches what is drawn and a full-page capture cuts clean.
+  shell.style.zoom = String(window.innerWidth / 1920)
+}
+
 function fit() {
+  // The sheet is many frames at 1:1; there is nothing to scale.
+  if (document.body.dataset.sheet) return
   const f = document.getElementById('frame')
   if (exporting) {
     const s = Math.min(1, window.innerWidth / f.offsetWidth)
@@ -2139,6 +2483,9 @@ function fit() {
     else if (view === 'x-headliners') await loadXHeadliners()
     else if (view === 'x-cover') await loadXCover()
     else if (view === 'x-mnf') await loadXMnf()
+    else if (view === 'wk-intro') await loadWkIntro()
+    else if (view === 'wk-rank') await loadWkRank()
+    else if (view === 'wk-sheet') await loadWkSheet()
     else if (view === 'champ') await loadChamp()
     else await loadLeague(view in LEAGUES ? view : 'lor')
   } catch (e) {
