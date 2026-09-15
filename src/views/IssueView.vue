@@ -313,51 +313,80 @@
                that grid is built for a rank, a crest and a record, not
                for a player, a team and a bid. -->
           <ol v-else-if="sec.rows?.length" class="issue-wire" role="list">
-            <li v-for="(row, i) in sec.rows" :key="`${row.label}-${i}`" class="issue-wire-row">
-              <span
-                v-if="row.logoUrl || row.logoColor"
-                class="issue-wire-logo"
-                :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
-              >
-                <img v-if="row.logoUrl" :src="row.logoUrl" class="avatar-image" alt="" />
-                <span v-else>{{ row.logoInitials }}</span>
-              </span>
-              <span class="issue-wire-copy">
-                <span class="issue-wire-name">{{ row.label }}</span>
-                <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
-                     bar at 99.8% is the same fact felt on sight. -->
-                <span v-if="row.progress" class="issue-chase">
+            <li
+              v-for="(row, i) in sec.rows"
+              :key="`${row.label}-${i}`"
+              class="issue-wire-row"
+              :class="{ 'issue-versus': !!row.progress?.against }"
+            >
+              <!-- A comparison gets BOTH sides in one grid, with a fixed
+                   name column so the bar tracks start and end on the
+                   same x. Nested inside the copy column the rival's
+                   track was narrower, and two equal figures drew two
+                   unequal bars — the exact thing a comparison exists to
+                   disprove. -->
+              <template v-if="row.progress?.against">
+                <div class="issue-versus-side">
                   <span
-                    class="issue-chase-fill"
-                    :class="{ 'is-held': row.progress.held }"
-                    :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
-                  ></span>
-                </span>
-                <!-- The other side of a race, at the SAME weight. A tie
-                     drawn as one full bar plus a grey footnote does not
-                     look tied — it looks like somebody is ahead. -->
-                <span v-if="row.progress?.against" class="issue-rival">
+                    class="issue-wire-logo"
+                    :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
+                  >
+                    <img v-if="row.logoUrl" :src="row.logoUrl" class="avatar-image" alt="" />
+                    <span v-else>{{ row.logoInitials }}</span>
+                  </span>
+                  <span class="issue-versus-name">{{ row.label }}</span>
+                  <span class="issue-chase">
+                    <span
+                      class="issue-chase-fill"
+                      :style="{ width: `${(row.progress.value / Math.max(row.progress.value, row.progress.against.value)) * 100}%` }"
+                    ></span>
+                  </span>
+                  <span class="issue-versus-value">{{ row.progress.value }}</span>
+                </div>
+                <div class="issue-versus-side">
                   <span
-                    class="issue-rival-logo"
+                    class="issue-wire-logo"
                     :style="{ background: row.progress.against.logoColor ? `linear-gradient(135deg, ${row.progress.against.logoColor})` : undefined }"
                   >
                     <img v-if="row.progress.against.logoUrl" :src="row.progress.against.logoUrl" class="avatar-image" alt="" />
                     <span v-else>{{ row.progress.against.logoInitials }}</span>
                   </span>
-                  <span class="issue-rival-body">
-                    <span class="issue-rival-name">{{ row.progress.against.name }}</span>
-                    <span class="issue-chase">
-                      <span
-                        class="issue-chase-fill is-held"
-                        :style="{ width: `${Math.min(100, (row.progress.against.value / Math.max(row.progress.value, row.progress.against.value)) * 100)}%` }"
-                      ></span>
-                    </span>
+                  <span class="issue-versus-name">{{ row.progress.against.name }}</span>
+                  <span class="issue-chase">
+                    <span
+                      class="issue-chase-fill"
+                      :style="{ width: `${(row.progress.against.value / Math.max(row.progress.value, row.progress.against.value)) * 100}%` }"
+                    ></span>
                   </span>
-                  <span class="issue-rival-value">{{ row.progress.against.value }}</span>
+                  <span class="issue-versus-value">{{ row.progress.against.value }}</span>
+                </div>
+                <p v-if="row.sub" class="issue-versus-sub">{{ row.sub }}</p>
+              </template>
+
+              <template v-else>
+                <span
+                  v-if="row.logoUrl || row.logoColor"
+                  class="issue-wire-logo"
+                  :style="{ background: row.logoColor ? `linear-gradient(135deg, ${row.logoColor})` : undefined }"
+                >
+                  <img v-if="row.logoUrl" :src="row.logoUrl" class="avatar-image" alt="" />
+                  <span v-else>{{ row.logoInitials }}</span>
                 </span>
-                <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
-              </span>
-              <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
+                <span class="issue-wire-copy">
+                  <span class="issue-wire-name">{{ row.label }}</span>
+                  <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
+                       bar is the same fact felt on sight. -->
+                  <span v-if="row.progress" class="issue-chase">
+                    <span
+                      class="issue-chase-fill"
+                      :class="{ 'is-held': row.progress.held }"
+                      :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
+                    ></span>
+                  </span>
+                  <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
+                </span>
+                <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
+              </template>
             </li>
           </ol>
 

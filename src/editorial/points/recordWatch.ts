@@ -95,6 +95,21 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
   const active = input.careers.filter((c) => c.teamId)
   const beforeBy = new Map(input.before.map((c) => [c.managerId, c]))
   const pointRank = rankBy(input.careers, (c) => c.pointsFor)
+  // Ordered totals, so a rank can say what it is worth: how far back
+  // the next team up is, or — at the top — how much daylight there is.
+  const byPointsDesc = [...input.careers].sort((a, b) => b.pointsFor - a.pointsFor)
+  const neighbourGap = (c: CareerRecord): string => {
+    const i = byPointsDesc.findIndex((x) => x.managerId === c.managerId)
+    if (i < 0) return ''
+    if (i === 0) {
+      const next = byPointsDesc[1]
+      return next
+        ? ` The most in league history, ${Math.round(c.pointsFor - next.pointsFor).toLocaleString()} clear of ${next.name}.`
+        : ''
+    }
+    const above = byPointsDesc[i - 1]
+    return ` ${Math.round(above.pointsFor - c.pointsFor).toLocaleString()} behind ${above.name} in ${ORD(i)}.`
+  }
 
   /* ── The all-time wins lead ─────────────────────────────────── */
 
@@ -177,7 +192,8 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
       headline: `${target.toLocaleString()} pts`,
       detail:
         `${Math.round(away)} away, out of the ${Math.round(perGame)} they average a week. ` +
-        `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer all time.`,
+        `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer all time.` +
+        neighbourGap(c),
       // Against a week's scoring, so nearly-there and not-quite look
       // different. See the note on `progress`.
       progress: { value: Math.max(0, round1(perGame - away)), target: round1(perGame) },

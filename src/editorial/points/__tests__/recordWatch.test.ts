@@ -134,3 +134,28 @@ describe('what it refuses to do', () => {
     expect(notes[0].kind).toBe('moved')
   })
 })
+
+describe('a rank says what it is worth', () => {
+  it('names how far back the team above is', () => {
+    // "6th-highest scorer all time" is a placing. The distance to
+    // fifth is the thing that makes it a race.
+    const notes = buildWeeklyRecordBook({
+      ...base,
+      before: BEFORE,
+      careers: after({ juggs: { pf: 133 } }),
+    })
+    const ms = notes.find((n) => n.kind === 'milestone' && n.managerId === 'juggs')!
+    expect(ms.detail).toMatch(/behind .+ in 3rd/)
+  })
+
+  it('gives the leader their daylight instead', () => {
+    const top = [
+      mgr({ managerId: 'king', name: 'King', pointsFor: 11_960, seasons: 8 }),
+      mgr({ managerId: 'second', name: 'Second', pointsFor: 11_000, seasons: 8 }),
+    ]
+    const notes = buildWeeklyRecordBook({ ...base, before: top, careers: top })
+    const ms = notes.find((n) => n.kind === 'milestone' && n.managerId === 'king')!
+    expect(ms.detail).toContain('The most in league history')
+    expect(ms.detail).toContain('960 clear of Second')
+  })
+})
