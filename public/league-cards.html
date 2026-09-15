@@ -865,6 +865,20 @@
   }
   .wk-intro-title em { font-style: normal; color: var(--gold); display: block; }
 
+  .wk-intro-pair {
+    display: flex; align-items: center; justify-content: center; gap: 44px;
+    margin: 0 auto 44px;
+  }
+  .wk-intro-pair img { width: 300px; height: 300px; object-fit: contain; border-radius: 34px; }
+  /* The ladder itself, between the two crests — the Drop Zone League
+     has no crest of its own, it IS the relationship between these. */
+  .wk-intro-ladder {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 30px;
+    letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.5; text-align: center;
+  }
+  .wk-intro-ladder .dn { color: oklch(0.70 0.19 40); display: block; }
+  .wk-intro-ladder .up { color: oklch(0.74 0.18 145); display: block; }
+
   .wk { height: 100%; display: flex; flex-direction: column; }
   .wk-top {
     display: flex; align-items: center; justify-content: space-between;
@@ -953,6 +967,9 @@ const LEAGUES = {
   lor: { id: '1389692138421239808', prev: '1186844188245356544', name: 'League of Record', eyebrow: 'Top flight',  crest: '/league/lor-logo.png', divisions: true },
   ffl: { id: '1389738108437680128', prev: '1257084943821967360', name: 'Futures Football League', eyebrow: 'Second tier', crest: '/league/ffl-logo.png', divisions: false },
   // No local crest for this one; Sleeper's own league avatar stands in.
+  // The umbrella over both tiers. No league id and no board of its own —
+  // it exists here only so the countdown's opening plate can carry it.
+  dzl: { name: 'Drop Zone League', pair: true },
   dc: { id: '1312950142000697344', prev: '1186825886808555520', name: 'Dynasty Champs', eyebrow: 'Dynasty', crest: 'https://sleepercdn.com/avatars/595d5a2c123d2262155b707e3c1cd31f', divisions: false },
 }
 
@@ -1192,11 +1209,29 @@ function fillFrom(byPos) {
   return tot
 }
 
+/**
+ * How deep the enumeration goes at each position.
+ *
+ * THIS IS A CORRECTNESS FIX, NOT A SPEED ONE. The loop below walks
+ * every availability combination — 2^n of them — and JavaScript's
+ * bitwise operators are 32-bit, so `1 << n` overflows at n = 31 and
+ * goes NEGATIVE at exactly 31. A dynasty roster carries 30-plus skill
+ * players, which made the loop body run zero times and the whole
+ * league project 0.0 points a week. Redraft rosters sat under the
+ * limit, so this only ever showed up in Dynasty Champs.
+ *
+ * Depth is per position and generous: a sixth running back only starts
+ * once five are out at the same time, which at P_AVAIL = 0.82 is a
+ * 0.02% week. Everything past that is rounding pretending to be rigour.
+ */
+const DEPTH = { QB: 3, RB: 6, WR: 7, TE: 4 }
+
 function expectedWeekly(roster) {
   // Sorted descending within each position, so a subset's available list
   // comes out sorted by construction and never needs re-sorting.
   const pl = ['QB', 'RB', 'WR', 'TE'].flatMap((pos) =>
     roster.filter((p) => p.pos === pos).sort((a, b) => b.pts - a.pts)
+      .slice(0, DEPTH[pos])
       .map((p) => ({ pos, val: p.pts / 17 })))
   const n = pl.length
   const q = 1 - P_AVAIL
@@ -2244,8 +2279,62 @@ function allPlayFrom(scores, keep) {
  * final — so completed weeks come from the rosters' own records, which
  * are written by the same event that closes a week.
  */
+/**
+ * Where each manager stood at the end of last season.
+ *
+ * KEYED ON OWNER, because roster ids are reassigned between seasons
+ * and team names move. Returns owner id -> { rank, size, tier }.
+ *
+ * ACROSS BOTH TIERS for the promotion/relegation pair. A manager who
+ * won the Futures Football League and came up is not "up nine places"
+ * in the League of Record — they were not in it. Those get named as
+ * promoted or relegated instead of given a number that reads as form.
+ */
+const _lastSeasonCache = {}
+async function lastSeasonFinish(prevId) {
+  if (_lastSeasonCache[prevId]) return _lastSeasonCache[prevId]
+  const rosters = await fetch(`https://api.sleeper.app/v1/league/${prevId}/rosters`).then((r) => r.json())
+  // Sleeper's own tiebreak: wins first, then points for.
+  const fpts = (r) => (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100
+  const order = [...rosters].sort(
+    (a, b) => (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0) || fpts(b) - fpts(a))
+  const out = new Map()
+  order.forEach((r, i) => { if (r.owner_id) out.set(r.owner_id, { rank: i + 1, size: order.length }) })
+  _lastSeasonCache[prevId] = out
+  return out
+}
+
+/**
+ * The line under a team name: how far they have moved, and from what.
+ *
+ * Week one is the first board of the season, so there is no previous
+ * week to diff against — until week two closes, the honest comparison
+ * is last season's final standing, and it is labelled as such rather
+ * than passed off as form.
+ */
+function movementOf(row, ctx) {
+  const prior = ctx.priorRank?.get(row.teamId)
+  if (prior !== undefined) {
+    const d = prior - row.rank
+    if (d === 0) return { dir: 'flat', text: 'No change from last week' }
+    return { dir: d > 0 ? 'up' : 'down', text: `${d > 0 ? '▲' : '▼'} ${Math.abs(d)} from last week` }
+  }
+  const last = ctx.lastSeason?.get(row.ownerId)
+  if (last) {
+    const d = last.rank - row.rank
+    if (d === 0) return { dir: 'flat', text: `Level with last season's ${ORD(last.rank)}` }
+    return {
+      dir: d > 0 ? 'up' : 'down',
+      text: `${d > 0 ? '▲' : '▼'} ${Math.abs(d)} on last season's ${ORD(last.rank)}`,
+    }
+  }
+  const other = ctx.otherTier?.get(row.ownerId)
+  if (other) return { dir: other.dir, text: other.text }
+  return { dir: 'flat', text: 'First season in the league' }
+}
+
 async function powerBoard(cfg) {
-  await rankedTeams(cfg)                          // primes _prCache
+  const table = await rankedTeams(cfg)            // also primes _prCache
   const [league, rosters, users] = _prCache[cfg.id]
   const decided = rosters.reduce(
     (t, r) => t + (r.settings?.wins ?? 0) + (r.settings?.losses ?? 0) + (r.settings?.ties ?? 0), 0)
@@ -2287,17 +2376,19 @@ async function powerBoard(cfg) {
   const leagueMean = means.reduce((t, m) => t + m, 0) / means.length
   const stdev = Math.sqrt(means.reduce((t, m) => t + (m - leagueMean) ** 2, 0) / means.length)
 
-  // NO PROJECTION COMPONENT HERE, deliberately.
-  //
-  // The site's board blends results with what the CURRENT roster
-  // projects to score. This page has no player projections — the only
-  // per-manager number it holds is career points a week, which is a
-  // different quantity: it says who has been good for years, not who
-  // is good now. Blending it in put a 2-7 all-play team top of Dynasty
-  // Champs and buried a 9-0 East Coast in fifth, which is the exact
-  // complaint that got the board recalibrated in the first place.
-  //
-  // So this board is results only. Stated plainly rather than faked.
+  /* ── What the current roster projects ──────────────────────────
+     The other half of the board, and the same half the site uses: a
+     week-two ranking built only on week one is a ranking of one game.
+     Its weight decays as results arrive — half at one week played,
+     down to a quarter — which is why the page says the projection is
+     carrying most of this early and results take over.
+
+     Normalised min-max across the field, matching the site. */
+  const projOf = new Map(table.map((t) => [t.owner, t.perWeek]))
+  const ownerOf = new Map(rosters.map((r) => [String(r.roster_id), r.owner_id]))
+  const projValues = rosters.map((r) => projOf.get(r.owner_id)).filter(Number.isFinite)
+  const pLo = Math.min(...projValues), pHi = Math.max(...projValues)
+  const projWeight = Math.max(0.25, 1 / (1 + closedWeeks))
 
   const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
   const rows = rosters.map((r) => {
@@ -2311,22 +2402,94 @@ async function powerBoard(cfg) {
     const fromResults =
       PW.allPlay * pct(a.wins, a.losses, a.ties) + PW.scoring * scoring +
       PW.record * record + PW.recent * pct(rr.wins, rr.losses, rr.ties)
+    // Branch rather than weight by zero: `0 * undefined` is NaN, which
+    // clamps to 0 and flattens the whole board.
+    const raw = projOf.get(ownerOf.get(id))
+    const proj = pHi > pLo && Number.isFinite(raw) ? clamp01((raw - pLo) / (pHi - pLo)) : undefined
+    const blend = proj === undefined ? fromResults
+      : (1 - projWeight) * fromResults + projWeight * proj
     const u = byId[r.owner_id] || {}
     const md = u.metadata || {}
     return {
       teamId: id,
+      ownerId: r.owner_id,
       // NEVER `display_name` — that is a Sleeper username, and these
       // plates get posted. A team without a set name gets a number.
       team: (md.team_name || `Team ${r.roster_id}`).trim(),
       avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
-      score: Math.round(clamp01(fromResults) * 1000) / 10,
+      score: Math.round(clamp01(blend) * 1000) / 10,
       allPlay: `${a.wins}-${a.losses}`,
       record: `${w}-${l}${t ? `-${t}` : ''}`,
       perWeek: Math.round(mean * 10) / 10,
     }
   }).sort((x, y) => y.score - x.score)
   rows.forEach((r, i) => { r.rank = i + 1 })
-  return { rows, closedWeeks, results, nameOf: new Map(rows.map((r) => [r.teamId, r.team])) }
+
+  /* ── Where they stood before this week ──────────────────────────
+     Same formula on the weeks up to but not including the last one.
+     With a single closed week there is no such board, and `priorRank`
+     stays undefined so the movement line falls back to last season. */
+  let priorRank
+  if (closedWeeks >= 2) {
+    const before = scores.filter((s) => s.week < closedWeeks)
+    const bap = allPlayFrom(before)
+    const bplayed = [...new Set(before.map((s) => s.week))].sort((a, b) => a - b)
+    const bcut = bplayed[Math.max(0, bplayed.length - RECENT_WEEKS)]
+    const brp = allPlayFrom(before, (w) => w >= bcut)
+    const bmean = new Map()
+    for (const id of new Set(before.map((s) => s.teamId))) {
+      const mine = before.filter((s) => s.teamId === id)
+      bmean.set(id, mine.reduce((t, s) => t + s.points, 0) / mine.length)
+    }
+    const bm = [...bmean.values()]
+    const bLeague = bm.reduce((t, m) => t + m, 0) / bm.length
+    const bStd = Math.sqrt(bm.reduce((t, m) => t + (m - bLeague) ** 2, 0) / bm.length)
+    const prior = rosters.map((r) => {
+      const id = String(r.roster_id)
+      const a = bap.get(id) ?? { wins: 0, losses: 0, ties: 0 }
+      const rr = brp.get(id) ?? a
+      const mean = bmean.get(id) ?? 0
+      const sc = bStd > 0 ? clamp01(0.5 + (mean - bLeague) / (4 * bStd)) : 0.5
+      // Head-to-head record as it stood then, from the weeks played —
+      // `roster.settings.wins` is today's and would leak this week in.
+      const rec = pct(a.wins, a.losses, a.ties)
+      const res = PW.allPlay * pct(a.wins, a.losses, a.ties) + PW.scoring * sc +
+                  PW.record * rec + PW.recent * pct(rr.wins, rr.losses, rr.ties)
+      // Same blend, at the weight that applied THEN — comparing a
+      // blended board against a results-only one would report movement
+      // that is really just a change of model.
+      const pw = Math.max(0.25, 1 / (1 + (closedWeeks - 1)))
+      const raw = projOf.get(r.owner_id)
+      const pj = pHi > pLo && Number.isFinite(raw) ? clamp01((raw - pLo) / (pHi - pLo)) : undefined
+      return { id, score: pj === undefined ? res : (1 - pw) * res + pw * pj }
+    }).sort((x, y) => y.score - x.score)
+    priorRank = new Map(prior.map((p, i) => [p.id, i + 1]))
+  }
+
+  /* ── Last season, for the weeks before a board exists ──────────── */
+  const lastSeason = cfg.prev ? await lastSeasonFinish(cfg.prev) : new Map()
+  // The two tiers trade four teams a year. A manager who is not in
+  // last season's table for THIS league may be in the other one's.
+  const otherTier = new Map()
+  const sibling = cfg === LEAGUES.lor ? LEAGUES.ffl : cfg === LEAGUES.ffl ? LEAGUES.lor : null
+  if (sibling) {
+    const there = await lastSeasonFinish(sibling.prev)
+    const up = sibling === LEAGUES.ffl        // they came from the tier below
+    for (const [owner, f] of there) {
+      if (lastSeason.has(owner)) continue
+      otherTier.set(owner, {
+        dir: up ? 'up' : 'down',
+        text: `${up ? '▲ Promoted' : '▼ Relegated'} · ${ORD(f.rank)} in ${sibling.name}`,
+      })
+    }
+  }
+
+  const ctx = { priorRank, lastSeason, otherTier }
+  for (const r of rows) r.move = movementOf(r, ctx)
+  return {
+    rows, closedWeeks, results,
+    nameOf: new Map(rows.map((r) => [r.teamId, r.team])),
+  }
 }
 
 /**
@@ -2341,10 +2504,19 @@ async function powerBoard(cfg) {
  * revealed. The rank printed on the card is the real one.
  */
 function wkIntroHtml(cfg, wk) {
+  // The Drop Zone League has no crest of its own — it is the ladder
+  // between the two, and the title card has always said so with both.
+  const mark = cfg.pair
+    ? `<div class="wk-intro-pair">
+         <img src="${esc(LEAGUES.lor.crest)}" alt="">
+         <div class="wk-intro-ladder"><span class="dn">▼ 2 down</span><span class="up">2 up ▲</span></div>
+         <img src="${esc(LEAGUES.ffl.crest)}" alt="">
+       </div>`
+    : `<img class="wk-intro-crest" src="${esc(cfg.crest)}" alt="">`
   return `
     <div class="wk-intro">
       <div>
-        <img class="wk-intro-crest" src="${esc(cfg.crest)}" alt="">
+        ${mark}
         <div class="wk-intro-league">${esc(cfg.name)}</div>
         <div class="wk-intro-title">Week ${wk}<em>Power rankings</em></div>
       </div>
@@ -2381,7 +2553,7 @@ function wkRankHtml(cfg, wk, board, n) {
               : esc(initials(row.team))}</span>
             <div>
               <div class="wk-team">${esc(row.team)}</div>
-              <div class="wk-move flat">of ${board.rows.length}</div>
+              <div class="wk-move ${row.move.dir}">${esc(row.move.text)}</div>
             </div>
           </div>
           <div class="wk-stats">
@@ -2426,17 +2598,26 @@ async function loadWkRank() {
 async function loadWkSheet() {
   const cfg = wkCfg()
   const wk = wkWeek()
-  const board = await powerBoard(cfg)
-  if (board.rows.length === 0) {
-    document.getElementById('safe').innerHTML = '<div class="err">No completed week yet.</div>'
-    return
-  }
   const plate = (inner) => `<div class="frame"><div class="safe">${inner}</div></div>`
   const cards = [plate(wkIntroHtml(cfg, wk))]
-  for (let n = 1; n <= board.rows.length; n++) cards.push(plate(wkRankHtml(cfg, wk, board, n)))
+  // The umbrella has no league id and so no board — its sheet is the
+  // opening plate alone.
+  if (!cfg.pair) {
+    const board = await powerBoard(cfg)
+    if (board.rows.length === 0) {
+      document.getElementById('safe').innerHTML = '<div class="err">No completed week yet.</div>'
+      return
+    }
+    for (let n = 1; n <= board.rows.length; n++) cards.push(plate(wkRankHtml(cfg, wk, board, n)))
+  }
+  // A thirteen-frame sheet is 17,550px tall and Chrome times out
+  // capturing it. `&from=&to=` (1-based, inclusive) takes it in passes.
+  const from = Number(params.get('from') || 1)
+  const to = Number(params.get('to') || cards.length)
+  const shown = cards.slice(from - 1, to)
   const shell = document.getElementById('shell')
-  shell.innerHTML = cards.join('')
-  document.body.dataset.sheet = String(board.rows.length + 1)
+  shell.innerHTML = shown.join('')
+  document.body.dataset.sheet = String(shown.length)
 
   // ZOOM THE SHEET TO THE WINDOW, don't let the window shrink the
   // sheet. A capture is taken at `innerWidth × devicePixelRatio`
