@@ -239,7 +239,7 @@ function recordSection(input: WeeklyIssueInput): IssueSection | null {
     label: n.teamId ? input.teamName(n.teamId) : n.headline,
     value: n.headline,
     sub: n.detail,
-    progress: n.progress,
+    progress: n.progress ? { ...n.progress, against: n.against } : undefined,
     ...(n.teamId ? visual(input, n.teamId) : {}),
   }))
 
@@ -289,11 +289,20 @@ function powerSection(input: WeeklyIssueInput): IssueSection | null {
     const prior = input.previousPowerRank?.(p.teamId)
     const notes: string[] = []
 
+    // WHAT THE ROW SAYS ABOUT THIS TEAM, not what all-play means.
+    // Every row used to carry the same sentence defining all-play —
+    // ten times in a ten-team league, twelve in a twelve — under a
+    // support paragraph that had already explained it. The definition
+    // belongs once, at the top; the row owes the reader whatever is
+    // true of THIS team and nobody else.
     const luckLine = luck ? describeLuck(luck, input.teamName(p.teamId)) : null
     if (luckLine) notes.push(luckLine)
+    const record = rec ? `${rec.wins}-${rec.losses}${rec.ties ? `-${rec.ties}` : ''}` : null
+    const allPlay = `${p.allPlayWins}-${p.allPlayLosses} all-play`
     notes.push(
-      `All-play ${p.allPlayWins}-${p.allPlayLosses}: the record they would hold ` +
-        'having played everyone, every week.',
+      record
+        ? `${record} on the season, ${allPlay}, ${round1(p.pointsPerWeek)} a week.`
+        : `${allPlay}, ${round1(p.pointsPerWeek)} a week.`,
     )
 
     return {
@@ -531,8 +540,14 @@ export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
     ...(input.transactions ?? []).map((t) => t.week).filter(Number.isFinite),
     -Infinity,
   )
-  const wireWeek =
-    Number.isFinite(latest) && Math.abs(latest - input.week) <= 1 ? latest : input.week
+  // WAIT FOR THE WIRE. The issue covering week N publishes on the
+  // Tuesday of week N+1, before waivers have run — so reading "the
+  // most recent week with moves" printed week N's claims as though
+  // they were news, days after everyone had seen them. The wire is a
+  // Wednesday section; until this week's claims process there is
+  // nothing to report and the section stays away.
+  const wireWeek = input.week + 1
+  void latest
   const wire = buildWireFacts(input.transactions, wireWeek)
 
   const sections = [

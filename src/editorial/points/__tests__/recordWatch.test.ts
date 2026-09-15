@@ -38,8 +38,11 @@ describe('the chase keeps being reported', () => {
     })
     const race = notes.find((n) => n.kind === 'chase')!
     expect(race).toBeDefined()
-    expect(race.detail).toContain('still one back')
+    expect(race.detail).toContain('Still one back')
+    // Both sides of the race, so the row can draw the comparison
+    // rather than a lone bar the reader has to interpret.
     expect(race.progress).toEqual({ value: 60, target: 61 })
+    expect(race.against).toEqual({ name: 'Mighty Mallards', value: 61 })
   })
 
   it('reports the gap closing', () => {
@@ -85,9 +88,13 @@ describe('milestones inside a week', () => {
     })
     const ms = notes.find((n) => n.kind === 'milestone')!
     expect(ms.headline).toBe('8,000 pts')
-    expect(ms.progress!.target).toBe(8000)
-    expect(ms.progress!.value).toBeCloseTo(7986, 0)
     expect(ms.detail).toMatch(/14 away/)
+    // Scaled to a WEEK, not to 8,000 — otherwise 14-away and 140-away
+    // both render as a bar at ~99% and the drawing says nothing.
+    const pace = ms.progress!.target
+    expect(pace).toBeGreaterThan(80)
+    expect(pace).toBeLessThan(120)
+    expect(ms.progress!.value / pace).toBeGreaterThan(0.8)
   })
 
   it('says nothing about a number three seasons out', () => {

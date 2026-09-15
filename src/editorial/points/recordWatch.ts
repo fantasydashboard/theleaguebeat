@@ -35,8 +35,19 @@ export interface WeeklyRecordNote {
   headline: string
   /** What it means and how close it is. */
   detail: string
-  /** The chase, for drawing. */
+  /**
+   * The chase, for drawing.
+   *
+   * SCALED TO A WEEK, not to the record. A bar running from zero to
+   * 8,000 puts "5 away" and "55 away" at 99.9% and 99.3% — visually
+   * identical, when one is eleven times closer. Measured against what
+   * the team scores in a week, they are 96% and 58% of the way
+   * through their last stretch, which is the thing a reader is
+   * actually being told.
+   */
   progress?: { value: number; target: number; held?: boolean }
+  /** The other side of a race, drawn on the same scale. */
+  against?: { name: string; value: number }
   /** Smaller sorts first. */
   urgency: number
 }
@@ -56,6 +67,7 @@ export const MAX_WEEKLY_RECORD_NOTES = 3
 /** A race still worth reporting. Beyond this the chase is notional. */
 const MAX_RACE_GAMES = 12
 
+const round1 = (n: number) => Math.round(n * 10) / 10
 const nextRung = (v: number, step: number) => (Math.floor(v / step) + 1) * step
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const ORD = (n: number) => {
@@ -135,10 +147,9 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
         managerId: second.managerId,
         teamId: second.teamId,
         headline: `${second.wins} wins`,
-        detail:
-          `${lead.name} hold the all-time record on ${lead.wins}. ` +
-          `${second.name} are ${movement}.`,
+        detail: `${plural(gap, 'win')} behind ${lead.name}, who hold the record on ${lead.wins}. ${movement[0].toUpperCase()}${movement.slice(1)}.`,
         progress: { value: second.wins, target: lead.wins },
+        against: { name: lead.name, value: lead.wins },
       })
     }
   }
@@ -159,9 +170,11 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
       teamId: c.teamId,
       headline: `${target.toLocaleString()} pts`,
       detail:
-        `${Math.round(away)} away — one ordinary week does it. ` +
+        `${Math.round(away)} away — ${Math.round((away / perGame) * 100)}% of an ordinary week. ` +
         `${ORD(pointRank.get(c.managerId) ?? 0)}-highest scorer all time.`,
-      progress: { value: Math.round(c.pointsFor), target },
+      // Against a week's scoring, so nearly-there and not-quite look
+      // different. See the note on `progress`.
+      progress: { value: Math.max(0, round1(perGame - away)), target: round1(perGame) },
     })
   }
 

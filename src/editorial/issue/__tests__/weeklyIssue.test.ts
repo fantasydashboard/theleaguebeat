@@ -103,7 +103,7 @@ describe('buildWeeklyIssue', () => {
     // whichever side the builder attributed the players to, and would
     // prove nothing about who got what.
     const trade: LeagueTransaction = {
-      id: 't1', platform: 'sleeper', kind: 'trade', timestamp: 1, week: 5,
+      id: 't1', platform: 'sleeper', kind: 'trade', timestamp: 1, week: 6,
       teamIds: ['a', 'b'],
       movements: [
         { playerId: '1', playerName: 'Bijan Robinson', toTeamId: 'a', fromTeamId: 'b' },
@@ -139,18 +139,25 @@ describe('buildWeeklyIssue', () => {
     expect(wire.headline).toBe('$44 changed hands.')
     expect(wire.support).toContain('Week 6 claims.')
 
-    // But only within a week. On a stale or finished season the log's
-    // most recent period can be months past what is being written
-    // about — a real 2025 league put week 17's playoff claims under a
-    // week 14 headline. Beyond one week it falls back to the issue's
-    // own week.
+    // And nothing else. The issue covering week 5 publishes on the
+    // Tuesday of week 6, BEFORE waivers run — so falling back to the
+    // issue's own week reprinted claims everyone had already seen,
+    // days late and labelled as news. A wire with nothing new is a
+    // wire that waits.
+    const tuesday = buildWeeklyIssue({
+      ...base, week: 5, power: six,
+      transactions: [claim('old', 5, 'Last Week Guy', 3)],
+    })!
+    expect(tuesday.sections.find((s) => s.id === 'the-wire')).toBeUndefined()
+
+    // A stale or finished season must not reach forward either: a real
+    // 2025 league put week 17's playoff claims under a week 14
+    // headline.
     const stale = buildWeeklyIssue({
       ...base, week: 5, power: six,
-      transactions: [claim('old', 5, 'Last Week Guy', 3), claim('far', 17, 'Playoff Guy', 44)],
+      transactions: [claim('far', 17, 'Playoff Guy', 44)],
     })!
-    const staleWire = stale.sections.find((s) => s.id === 'the-wire')!
-    expect(staleWire.rows!.map((r) => r.label)).toEqual(['Last Week Guy'])
-    expect(staleWire.support).not.toContain('Week 17')
+    expect(stale.sections.find((s) => s.id === 'the-wire')).toBeUndefined()
   })
 
   it('offers no trades section in a week nobody traded', () => {

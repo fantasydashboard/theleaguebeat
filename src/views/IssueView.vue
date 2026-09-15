@@ -206,9 +206,15 @@
           :id="`issue-${sec.id}`"
           class="section issue-sec"
         >
-          <!-- The cover already said this section's piece. Repeating
-               the eyebrow, headline and support four hundred pixels
-               later was the page's loudest generated tell. -->
+          <!-- The cover already said this section's piece, so the
+               headline and support do not run again. The EYEBROW
+               stays: without it the lead section's rows arrived
+               several hundred pixels below the cover with no label on
+               them, and the table of contents pointed at a heading
+               that was not there. -->
+          <p v-if="isCoverSection(secIndex)" class="section-eyebrow issue-sec-resume">
+            {{ sec.eyebrow }}
+          </p>
           <div v-if="!isCoverSection(secIndex)" class="issue-sec-top">
             <!-- Identity marks, deliberately a fraction of the cover
                  portrait. A page where every section shouts at cover
@@ -318,6 +324,12 @@
                     :class="{ 'is-held': row.progress.held }"
                     :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
                   ></span>
+                </span>
+                <!-- The other side of a race. A chase drawn without the
+                     team being chased is half a story. -->
+                <span v-if="row.progress?.against" class="issue-chase-rival">
+                  <span class="issue-chase-rival-bar"></span>
+                  {{ row.progress.against.name }} · {{ row.progress.against.value }}
                 </span>
                 <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
               </span>
@@ -4113,6 +4125,8 @@ function collectUserIdentity() {
    A fraction of the cover portrait on purpose: identity marks that say
    whose story this is, not illustrations competing with the lead. */
 .issue-sec-top { display: flex; align-items: flex-start; gap: 22px; }
+/* The lead section resuming under the cover: a label, not a headline. */
+.issue-sec-resume { margin: 0 0 14px; }
 .issue-sec-copy { flex: 1; min-width: 0; }
 .issue-sec-art { display: flex; flex: none; padding-top: 4px; }
 .issue-sec-logo {
@@ -4159,6 +4173,14 @@ function collectUserIdentity() {
   transition: width 0.6s ease;
 }
 .issue-chase-fill.is-held { background: oklch(0.70 0.27 350); }
+.issue-chase-rival {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.72rem; color: oklch(0.55 0.01 90); margin-bottom: 0.3rem;
+}
+.issue-chase-rival-bar {
+  flex: none; width: 36px; height: 4px; border-radius: 999px;
+  background: oklch(0.70 0.27 350);
+}
 .issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
 
 /* ── ISSUE SECTION DENSITY ──────────────────────────────────────────
