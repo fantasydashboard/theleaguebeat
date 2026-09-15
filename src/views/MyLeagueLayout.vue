@@ -827,18 +827,24 @@ onMounted(() => {
   padding-top: 12px;
 }
 
+/* The sister product, in the sister product's own chartreuse. The
+   colour is the signal: gold is a League Beat control, this is
+   somewhere else. Deliberately a text link rather than a second
+   button — two filled CTAs in one bar and neither gets pressed. */
 .league-bar-back {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.82rem;
-  color: oklch(0.55 0.010 90);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: oklch(0.86 0.19 128);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 800;
   white-space: nowrap;
   transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.league-bar-back svg { opacity: 0.7; }
+.league-bar-back svg { opacity: 0.85; }
 @media (hover: hover) and (pointer: fine) {
-  .league-bar-back:hover { color: var(--ink-1); }
+  .league-bar-back:hover { color: oklch(0.93 0.20 128); }
 }
 .league-bar-cta {
   display: inline-flex; align-items: center; gap: 6px;
