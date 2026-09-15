@@ -56,6 +56,24 @@ export interface IssueRow {
       logoColor?: string
       logoInitials?: string
     }
+    /**
+     * Who is next up the list, and by how much.
+     *
+     * NOT the same as `against`. That is the other half of a race this
+     * row IS, and gets equal billing. This is the team one rung above
+     * on a different ladder — it rides at the END of the track, where
+     * the thing being chased belongs, so "851 behind" is a distance a
+     * reader sees rather than a clause they parse.
+     */
+    neighbour?: {
+      name: string
+      gap: number
+      /** True at the top, where the gap is daylight held, not owed. */
+      leader?: boolean
+      logoUrl?: string
+      logoColor?: string
+      logoInitials?: string
+    }
   }
 }
 

@@ -49,6 +49,18 @@ export interface WeeklyRecordNote {
   /** The other side of a race, drawn on the same scale and at the
    *  same weight — a tie has to LOOK tied. */
   against?: { name: string; value: number; teamId?: string }
+  /**
+   * The team immediately above on the all-time list, and the gap.
+   *
+   * SEPARATE FROM `against`, and deliberately. `against` is the other
+   * half of a race the row IS — a tie, a record changing hands — and
+   * gets drawn at equal weight. This is the next rung up on a
+   * different ladder: a milestone row is chasing a round number, and
+   * "851 behind the team in 5th" is a second fact about the same
+   * team. It used to live only inside `detail`, which meant the one
+   * genuinely competitive number in the row was prose.
+   */
+  neighbour?: { name: string; gap: number; place: number; teamId?: string; leader?: boolean }
   /** Smaller sorts first. */
   urgency: number
 }
@@ -98,17 +110,27 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
   // Ordered totals, so a rank can say what it is worth: how far back
   // the next team up is, or — at the top — how much daylight there is.
   const byPointsDesc = [...input.careers].sort((a, b) => b.pointsFor - a.pointsFor)
-  const neighbourGap = (c: CareerRecord): string => {
+  const neighbourOf = (c: CareerRecord): WeeklyRecordNote['neighbour'] => {
     const i = byPointsDesc.findIndex((x) => x.managerId === c.managerId)
-    if (i < 0) return ''
-    if (i === 0) {
-      const next = byPointsDesc[1]
-      return next
-        ? ` The most in league history, ${Math.round(c.pointsFor - next.pointsFor).toLocaleString()} clear of ${next.name}.`
-        : ''
+    if (i < 0) return undefined
+    // At the top there is nobody above, so the comparison inverts:
+    // the gap is daylight held rather than ground to make up.
+    const other = i === 0 ? byPointsDesc[1] : byPointsDesc[i - 1]
+    if (!other) return undefined
+    return {
+      name: other.name,
+      gap: Math.round(Math.abs(other.pointsFor - c.pointsFor)),
+      place: i === 0 ? 1 : i,
+      teamId: other.teamId,
+      leader: i === 0,
     }
-    const above = byPointsDesc[i - 1]
-    return ` ${Math.round(above.pointsFor - c.pointsFor).toLocaleString()} behind ${above.name} in ${ORD(i)}.`
+  }
+  const neighbourGap = (c: CareerRecord): string => {
+    const n = neighbourOf(c)
+    if (!n) return ''
+    return n.leader
+      ? ` The most in league history, ${n.gap.toLocaleString()} clear of ${n.name}.`
+      : ` ${n.gap.toLocaleString()} behind ${n.name} in ${ORD(n.place)}.`
   }
 
   /* ── The all-time wins lead ─────────────────────────────────── */
@@ -197,6 +219,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
       // Against a week's scoring, so nearly-there and not-quite look
       // different. See the note on `progress`.
       progress: { value: Math.max(0, round1(perGame - away)), target: round1(perGame) },
+      neighbour: neighbourOf(c),
     })
   }
 

@@ -319,6 +319,19 @@ function recordSection(input: WeeklyIssueInput): IssueSection | null {
                 }
               })()
             : undefined,
+          neighbour: n.neighbour
+            ? (() => {
+                const t = n.neighbour.teamId ? input.team?.(n.neighbour.teamId) : undefined
+                return {
+                  name: n.neighbour.name,
+                  gap: n.neighbour.gap,
+                  leader: n.neighbour.leader,
+                  logoUrl: t?.avatarUrl,
+                  logoColor: t?.avatarColor,
+                  logoInitials: t?.ownerInitials,
+                }
+              })()
+            : undefined,
         }
       : undefined,
     ...(n.teamId ? visual(input, n.teamId) : {}),

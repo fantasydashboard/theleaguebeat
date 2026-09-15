@@ -375,13 +375,40 @@
                 <span class="issue-wire-copy">
                   <span class="issue-wire-name">{{ row.label }}</span>
                   <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
-                       bar is the same fact felt on sight. -->
-                  <span v-if="row.progress" class="issue-chase">
-                    <span
-                      class="issue-chase-fill"
-                      :class="{ 'is-held': row.progress.held }"
-                      :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
-                    ></span>
+                       bar is the same fact felt on sight.
+
+                       The team one rung up rides at the END of the
+                       track, because that is where the thing being
+                       chased belongs. The gap number sits with its
+                       crest rather than in the sentence below. -->
+                  <span v-if="row.progress" class="issue-chase-line">
+                    <span class="issue-chase">
+                      <span
+                        class="issue-chase-fill"
+                        :class="{ 'is-held': row.progress.held }"
+                        :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
+                      ></span>
+                    </span>
+                    <span v-if="row.progress.neighbour" class="issue-ahead">
+                      <span
+                        class="issue-ahead-logo"
+                        :style="{ background: row.progress.neighbour.logoColor ? `linear-gradient(135deg, ${row.progress.neighbour.logoColor})` : undefined }"
+                        :title="row.progress.neighbour.name"
+                      >
+                        <img
+                          v-if="row.progress.neighbour.logoUrl"
+                          :src="row.progress.neighbour.logoUrl"
+                          class="avatar-image"
+                          alt=""
+                        />
+                        <span v-else>{{ row.progress.neighbour.logoInitials }}</span>
+                      </span>
+                      <span
+                        class="issue-ahead-gap"
+                        :class="{ 'is-clear': row.progress.neighbour.leader }"
+                      >{{ row.progress.neighbour.leader ? '+' : '−'
+                        }}{{ row.progress.neighbour.gap.toLocaleString() }}</span>
+                    </span>
                   </span>
                   <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
                 </span>
@@ -4401,6 +4428,59 @@ function collectUserIdentity() {
   transition: width 0.6s ease;
 }
 .issue-chase-fill.is-held { background: oklch(0.70 0.27 350); }
+
+/* The track and whoever is next up the list, on one line. The crest
+   sits past the end of the bar because that is where the thing being
+   chased is. */
+.issue-chase-line { display: flex; align-items: center; gap: 0.55rem; }
+.issue-chase-line .issue-chase { flex: 1; min-width: 0; }
+.issue-ahead { display: flex; align-items: center; gap: 0.35rem; flex: none; }
+.issue-ahead-logo {
+  width: 22px; height: 22px; border-radius: 6px; flex: none; overflow: hidden;
+  display: grid; place-items: center;
+  background: oklch(0.24 0.02 90); font-weight: 800; font-size: 0.55rem;
+  color: oklch(0.62 0.01 90);
+}
+.issue-ahead-logo .avatar-image { width: 100%; height: 100%; object-fit: cover; }
+.issue-ahead-gap {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 0.8rem; letter-spacing: 0.03em; color: oklch(0.72 0.13 60);
+}
+/* At the top of the list the gap is daylight held, not ground owed. */
+.issue-ahead-gap.is-clear { color: oklch(0.74 0.18 145); }
+
+/* ── COMPARISON ROWS ────────────────────────────────────────────────
+   Two teams measured against each other — a tie at the top of the
+   all-time list, a record changing hands.
+
+   STACKED, WITH THE TRACKS IN ONE COLUMN. Side by side, each side got
+   half the width and two equal figures drew two half-length bars that
+   started and ended at different x — which is the exact thing a
+   comparison exists to disprove. One grid, shared columns, so equal
+   numbers are visibly equal and one-ahead is visibly one longer. */
+.issue-wire-row.issue-versus { flex-direction: column; align-items: stretch; gap: 10px; }
+.issue-versus-side {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 9.5rem) 1fr auto;
+  align-items: center;
+  gap: 0 12px;
+}
+.issue-versus-side .issue-chase { margin: 0; }
+.issue-versus-name {
+  font-weight: 700; font-size: 0.9rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.issue-versus-value {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 1.05rem; min-width: 2.5rem; text-align: right;
+}
+.issue-versus-sub {
+  margin: 0; font-size: 0.78rem; color: oklch(0.62 0.01 90);
+}
+
+@media (max-width: 640px) {
+  .issue-versus-side { grid-template-columns: 28px minmax(0, 6rem) 1fr auto; gap: 0 8px; }
+}
 .standings-move {
   display: inline-block; margin-left: 0.45rem;
   font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
