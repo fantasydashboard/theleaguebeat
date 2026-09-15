@@ -44,6 +44,11 @@ export type LeagueSport = 'mlb' | 'nfl' | 'nba' | 'nhl'
 export interface CategoryLeagueDataTeam {
   id: string
   name: string
+  /** The platform's stable owner id — opaque, never a username.
+   *  Team ids are reassigned between seasons and names move, so this
+   *  is the only safe key for anything that spans years (head-to-head
+   *  series, career records, champions). */
+  ownerId?: string
   ownerName: string
   ownerInitials: string
   avatarUrl?: string
@@ -200,7 +205,8 @@ export interface CategoryLeaguePlayerPerformance {
 
 /** Per-season summary — for the History page season list. */
 /** Re-exported so the contract is readable without chasing imports. */
-export type { CareerRecord } from './points/recordBook'
+import type { CareerRecord } from './points/recordBook'
+export type { CareerRecord }
 
 export interface CategoryLeagueDataSeasonHistory {
   year: number
@@ -613,6 +619,12 @@ export interface LeagueDataH2HPoints {
    *  per-matchup projection of their own. Optional: without it the
    *  desk degrades to silence rather than guessing. */
   currentWeekStarters?: Record<string, string[]>
+
+  /** Current week's full rosters, by team id. Lets the FIRST weekly
+   *  issue rank the field on projections — with one week played there
+   *  is no prior board to rewind to, and ranking on the board a result
+   *  produced would let a win justify its own number. */
+  currentWeekRosters?: Record<string, string[]>
 
   /** Previous week's matchups in finalized state. Drives Monday-
    *  morning recap framing on the Matchups page; absent on early-

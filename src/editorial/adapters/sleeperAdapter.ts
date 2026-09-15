@@ -668,6 +668,7 @@ function buildTeams(
     return {
       id: String(r.roster_id),
       name: teamName,
+      ownerId: r.owner_id ? String(r.owner_id) : undefined,
       ownerName,
       ownerInitials,
       avatarUrl,
@@ -2317,6 +2318,29 @@ function buildSleeperCurrentWeekStarters(
 }
 
 /**
+ * Full rosters, by team id.
+ *
+ * Comes off the same matchup payload as the starters, so it costs no
+ * extra request. The first weekly issue needs it: with only one week
+ * played there is no prior board to rewind to, and the honest
+ * pregame ranking is the projection board the preseason issue
+ * published — which needs whole rosters, not lineups.
+ */
+function buildSleeperCurrentWeekRosters(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  currentWeek: number,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const m of matchupsByWeek[String(currentWeek)] ?? []) {
+    const players = (m.players ?? []).filter(
+      (id): id is string => typeof id === 'string' && !!id && id !== '0',
+    )
+    if (players.length > 0) out[String(m.roster_id)] = players
+  }
+  return out
+}
+
+/**
  * Previous week's matchups, unconditionally stamped 'final'. Unlike
  * the current week (which can't be honestly called closed from
  * per-roster point totals — see `weekMatchupStatus` above), a
@@ -2443,6 +2467,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     league.status === 'complete',
   )
   const currentWeekStarters = buildSleeperCurrentWeekStarters(matchupsByWeek, currentWeek)
+  const currentWeekRosters = buildSleeperCurrentWeekRosters(matchupsByWeek, currentWeek)
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
@@ -2474,6 +2499,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     teams,
     currentWeekMatchups,
     currentWeekStarters,
+    currentWeekRosters,
     previousWeekMatchups,
     weeklyPointsAverage,
     standings,

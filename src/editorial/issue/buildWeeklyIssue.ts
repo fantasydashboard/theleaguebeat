@@ -25,6 +25,7 @@ import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
 import { buildWireFacts, describeCost, type WireFacts } from '../points/wireFacts'
 import { detectUpsets } from '../points/upsets'
 import { buildWeeklyRecordBook } from '../points/recordWatch'
+import { seriesFor, describeSeries, type HeadToHead } from '../points/headToHead'
 import type { CareerRecord } from '../points/recordBook'
 import type { LeagueTransaction } from '../transactions/types'
 import type { LeagueDataPointsMatchup } from '../types'
@@ -58,6 +59,14 @@ export interface WeeklyIssueInput {
   transactions?: readonly LeagueTransaction[]
   /** Power ranking as of last week, for movement. */
   previousPowerRank?: (teamId: string) => number | undefined
+  /** The board to use when there is no previous week to rewind to —
+   *  the projection board, for the first weekly issue of a season. */
+  fallbackPriorRank?: (teamId: string) => number | undefined
+  /** Every manager's record against every other, all-time. */
+  headToHead?: HeadToHead
+  /** teamId → the platform's stable owner id, which is what the
+   *  head-to-head tally is keyed on. */
+  ownerOf?: (teamId: string) => string | undefined
   /** Careers including the week just covered, and as they stood
    *  before it — the record book needs both tenses. */
   careers?: readonly CareerRecord[]
@@ -70,6 +79,17 @@ export interface WeeklyIssueInput {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
+
+/**
+ * The board a team sat on going INTO the covered week.
+ *
+ * Last week's board when there is one; the projection board in the
+ * first weekly issue of a season, where rewinding has nothing behind
+ * it. Never the board the week produced — that would let a win
+ * justify its own number.
+ */
+const priorRank = (input: WeeklyIssueInput, teamId: string): number | undefined =>
+  input.previousPowerRank?.(teamId) ?? input.fallbackPriorRank?.(teamId)
 
 function visual(input: WeeklyIssueInput, teamId: string) {
   const t = input.team?.(teamId)
@@ -159,15 +179,22 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
     const margin = round1(Math.abs(m.homePoints - m.awayPoints))
     // Rank going INTO the week. Using the board this result produced
     // would let a win quietly justify its own number.
-    const wr = input.previousPowerRank?.(winner)
-    const lr = input.previousPowerRank?.(loser)
+    const wr = priorRank(input, winner)
+    const lr = priorRank(input, loser)
     const named =
       wr && lr
         ? `No. ${wr} ${input.teamName(winner)} beat No. ${lr} ${input.teamName(loser)}`
         : `${input.teamName(winner)} beat ${input.teamName(loser)}`
+    // The rivalry, when there is one. A result is a fact; a result
+    // with a series behind it is a story.
+    const rivalry = describeSeries(
+      seriesFor(input.headToHead, input.ownerOf?.(winner), input.ownerOf?.(loser)),
+      input.teamName(winner),
+    )
+    const marginText = margin === 0 ? 'Tied' : `by ${margin}`
     return {
       label: named,
-      sub: margin === 0 ? 'Tied' : `by ${margin}`,
+      sub: rivalry ? `${marginText} · ${rivalry}` : marginText,
       value: `${round1(Math.max(m.homePoints, m.awayPoints)).toFixed(1)} – ${round1(Math.min(m.homePoints, m.awayPoints)).toFixed(1)}`,
       ...visual(input, winner),
     }
@@ -186,10 +213,10 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
  * with it so the claim is checkable.
  */
 function upsetSection(input: WeeklyIssueInput): IssueSection | null {
-  if (!input.previousPowerRank || input.power.length === 0) return null
+  if ((!input.previousPowerRank && !input.fallbackPriorRank) || input.power.length === 0) return null
   const upsets = detectUpsets({
     results: input.results,
-    priorRank: input.previousPowerRank,
+    priorRank: (id) => priorRank(input, id),
     fieldSize: input.power.length,
   })
   if (upsets.length === 0) return null

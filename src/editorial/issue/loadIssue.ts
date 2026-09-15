@@ -19,6 +19,7 @@ import { buildWeeklyIssue } from './buildWeeklyIssue'
 import { loadPreseasonIssue } from './loadPreseasonIssue'
 import type { Issue } from './types'
 import type { LeagueDataH2HPoints } from '../types'
+import type { HeadToHead } from '../points/headToHead'
 
 export interface IssueTeamVisual {
   name: string
@@ -36,6 +37,12 @@ export interface LoadIssueArgs {
   teamName: (teamId: string) => string
   team?: (teamId: string) => IssueTeamVisual | undefined
   playerImage?: (playerId: string) => string | null | undefined
+  /** The projection board, for the first weekly issue of a season —
+   *  there is no previous week to rewind to. Arrives lazily. */
+  fallbackPriorRank?: (teamId: string) => number | undefined
+  /** All-time series records. Arrives lazily; the issue is richer
+   *  when it lands and correct without it. */
+  headToHead?: HeadToHead
 }
 
 /** Whether a week has actually finished, which is what the weekly
@@ -117,6 +124,9 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
     transactions: data.transactions,
     careers: data.careerRecords,
     careersBefore,
+    fallbackPriorRank: args.fallbackPriorRank,
+    headToHead: args.headToHead,
+    ownerOf: (teamId) => data.teams.find((t) => t.id === teamId)?.ownerId,
     seasonsPlayed: (data.seasonHistory ?? []).length,
     previousPowerRank: (() => {
       const prior = previousPowerRanks(data)

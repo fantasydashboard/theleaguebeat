@@ -1005,7 +1005,13 @@ import {
   scheduleUrl,
   type PendingPlayer,
 } from '@/editorial/points/liveRemaining'
-import { projectionsUrl } from '@/editorial/points/sleeperProjections'
+import {
+  projectionsUrl,
+  buildDraftBaseline,
+  ASSUMED_SCORING,
+} from '@/editorial/points/sleeperProjections'
+import { rankRosterStrength } from '@/editorial/points/rosterStrength'
+import { foldSeason, type HeadToHead } from '@/editorial/points/headToHead'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
@@ -1383,11 +1389,91 @@ const mondayDesk = computed(() => {
 const liveProjected = ref<LeagueDataPointsMatchup[] | null>(null)
 /** Starters a team is still waiting on, by team id. */
 const livePending = ref<Record<string, PendingPlayer[]>>({})
+/**
+ * Projection board — team id to rank, strongest first.
+ *
+ * The FIRST weekly issue has no prior board: `previousPowerRanks`
+ * rewinds one completed week, and after week one there is nothing
+ * behind it. Ranking on the board the week produced would let a win
+ * justify its own number, so the honest pregame ranking is the one
+ * the preseason issue published — projected roster strength. Built
+ * from the projections this page already fetches for the desk, so it
+ * costs nothing extra.
+ */
+const projectionBoard = ref<Map<string, number> | null>(null)
+
+/**
+ * Every manager's record against every other, all-time.
+ *
+ * Expensive — one request per week per season, about 140 for a
+ * ten-year league — so it is fetched after the page has painted and
+ * the issue is rebuilt when it lands. Sleeper only: it is the one
+ * platform whose history is readable without the reader's own
+ * credentials.
+ */
+const headToHead = ref<HeadToHead | null>(null)
 let projSeq = 0
+let h2hSeq = 0
+
+async function hydrateHeadToHead() {
+  headToHead.value = null
+  const d = livePointsData.value
+  const record = strictLeagueRecord.value
+  if (!d || record?.platform !== 'sleeper' || !record.platform_league_id) return
+
+  const token = ++h2hSeq
+  try {
+    // Walk back through `previous_league_id`, which is how Sleeper
+    // chains a league to the one it continues.
+    const seasons: { id: string; end: number }[] = []
+    let id: string | undefined = record.platform_league_id
+    for (let i = 0; i < 12 && id; i++) {
+      const lg: {
+        league_id?: string
+        previous_league_id?: string | null
+        settings?: { playoff_week_start?: number }
+      } | null = await fetch(`https://api.sleeper.app/v1/league/${id}`).then((r) =>
+        r.ok ? r.json() : null,
+      )
+      if (!lg?.league_id) break
+      // playoff_week_start of 0 means UNSET, not "no playoffs".
+      const start = Number(lg.settings?.playoff_week_start)
+      seasons.push({ id: lg.league_id, end: start > 0 ? start - 1 : 14 })
+      id = lg.previous_league_id ?? undefined
+    }
+    if (token !== h2hSeq) return
+
+    const series: HeadToHead['series'] = {}
+    for (const s of seasons) {
+      const rosters = await fetch(`https://api.sleeper.app/v1/league/${s.id}/rosters`).then((r) =>
+        r.ok ? r.json() : [],
+      )
+      const ownerOfRoster: Record<number, string | undefined> = {}
+      for (const r of rosters as { roster_id: number; owner_id?: string }[]) {
+        ownerOfRoster[r.roster_id] = r.owner_id ?? undefined
+      }
+      const weeks = await Promise.all(
+        Array.from({ length: s.end }, (_, i) =>
+          fetch(`https://api.sleeper.app/v1/league/${s.id}/matchups/${i + 1}`).then((r) =>
+            r.ok ? r.json() : [],
+          ),
+        ),
+      )
+      if (token !== h2hSeq) return
+      foldSeason(series, weeks, ownerOfRoster)
+    }
+    if (token !== h2hSeq) return
+    headToHead.value = { series }
+    void rebuildIssue()
+  } catch {
+    // The issue is correct without it; it is simply less interesting.
+  }
+}
 
 async function hydrateLiveProjections() {
   liveProjected.value = null
   livePending.value = {}
+  projectionBoard.value = null
   const d = livePointsData.value
   const starters = d?.currentWeekStarters
   if (!d || !starters || Object.keys(starters).length === 0) return
@@ -1422,6 +1508,26 @@ async function hydrateLiveProjections() {
       if (left.length > 0) pending[teamId] = left
     }
     livePending.value = pending
+
+    // The pregame board, for the first weekly issue.
+    const baseline = buildDraftBaseline(projections, ASSUMED_SCORING)
+    const rosters = d.currentWeekRosters
+    if (baseline && rosters && d.rosterPositions?.length) {
+      const players = Object.entries(rosters).flatMap(([teamId, ids]) =>
+        ids.map((playerId) => ({
+          playerId,
+          position: baseline.positionOf(playerId) ?? '',
+          teamId,
+        })),
+      )
+      const strength = rankRosterStrength(players, baseline.pointsOf, d.rosterPositions)
+      if (strength.length >= 4) {
+        projectionBoard.value = new Map(strength.map((t, i) => [t.teamId, i + 1]))
+        // The issue was assembled before this landed; rebuild it so the
+        // week-one upset and the ranks on results can appear.
+        void rebuildIssue()
+      }
+    }
   } catch {
     // Offline or rate-limited. The desk stays away.
   }
@@ -2046,27 +2152,45 @@ watch(
   { immediate: true },
 )
 
+/**
+ * Assemble the issue from whatever is known right now.
+ *
+ * Called again when the lazily-fetched extras land — the projection
+ * board and the head-to-head history arrive after first paint, and
+ * the issue gets richer rather than the page waiting on them.
+ */
+async function rebuildIssue() {
+  const data = livePointsData.value
+  const record = strictLeagueRecord.value
+  if (!data || !record) return
+  assembledIssue.value = await assembleIssue({
+    data,
+    leagueName: record.league_name || data.leagueName,
+    platform: record.platform,
+    platformLeagueId: record.platform_league_id,
+    fallbackPriorRank: projectionBoard.value
+      ? (id: string) => projectionBoard.value?.get(id)
+      : undefined,
+    headToHead: headToHead.value ?? undefined,
+    teamName: (id) => lookupTeam(id).name,
+    team: (id) => {
+      const t = lookupTeam(id)
+      return {
+        name: t.name,
+        avatarUrl: t.avatarUrl,
+        avatarColor: t.avatarColor,
+        ownerInitials: t.ownerInitials,
+      }
+    },
+  })
+}
+
 watch(
   [livePointsData, strictLeagueRecord],
   async ([data, record]) => {
     assembledIssue.value = null
     if (!data || !record) return
-    assembledIssue.value = await assembleIssue({
-      data,
-      leagueName: record.league_name || data.leagueName,
-      platform: record.platform,
-      platformLeagueId: record.platform_league_id,
-      teamName: (id) => lookupTeam(id).name,
-      team: (id) => {
-        const t = lookupTeam(id)
-        return {
-          name: t.name,
-          avatarUrl: t.avatarUrl,
-          avatarColor: t.avatarColor,
-          ownerInitials: t.ownerInitials,
-        }
-      },
-    })
+    await rebuildIssue()
   },
   { immediate: true },
 )
@@ -2774,6 +2898,7 @@ async function loadIssue() {
       // Fire and forget: the desk fills in a beat later, and the page
       // never waits on the projections payload.
       void hydrateLiveProjections()
+      void hydrateHeadToHead()
       if (leagueRowId && adapted.leagueName) {
         void leaguesStore.maybeBackfillLeagueName(leagueRowId, adapted.leagueName)
       }
