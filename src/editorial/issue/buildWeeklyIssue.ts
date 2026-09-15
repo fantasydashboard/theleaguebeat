@@ -91,6 +91,24 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 const priorRank = (input: WeeklyIssueInput, teamId: string): number | undefined =>
   input.previousPowerRank?.(teamId) ?? input.fallbackPriorRank?.(teamId)
 
+/**
+ * Section artwork.
+ *
+ * The weekly sections carried none, so the cover — which reads its
+ * portrait off the lead section — rendered as text against an empty
+ * half-screen, while the preseason issue had a crest. Every section
+ * with a subject now names it.
+ */
+function artFor(input: WeeklyIssueInput, teamIds: string[]) {
+  return {
+    teamIds,
+    logos: teamIds.map((teamId) => {
+      const t = input.team?.(teamId)
+      return { teamId, url: t?.avatarUrl, color: t?.avatarColor, initials: t?.ownerInitials }
+    }),
+  }
+}
+
 function visual(input: WeeklyIssueInput, teamId: string) {
   const t = input.team?.(teamId)
   if (!t) return {}
@@ -200,7 +218,23 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
     }
   })
 
-  return { id: 'results', eyebrow: 'The week', headline, support, rows, priority: 10 }
+  const subject =
+    closestMargin < 1
+      ? (closest.homePoints >= closest.awayPoints ? closest.homeTeamId : closest.awayTeamId)
+      : unlucky
+        ? unlucky.teamId
+        : widestMargin >= 60
+          ? (widest.homePoints >= widest.awayPoints ? widest.homeTeamId : widest.awayTeamId)
+          : top.teamId
+  return {
+    id: 'results',
+    eyebrow: 'The week',
+    headline,
+    support,
+    visual: artFor(input, [subject]),
+    rows,
+    priority: 10,
+  }
 }
 
 /**
@@ -232,6 +266,7 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
   return {
     id: 'upset',
     eyebrow: lead.heist ? 'The heist' : 'The upset',
+    visual: artFor(input, [lead.winnerId, lead.loserId]),
     headline: `No. ${lead.winnerRank} took down No. ${lead.loserRank}.`,
     support:
       `${input.teamName(lead.winnerId)} beat ${input.teamName(lead.loserId)} ` +
@@ -273,6 +308,7 @@ function recordSection(input: WeeklyIssueInput): IssueSection | null {
   return {
     id: 'record-book',
     eyebrow: 'The record book',
+    ...(lead.teamId ? { visual: artFor(input, [lead.teamId]) } : {}),
     headline: moved
       ? `${input.teamName(lead.teamId ?? '')} moved the all-time record.`
       : lead.detail.split('.')[0] + '.',
@@ -359,6 +395,7 @@ function powerSection(input: WeeklyIssueInput): IssueSection | null {
   return {
     id: 'power-rankings',
     eyebrow: 'Power rankings',
+    ...(ranked[0] ? { visual: artFor(input, [ranked[0].teamId]) } : {}),
     headline:
       weeksPlayed < MIN_WEEKS_FOR_LUCK
         ? `The board after ${weeksPlayed} week${weeksPlayed === 1 ? '' : 's'}.`

@@ -473,14 +473,16 @@
                 </div>
                 <div class="points-matchup-id">
                   <p class="points-matchup-name">{{ pointsTeamLookup(m.homeTeamId).name }}</p>
-                  <p class="points-matchup-score">{{ m.homePoints.toFixed(1) }}</p>
+                  <p v-if="m.status !== 'upcoming'" class="points-matchup-score">{{ m.homePoints.toFixed(1) }}</p>
+                  <p v-else class="points-matchup-seed">{{ matchupSeed(m.homeTeamId) }}</p>
                 </div>
               </div>
               <span class="points-matchup-vs" aria-hidden="true">vs</span>
               <div class="points-matchup-side points-matchup-away">
                 <div class="points-matchup-id points-matchup-id-away">
                   <p class="points-matchup-name">{{ pointsTeamLookup(m.awayTeamId).name }}</p>
-                  <p class="points-matchup-score">{{ m.awayPoints.toFixed(1) }}</p>
+                  <p v-if="m.status !== 'upcoming'" class="points-matchup-score">{{ m.awayPoints.toFixed(1) }}</p>
+                  <p v-else class="points-matchup-seed">{{ matchupSeed(m.awayTeamId) }}</p>
                 </div>
                 <div class="points-matchup-avatar" :style="{ background: `linear-gradient(135deg, ${pointsTeamLookup(m.awayTeamId).avatarColor})` }">
                   <img v-if="pointsTeamLookup(m.awayTeamId).avatarUrl" :src="pointsTeamLookup(m.awayTeamId).avatarUrl" alt="" />
@@ -1312,6 +1314,20 @@ const pointsStandingsSorted = computed(() => {
  * Issue's points branch renders its OWN ladder, cellar and quick reads
  * — so it needs its own guard, not the other page's.
  */
+/**
+ * A team's line on an upcoming card: board position and record.
+ *
+ * Before kickoff every card printed "0.0", five times over — a
+ * scoreline for a game that has not happened. Where a team sits and
+ * what they have done is what a reader is actually weighing.
+ */
+function matchupSeed(teamId: string): string {
+  const rank = issueBoardRank.value?.get(teamId)
+  const s = (livePointsData.value?.standings ?? []).find((row) => row.teamId === teamId)
+  const record = s ? `${s.catWins}-${s.catLosses}${s.catTies ? `-${s.catTies}` : ''}` : ''
+  return [rank ? `No. ${rank}` : '', record].filter(Boolean).join(' · ')
+}
+
 const pointsSeasonStarted = computed(
   () => !!livePointsData.value && hasPlayedGames(livePointsData.value),
 )
@@ -1470,15 +1486,46 @@ async function hydrateHeadToHead() {
   }
 }
 
+/** The pregame board, for the first weekly issue of a season. */
+function buildBoard(projections: unknown) {
+  const d = livePointsData.value
+  const rosters = d?.currentWeekRosters
+  if (!d || !rosters || !d.rosterPositions?.length) return
+  const baseline = buildDraftBaseline(projections, ASSUMED_SCORING)
+  if (!baseline) return
+  const players = Object.entries(rosters).flatMap(([teamId, ids]) =>
+    ids.map((playerId) => ({
+      playerId,
+      position: baseline.positionOf(playerId) ?? '',
+      teamId,
+    })),
+  )
+  const strength = rankRosterStrength(players, baseline.pointsOf, d.rosterPositions)
+  if (strength.length < 4) return
+  projectionBoard.value = new Map(strength.map((t, i) => [t.teamId, i + 1]))
+  // The issue was assembled before this landed; rebuild it so the
+  // week-one upset and the ranks on results can appear.
+  void rebuildIssue()
+}
+
 async function hydrateLiveProjections() {
   liveProjected.value = null
   livePending.value = {}
   projectionBoard.value = null
   const d = livePointsData.value
-  const starters = d?.currentWeekStarters
-  if (!d || !starters || Object.keys(starters).length === 0) return
-  // Nothing in flight means nothing to project.
-  if (!(d.currentWeekMatchups ?? []).some((m) => m.status === 'live')) return
+  if (!d) return
+  const starters = d.currentWeekStarters
+  const rosters = d.currentWeekRosters
+  // Two jobs, two preconditions. The DESK needs a game in flight and
+  // a lineup; the pregame BOARD needs only rosters, and the first
+  // weekly issue wants it on a Tuesday when nothing is live. Gating
+  // both on "something is live" left week one with no board at all.
+  const wantDesk =
+    !!starters &&
+    Object.keys(starters).length > 0 &&
+    (d.currentWeekMatchups ?? []).some((m) => m.status === 'live')
+  const wantBoard = !!rosters && Object.keys(rosters).length > 0 && !!d.rosterPositions?.length
+  if (!wantDesk && !wantBoard) return
 
   const token = ++projSeq
   try {
@@ -1487,6 +1534,10 @@ async function hydrateLiveProjections() {
       fetch(projectionsUrl(Number(d.currentSeason))).then((r) => (r.ok ? r.json() : [])),
     ])
     if (token !== projSeq) return
+    if (!wantDesk) {
+      buildBoard(projections)
+      return
+    }
     const remaining = buildRemainingIndex(
       Array.isArray(projections) ? projections : [],
       teamsStillPlaying(Array.isArray(schedule) ? schedule : [], d.currentWeek),
@@ -1509,25 +1560,7 @@ async function hydrateLiveProjections() {
     }
     livePending.value = pending
 
-    // The pregame board, for the first weekly issue.
-    const baseline = buildDraftBaseline(projections, ASSUMED_SCORING)
-    const rosters = d.currentWeekRosters
-    if (baseline && rosters && d.rosterPositions?.length) {
-      const players = Object.entries(rosters).flatMap(([teamId, ids]) =>
-        ids.map((playerId) => ({
-          playerId,
-          position: baseline.positionOf(playerId) ?? '',
-          teamId,
-        })),
-      )
-      const strength = rankRosterStrength(players, baseline.pointsOf, d.rosterPositions)
-      if (strength.length >= 4) {
-        projectionBoard.value = new Map(strength.map((t, i) => [t.teamId, i + 1]))
-        // The issue was assembled before this landed; rebuild it so the
-        // week-one upset and the ranks on results can appear.
-        void rebuildIssue()
-      }
-    }
+    buildBoard(projections)
   } catch {
     // Offline or rate-limited. The desk stays away.
   }
@@ -4252,6 +4285,12 @@ function collectUserIdentity() {
 .issue-sec-top { display: flex; align-items: flex-start; gap: 22px; }
 /* The lead section resuming under the cover: a label, not a headline. */
 .issue-sec-resume { margin: 0 0 14px; }
+.points-matchup-seed {
+  margin: 2px 0 0;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 0.78rem; letter-spacing: 0.08em;
+  color: oklch(0.62 0.01 90);
+}
 .issue-sec-copy { flex: 1; min-width: 0; }
 .issue-sec-art { display: flex; flex: none; padding-top: 4px; }
 .issue-sec-logo {

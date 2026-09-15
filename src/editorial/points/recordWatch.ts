@@ -118,6 +118,7 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
             ? `Level with ${second.name} at the top of the league's history.`
             : `Alone at the top of the league's history, ${plural(gap, 'win')} clear of ${second.name}.`,
         progress: { value: lead.wins, target: lead.wins, held: true },
+        against: { name: second.name, value: second.wins },
       })
     } else if (gap === 0 && lead.teamId && second.teamId) {
       // Drew level this week: news whoever got there first.
@@ -131,6 +132,10 @@ export function buildWeeklyRecordBook(input: WeeklyRecordInput): WeeklyRecordNot
         headline: `${climber.wins} wins`,
         detail: `Level with ${other.name} at the top of the league's history.`,
         progress: { value: climber.wins, target: climber.wins, held: true },
+        // A tie is the case that most needs both teams drawn: "level
+        // with" is a claim ABOUT the other team, and a lone bar
+        // leaves the reader to take it on trust.
+        against: { name: other.name, value: other.wins },
       })
     } else if (gap > 0 && gap <= MAX_RACE_GAMES && second.teamId) {
       // The chase survived the week, which is itself the report.
