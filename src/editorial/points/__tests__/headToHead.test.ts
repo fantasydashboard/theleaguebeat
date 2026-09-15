@@ -65,13 +65,29 @@ describe('reading a series back', () => {
     expect(describeSeries(seriesFor(first, 'x', 'y'), 'X')).toBeNull()
   })
 
-  it('writes the clause the way somebody would say it', () => {
+  it('names the all-time series outright', () => {
+    // "Fourth win in six meetings" left a reader working out what was
+    // being counted — this season, a run of form, something else.
     expect(describeSeries(seriesFor(h2h, 'gridiron', 'throws'), 'Gridiron Man'))
-      .toBe("Gridiron Man's fourth win in 6 meetings")
-    expect(describeSeries(seriesFor(h2h, 'a', 'b'), 'A')).toBe('They are level at 3 apiece')
-    expect(describeSeries(seriesFor(h2h, 'sweep', 'swept'), 'Sweep')).toBe('Sweep have won all 3')
-    // The rarer, better line: winning a series you are behind in.
+      .toBe('Gridiron Man lead the all-time series 4-2')
+    expect(describeSeries(seriesFor(h2h, 'a', 'b'), 'A'))
+      .toBe('The all-time series is level at 3-3')
+    expect(describeSeries(seriesFor(h2h, 'sweep', 'swept'), 'Sweep'))
+      .toBe('Sweep lead the all-time series 3-0')
+    // Winning one you are behind in is the rarer, better line.
     expect(describeSeries(seriesFor(h2h, 'throws', 'gridiron'), 'Game of Throws'))
-      .toBe("Only Game of Throws's second win in 6")
+      .toBe('Game of Throws trail the all-time series 2-4')
+  })
+
+  it('prefers a run of three or more to the raw record', () => {
+    const streaky: HeadToHead = {
+      series: { [pairKey('x', 'y')]: { x: 5, y: 4 } },
+      streaks: { [pairKey('x', 'y')]: { owner: 'x', n: 3 } },
+    }
+    expect(describeSeries(seriesFor(streaky, 'x', 'y'), 'X'))
+      .toBe('X have won 3 straight in the all-time series')
+    // The other side of a streak is not their streak.
+    expect(describeSeries(seriesFor(streaky, 'y', 'x'), 'Y'))
+      .toBe('Y trail the all-time series 4-5')
   })
 })

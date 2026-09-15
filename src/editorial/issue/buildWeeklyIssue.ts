@@ -403,8 +403,13 @@ function powerSection(input: WeeklyIssueInput): IssueSection | null {
     support: [
       'Ranked on all-play — the record each team would hold having played ' +
         'everyone, every week, which is what a points league is measured on.',
+      // Say what it is running on. Every component is results-based,
+      // so a thin sample is regressed toward the preseason projection
+      // — without that a team projected first and held to one bad
+      // week fell to eighth, which is a scoreboard, not a ranking.
       weeksPlayed < MIN_WEEKS_FOR_LUCK
-        ? `${weeksPlayed} week${weeksPlayed === 1 ? '' : 's'} of evidence, so read it as a sketch.`
+        ? `${weeksPlayed} week${weeksPlayed === 1 ? '' : 's'} of evidence, so it still leans on ` +
+          'the preseason projection. That grip loosens every week.'
         : '',
     ]
       .filter(Boolean)

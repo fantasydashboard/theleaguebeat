@@ -33,6 +33,33 @@ export const POWER_WEIGHTS = {
 /** Weeks counted as "recent" for the form component. */
 const RECENT_WEEKS = 3
 
+/**
+ * How stubbornly the preseason projection holds on.
+ *
+ * WHY THERE IS A PRIOR AT ALL. Every component above is computed from
+ * results, so after ONE week all four say the same thing and the
+ * board is simply "who scored most on Sunday". A team projected first
+ * and held to 112 fell to eighth on a single game, which is not a
+ * power ranking — it is a scoreboard wearing one. Real rankings
+ * regress a small sample toward what was expected, and let the
+ * expectation fade as evidence arrives.
+ *
+ * The weight is k / (k + weeks): two thirds in week one, a third by
+ * week four, a tenth by week nine. By mid-season the projection is
+ * noise and the results are the story, which is the right ordering.
+ */
+const PRIOR_K = 2
+export const priorWeightFor = (weeksPlayed: number) => PRIOR_K / (PRIOR_K + Math.max(0, weeksPlayed))
+
+export interface PowerScoreOptions {
+  /**
+   * Preseason projected strength per team — any positive scale; it is
+   * normalised across the league. Omit and the board is results-only,
+   * which is correct once a season has evidence behind it.
+   */
+  priorStrength?: (teamId: string) => number | undefined
+}
+
 export interface PointsPowerComponents {
   /** Fraction of all head-to-head comparisons won across the season. */
   allPlay: number
@@ -142,7 +169,10 @@ function pct(wins: number, losses: number, ties: number): number {
  * week has completed there is nothing to rank, and a placeholder board
  * would read exactly like a real one.
  */
-export function computePointsPowerScores(data: LeagueDataH2HPoints): PointsPowerRow[] {
+export function computePointsPowerScores(
+  data: LeagueDataH2HPoints,
+  opts: PowerScoreOptions = {},
+): PointsPowerRow[] {
   const scores = data.weeklyScores ?? []
   const byWeek = scoresByWeek(scores)
   if (byWeek.size === 0) return []
@@ -152,6 +182,27 @@ export function computePointsPowerScores(data: LeagueDataH2HPoints): PointsPower
 
   const allPlay = buildAllPlay(scores)
   const recentAllPlay = buildAllPlay(scores, (w) => w >= recentCutoff)
+
+  // The prior, normalised across whoever it covers. Min-max rather
+  // than a z-score so the strongest roster sits at 1 and the weakest
+  // at 0 — the same 0-1 shape the other components use.
+  // Normalised across whoever the BOARD covers — the teams with
+  // scores — not `data.teams`, which an adapter may leave sparse and
+  // which would silently disable the prior when it did.
+  const priorValues = opts.priorStrength
+    ? [...new Set(scores.map((s) => s.teamId))]
+        .map((id) => opts.priorStrength!(id))
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    : []
+  const priorLo = priorValues.length ? Math.min(...priorValues) : 0
+  const priorHi = priorValues.length ? Math.max(...priorValues) : 0
+  const priorSpread = priorHi - priorLo
+  const priorOf = (teamId: string): number | undefined => {
+    if (!opts.priorStrength || priorSpread <= 0) return undefined
+    const v = opts.priorStrength(teamId)
+    if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
+    return clamp01((v - priorLo) / priorSpread)
+  }
 
   // Per-team mean score across the weeks they actually played, so a
   // team that joined late or missed a week is not punished for the
@@ -217,11 +268,25 @@ export function computePointsPowerScores(data: LeagueDataH2HPoints): PointsPower
       recent: pct(rp.wins, rp.losses, rp.ties),
     }
 
-    const blend =
+    const fromResults =
       POWER_WEIGHTS.allPlay * components.allPlay +
       POWER_WEIGHTS.scoring * components.scoring +
       POWER_WEIGHTS.record * components.record +
       POWER_WEIGHTS.recent * components.recent
+
+    // Regress toward the preseason projection while the sample is
+    // thin. See PRIOR_K.
+    // Branch rather than weight-by-zero: `0 * undefined` is NaN, and
+    // clamp01(NaN) is 0, which silently flattened every score on the
+    // board to zero when no prior was supplied.
+    const prior = priorOf(teamId)
+    const blend =
+      prior === undefined
+        ? fromResults
+        : (() => {
+            const w = priorWeightFor(weeks)
+            return (1 - w) * fromResults + w * prior
+          })()
 
     return {
       teamId,

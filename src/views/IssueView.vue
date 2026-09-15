@@ -1417,6 +1417,9 @@ const livePending = ref<Record<string, PendingPlayer[]>>({})
  * costs nothing extra.
  */
 const projectionBoard = ref<Map<string, number> | null>(null)
+/** Projected points a week, per team — the prior the early-season
+ *  board regresses toward. */
+const projectionStrength = ref<Map<string, number> | null>(null)
 
 /**
  * Every manager's record against every other, all-time.
@@ -1503,6 +1506,7 @@ function buildBoard(projections: unknown) {
   const strength = rankRosterStrength(players, baseline.pointsOf, d.rosterPositions)
   if (strength.length < 4) return
   projectionBoard.value = new Map(strength.map((t, i) => [t.teamId, i + 1]))
+  projectionStrength.value = new Map(strength.map((t) => [t.teamId, t.pointsPerWeek]))
   // The issue was assembled before this landed; rebuild it so the
   // week-one upset and the ranks on results can appear.
   void rebuildIssue()
@@ -1512,6 +1516,7 @@ async function hydrateLiveProjections() {
   liveProjected.value = null
   livePending.value = {}
   projectionBoard.value = null
+  projectionStrength.value = null
   const d = livePointsData.value
   if (!d) return
   const starters = d.currentWeekStarters
@@ -2205,6 +2210,9 @@ async function rebuildIssue() {
       ? (id: string) => projectionBoard.value?.get(id)
       : undefined,
     headToHead: headToHead.value ?? undefined,
+    priorStrength: projectionStrength.value
+      ? (id: string) => projectionStrength.value?.get(id)
+      : undefined,
     teamName: (id) => lookupTeam(id).name,
     team: (id) => {
       const t = lookupTeam(id)

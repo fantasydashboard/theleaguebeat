@@ -214,3 +214,45 @@ describe('power score across real leagues', () => {
     })
   }
 })
+
+describe('the preseason prior', () => {
+  const weekly = (weeks: number): PointsWeeklyScore[] => {
+    const out: PointsWeeklyScore[] = []
+    for (let w = 1; w <= weeks; w++) {
+      out.push({ teamId: 'projectedBest', week: w, points: 80 })
+      out.push({ teamId: 'projectedWorst', week: w, points: 120 })
+    }
+    return out
+  }
+  const prior = (id: string) => ({ projectedBest: 130, projectedWorst: 90 })[id]
+
+  it('does not touch the board when no prior is supplied', () => {
+    // The guard this pins: weighting by zero multiplied an undefined
+    // prior, NaN'd the blend and clamped every score to 0.
+    const rows = computePointsPowerScores(leagueOf(weekly(4)))
+    expect(rows.every((r) => r.score > 0)).toBe(true)
+  })
+
+  it('leans on the projection while one week is all there is', () => {
+    // Every component is results-based, so after one game the board is
+    // just "who scored most on Sunday" — a team projected first and
+    // held to a bad week fell to eighth on one result.
+    const rows = computePointsPowerScores(leagueOf(weekly(1)), { priorStrength: prior })
+    const best = rows.find((r) => r.teamId === 'projectedBest')!
+    const worst = rows.find((r) => r.teamId === 'projectedWorst')!
+    // Outscored 80 to 120 and still close, because the projection is
+    // carrying two thirds of the weight in week one.
+    expect(worst.score - best.score).toBeLessThan(30)
+  })
+
+  it('lets the results win once there are results', () => {
+    const early = computePointsPowerScores(leagueOf(weekly(1)), { priorStrength: prior })
+    const later = computePointsPowerScores(leagueOf(weekly(10)), { priorStrength: prior })
+    const gapAt = (rows: ReturnType<typeof computePointsPowerScores>) =>
+      rows.find((r) => r.teamId === 'projectedWorst')!.score -
+      rows.find((r) => r.teamId === 'projectedBest')!.score
+    // The team actually outscoring everybody pulls further clear as
+    // the projection fades.
+    expect(gapAt(later)).toBeGreaterThan(gapAt(early))
+  })
+})

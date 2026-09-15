@@ -54,10 +54,11 @@ describe('buildWeeklyIssue', () => {
     const wk1 = buildWeeklyIssue({ ...base, week: 1, power: power([['a', 90], ['b', 80], ['c', 70], ['d', 60]], 1) })!
     expect(wk1.basis).toContain('1 week played')
     const rankings = wk1.sections.find((s) => s.id === 'power-rankings')!
-    expect(rankings.support).toMatch(/read it as a sketch/)
+    expect(rankings.support).toMatch(/leans on the preseason projection/)
 
     const wk6 = buildWeeklyIssue({ ...base, week: 6, power: six })!
-    expect(wk6.sections.find((s) => s.id === 'power-rankings')!.support).not.toMatch(/sketch/)
+    expect(wk6.sections.find((s) => s.id === 'power-rankings')!.support)
+      .not.toMatch(/preseason projection/)
   })
 
   it('shows movement only when a team actually moved', () => {

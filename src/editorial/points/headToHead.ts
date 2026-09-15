@@ -27,6 +27,9 @@
 export interface HeadToHead {
   /** `owner|owner` (sorted) → wins by owner id. */
   series: Record<string, Record<string, number>>
+  /** `owner|owner` → who has won the last N in a row, and how many.
+   *  Requires the fold to run in chronological order. */
+  streaks?: Record<string, { owner: string; n: number }>
 }
 
 /** Stable key for a pair, order-independent. */
@@ -37,6 +40,8 @@ export interface SeriesRecord {
   played: number
   wins: number
   losses: number
+  /** Consecutive wins by the asking side, when they own the streak. */
+  streak?: number
 }
 
 /**
@@ -55,7 +60,13 @@ export function seriesFor(
   const wins = row[ownerA] ?? 0
   const losses = row[ownerB] ?? 0
   if (wins + losses === 0) return null
-  return { played: wins + losses, wins, losses }
+  const run = h2h.streaks?.[pairKey(ownerA, ownerB)]
+  return {
+    played: wins + losses,
+    wins,
+    losses,
+    streak: run?.owner === ownerA ? run.n : undefined,
+  }
 }
 
 /**
@@ -66,15 +77,18 @@ export function seriesFor(
  */
 export function describeSeries(s: SeriesRecord | null, winnerName: string): string | null {
   if (!s || s.played < 2) return null
-  if (s.wins === s.losses) return `They are level at ${s.wins} apiece`
-  if (s.losses === 0) return `${winnerName} have won all ${s.played}`
+  // NAME THE THING. "Fourth win in six meetings" left a reader working
+  // out what was being counted; a run of results, this season, some
+  // other split. Every line now says all-time series outright.
+  if (s.streak && s.streak >= 3) {
+    return `${winnerName} have won ${s.streak} straight in the all-time series`
+  }
+  if (s.wins === s.losses) return `The all-time series is level at ${s.wins}-${s.losses}`
+  if (s.losses === 0) return `${winnerName} lead the all-time series ${s.wins}-0`
   return s.wins > s.losses
-    ? `${winnerName}'s ${ordinalWord(s.wins)} win in ${s.played} meetings`
-    : `Only ${winnerName}'s ${ordinalWord(s.wins)} win in ${s.played}`
+    ? `${winnerName} lead the all-time series ${s.wins}-${s.losses}`
+    : `${winnerName} trail the all-time series ${s.wins}-${s.losses}`
 }
-
-const WORDS = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth']
-const ordinalWord = (n: number) => WORDS[n] ?? `${n}th`
 
 interface RawMatchup {
   roster_id?: unknown
@@ -92,6 +106,9 @@ export function foldSeason(
   series: HeadToHead['series'],
   weeks: readonly (readonly RawMatchup[])[],
   ownerOfRoster: Record<number, string | undefined>,
+  /** Pass to track runs. Only meaningful when seasons are folded
+   *  oldest-first — a streak is a statement about order. */
+  streaks?: NonNullable<HeadToHead['streaks']>,
 ): void {
   for (const week of weeks) {
     const groups = new Map<unknown, RawMatchup[]>()
@@ -116,6 +133,11 @@ export function foldSeason(
       const winner = pa > pb ? oa : ob
       row[winner] = (row[winner] ?? 0) + 1
       series[key] = row
+      if (streaks) {
+        const run = streaks[key]
+        streaks[key] =
+          run && run.owner === winner ? { owner: winner, n: run.n + 1 } : { owner: winner, n: 1 }
+      }
     }
   }
 }
