@@ -2280,57 +2280,25 @@ function allPlayFrom(scores, keep) {
  * are written by the same event that closes a week.
  */
 /**
- * Where each manager stood at the end of last season.
+ * The line under a team name: how far they have moved since last week.
  *
- * KEYED ON OWNER, because roster ids are reassigned between seasons
- * and team names move. Returns owner id -> { rank, size, tier }.
+ * WHAT "LAST WEEK" MEANS IN WEEK TWO. There is no earlier results
+ * board to diff against — this is the first one of the season. But
+ * there WAS a board last week: the preseason one, teams ordered by
+ * what their roster projected. That is what a reader saw, so that is
+ * what the movement is measured from, and it is what the site falls
+ * back to to draw the same arrows.
  *
- * ACROSS BOTH TIERS for the promotion/relegation pair. A manager who
- * won the Futures Football League and came up is not "up nine places"
- * in the League of Record — they were not in it. Those get named as
- * promoted or relegated instead of given a number that reads as form.
- */
-const _lastSeasonCache = {}
-async function lastSeasonFinish(prevId) {
-  if (_lastSeasonCache[prevId]) return _lastSeasonCache[prevId]
-  const rosters = await fetch(`https://api.sleeper.app/v1/league/${prevId}/rosters`).then((r) => r.json())
-  // Sleeper's own tiebreak: wins first, then points for.
-  const fpts = (r) => (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100
-  const order = [...rosters].sort(
-    (a, b) => (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0) || fpts(b) - fpts(a))
-  const out = new Map()
-  order.forEach((r, i) => { if (r.owner_id) out.set(r.owner_id, { rank: i + 1, size: order.length }) })
-  _lastSeasonCache[prevId] = out
-  return out
-}
-
-/**
- * The line under a team name: how far they have moved, and from what.
- *
- * Week one is the first board of the season, so there is no previous
- * week to diff against — until week two closes, the honest comparison
- * is last season's final standing, and it is labelled as such rather
- * than passed off as form.
+ * From week three the prior board is the real thing — the same
+ * formula run on the weeks before this one — and this fallback stops
+ * being used.
  */
 function movementOf(row, ctx) {
   const prior = ctx.priorRank?.get(row.teamId)
-  if (prior !== undefined) {
-    const d = prior - row.rank
-    if (d === 0) return { dir: 'flat', text: 'No change from last week' }
-    return { dir: d > 0 ? 'up' : 'down', text: `${d > 0 ? '▲' : '▼'} ${Math.abs(d)} from last week` }
-  }
-  const last = ctx.lastSeason?.get(row.ownerId)
-  if (last) {
-    const d = last.rank - row.rank
-    if (d === 0) return { dir: 'flat', text: `Level with last season's ${ORD(last.rank)}` }
-    return {
-      dir: d > 0 ? 'up' : 'down',
-      text: `${d > 0 ? '▲' : '▼'} ${Math.abs(d)} on last season's ${ORD(last.rank)}`,
-    }
-  }
-  const other = ctx.otherTier?.get(row.ownerId)
-  if (other) return { dir: other.dir, text: other.text }
-  return { dir: 'flat', text: 'First season in the league' }
+  if (prior === undefined) return { dir: 'flat', text: '' }
+  const d = prior - row.rank
+  if (d === 0) return { dir: 'flat', text: 'No change from last week' }
+  return { dir: d > 0 ? 'up' : 'down', text: `${d > 0 ? '▲' : '▼'} ${Math.abs(d)} from last week` }
 }
 
 async function powerBoard(cfg) {
@@ -2466,25 +2434,16 @@ async function powerBoard(cfg) {
     priorRank = new Map(prior.map((p, i) => [p.id, i + 1]))
   }
 
-  /* ── Last season, for the weeks before a board exists ──────────── */
-  const lastSeason = cfg.prev ? await lastSeasonFinish(cfg.prev) : new Map()
-  // The two tiers trade four teams a year. A manager who is not in
-  // last season's table for THIS league may be in the other one's.
-  const otherTier = new Map()
-  const sibling = cfg === LEAGUES.lor ? LEAGUES.ffl : cfg === LEAGUES.ffl ? LEAGUES.lor : null
-  if (sibling) {
-    const there = await lastSeasonFinish(sibling.prev)
-    const up = sibling === LEAGUES.ffl        // they came from the tier below
-    for (const [owner, f] of there) {
-      if (lastSeason.has(owner)) continue
-      otherTier.set(owner, {
-        dir: up ? 'up' : 'down',
-        text: `${up ? '▲ Promoted' : '▼ Relegated'} · ${ORD(f.rank)} in ${sibling.name}`,
-      })
-    }
+  // Week two has no earlier results board, so the preseason projection
+  // ranking stands in — the board a reader actually saw last week.
+  // `table` is already sorted by projected points a week.
+  if (!priorRank) {
+    const seat = new Map(table.map((t, i) => [t.owner, i + 1]))
+    priorRank = new Map(rosters.map((r) => [String(r.roster_id), seat.get(r.owner_id)])
+      .filter(([, v]) => v !== undefined))
   }
 
-  const ctx = { priorRank, lastSeason, otherTier }
+  const ctx = { priorRank }
   for (const r of rows) r.move = movementOf(r, ctx)
   return {
     rows, closedWeeks, results,
