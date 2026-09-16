@@ -23,6 +23,7 @@
 
 import { sleeperService } from '@/services/sleeper'
 import { buildH2H, type H2HGame } from '@/editorial/h2h/buildH2H'
+import type { PlayerWeek } from '@/editorial/players/playerWeek'
 import type {
   SleeperLeague,
   SleeperRoster,
@@ -1797,6 +1798,16 @@ export function sleeperPoints(intPart?: number, hundredths?: number): number {
  *  with zero adaptation. `matchupsByWeek` is a plain object keyed by
  *  week number as a string (Sleeper's own `/matchups/{week}` calls
  *  are one week at a time; this is how the results get assembled). */
+/** The handful of player fields anything here reads. Sleeper's blob
+ *  carries dozens more; naming these keeps `any` out of the contract. */
+export interface SleeperPlayerMeta {
+  full_name?: string
+  first_name?: string
+  last_name?: string
+  position?: string
+  team?: string
+}
+
 export interface SleeperPointsRaw {
   /** Already-normalized transactions. Passed IN rather than fetched
    *  here, because this builder is pure by contract — see the note
@@ -1807,6 +1818,11 @@ export interface SleeperPointsRaw {
   rosters: SleeperRoster[]
   users: SleeperUser[]
   matchupsByWeek: Record<string, SleeperMatchup[]>
+  /** Sleeper's player blob, for naming the week's scorers. Passed IN
+   *  for the same reason as `transactions` — this builder is pure and
+   *  the blob is a 5MB fetch. Undefined just means unnamed players,
+   *  which `buildSleeperPlayerWeeks` handles rather than throwing. */
+  playerDb?: Record<string, SleeperPlayerMeta> | null
   /** Draft and its picks. Optional: a league can exist without a draft
    *  (imported rosters, orphaned leagues), and that is a fact about the
    *  league rather than a capture failure. */
@@ -2347,6 +2363,59 @@ function buildSleeperH2HRecords(
   return buildH2H(games)
 }
 
+/**
+ * Every rostered player's most recent CLOSED week.
+ *
+ * COSTS NO EXTRA REQUEST. The matchup payload already carries
+ * `players_points` and `starters` — the same payload the board and
+ * the weekly scores come off — and the NFL player blob is already
+ * fetched for transaction naming. Your Players was the one personal
+ * block football could never render, and the data was sitting in
+ * hand the whole time.
+ *
+ * THE MOST RECENT CLOSED WEEK, NOT THE CURRENT ONE. Sleeper points
+ * accumulate live, so a Sunday afternoon read would call a player a
+ * dud at half time. See the note on `weekMatchupStatus`.
+ */
+function buildSleeperPlayerWeeks(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  week: number,
+  playerDb: Record<string, SleeperPlayerMeta> | null | undefined,
+): PlayerWeek[] {
+  if (week < 1) return []
+  const out: PlayerWeek[] = []
+  for (const m of matchupsByWeek[String(week)] ?? []) {
+    const teamId = String(m.roster_id)
+    const started = new Set(
+      (m.starters ?? []).filter((id): id is string => typeof id === 'string' && !!id && id !== '0'),
+    )
+    const points = m.players_points ?? {}
+    for (const playerId of m.players ?? []) {
+      if (typeof playerId !== 'string' || !playerId || playerId === '0') continue
+      const pts = points[playerId]
+      if (!Number.isFinite(pts)) continue
+      const meta = playerDb?.[playerId]
+      const name =
+        meta?.full_name ||
+        `${meta?.first_name ?? ''} ${meta?.last_name ?? ''}`.trim() ||
+        // A team defence has no personal name; Sleeper keys it on the
+        // team abbreviation itself.
+        (meta?.position === 'DEF' ? `${playerId} defence` : `Player ${playerId}`)
+      out.push({
+        playerId,
+        name,
+        position: meta?.position ?? undefined,
+        proTeam: meta?.team ?? undefined,
+        week,
+        points: Math.round(Number(pts) * 100) / 100,
+        teamId,
+        started: started.has(playerId),
+      })
+    }
+  }
+  return out
+}
+
 function buildSleeperCurrentWeekStarters(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   currentWeek: number,
@@ -2516,6 +2585,12 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
   const h2hRecords = buildSleeperH2HRecords(matchupsByWeek, regularSeasonBoundWeek)
+  // Most recent CLOSED week — roster records are the oracle, because
+  // `settings.leg` lags reality by a day and points accumulate live.
+  const lastClosedWeek = completedWeeksFromRecords(raw.rosters)
+  const playerWeeks = lastClosedWeek >= 1
+    ? buildSleeperPlayerWeeks(matchupsByWeek, lastClosedWeek, raw.playerDb)
+    : undefined
   const draft = buildSleeperDraft(raw, currentSeason)
   const seasonHistory = buildSleeperPointsSeasonHistory(raw)
   const careerRecords = buildSleeperCareers(
@@ -2551,6 +2626,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     seasonRankHistory,
     weeklyScores,
     h2hRecords,
+    playerWeeks,
     draft,
     transactions: raw.transactions,
     seasonHistory,
@@ -2593,9 +2669,13 @@ export async function sleeperLeagueToPointsData(
   // Draft and bracket in parallel — independent of each other and of
   // the history walk below. All three are optional: a league with no
   // draft, or a season with no bracket, is a fact about that league.
-  const [draftData, winnersBracket] = await Promise.all([
+  const [draftData, winnersBracket, playerDb] = await Promise.all([
     sleeperService.getDraftData(leagueId).catch(() => null),
     sleeperService.getWinnersBracket(leagueId).catch(() => []),
+    // Already cached in-process by the service, and the wire fetches
+    // the same blob for transaction naming — so this is one fetch per
+    // session however many callers want it.
+    sleeperService.getPlayersBySport(league.sport ?? 'nfl').catch(() => null),
   ])
 
   const history = await fetchSleeperHistory(league)
@@ -2617,6 +2697,7 @@ export async function sleeperLeagueToPointsData(
     draft: draftData ? { info: draftData, picks: draftData.picks ?? [] } : null,
     winnersBracket: winnersBracket ?? [],
     history,
+    playerDb,
   })
 }
 

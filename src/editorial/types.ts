@@ -620,6 +620,11 @@ export interface LeagueDataH2HPoints {
    *  desk degrades to silence rather than guessing. */
   currentWeekStarters?: Record<string, string[]>
 
+  /** What every rostered player scored in the most recent closed week.
+   *  Football's answer to `playerNights`, which is MLB-shaped and
+   *  cannot describe a football week. Drives Your Players. */
+  playerWeeks?: import('./players/playerWeek').PlayerWeek[]
+
   /** Current week's full rosters, by team id. Lets the FIRST weekly
    *  issue rank the field on projections — with one week played there
    *  is no prior board to rewind to, and ranking on the board a result

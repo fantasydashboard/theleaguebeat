@@ -6,6 +6,7 @@
 import type { LeagueData, H2HRecord } from '@/editorial/types'
 import { hasPlayedGames } from '@/editorial/leagueCore'
 import { detectCoverStory, detectPointsCoverStory } from '@/editorial/cover-story'
+import { buildYourFootballPlayers } from './buildYourFootballPlayers'
 import { buildYourPlayers, type YourPlayersBlock } from '@/editorial/yourColumn/buildYourPlayers'
 
 /** Optional visualization a block can render. The view draws these; the
@@ -72,7 +73,13 @@ export function buildYourColumn(data: LeagueData, teamId: string): YourColumn {
   return {
     hero: buildHero(data, teamId),
     matchup: buildMatchup(data, teamId),
-    players: buildYourPlayers(data.playerNights ?? [], teamId),
+    // Baseball and football carry different stat lines, so they get
+    // different builders rather than one that reads around the other's
+    // fields. `playerWeeks` is the football feed; `playerNights` the
+    // MLB one. A league only ever has one of them.
+    players:
+      buildYourFootballPlayers(data.playerWeeks ?? [], teamId) ??
+      buildYourPlayers(data.playerNights ?? [], teamId),
     rival: buildRival(data, teamId),
     arc: buildArc(data, teamId),
   }
