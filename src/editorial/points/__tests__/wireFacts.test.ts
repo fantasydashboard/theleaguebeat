@@ -12,7 +12,11 @@ const add = (
   id,
   platform: 'sleeper',
   kind: 'faab-add',
-  timestamp: 0,
+  // A timestamp consistent with the week. Every fixture used to sit on
+  // 0, which models two claims from different weeks settling in the
+  // same instant — waiver runs are a week apart, and a wire grouped by
+  // when it SETTLED cannot be tested against a state that cannot occur.
+  timestamp: week * 7 * 86_400_000,
   week,
   teamIds: [teamId],
   movements: [{ playerId: `p-${id}`, playerName, fromTeamId: 'waivers', toTeamId: teamId }],
@@ -23,7 +27,10 @@ const trade = (id: string, a: string, b: string, week = 3): LeagueTransaction =>
   id,
   platform: 'sleeper',
   kind: 'trade',
-  timestamp: 0,
+  // Same reasoning as `add` above: the timestamp has to agree with the
+  // week, or a trade sits in a different run from the claims it was
+  // written to appear beside.
+  timestamp: week * 7 * 86_400_000,
   week,
   teamIds: [a, b],
   movements: [
@@ -48,6 +55,37 @@ describe('buildWireFacts', () => {
     ])!
     expect(facts.week).toBe(4)
     expect(facts.adds.map((a) => a.playerName)).toEqual(['This Week'])
+  })
+
+  it('keeps one waiver run together when the platform splits its legs', () => {
+    // THE REAL CASE. Sleeper stamps a claim with the leg it was
+    // SUBMITTED in, but a run settles everything outstanding at once.
+    // One Wednesday run in the captured league settled a $15 claim
+    // stamped leg 1 and a $1 claim stamped leg 2 in the same second.
+    // Grouping by leg split the wire across two weeks and headlined
+    // the issue "$1 changed hands" on a week somebody spent fifteen.
+    const settled = 16 * 86_400_000 + 9 * 3_600_000      // same morning
+    const facts = buildWireFacts([
+      { ...add('a', 't1', 'Devaughn Vele', 1, { faabBid: 15 }), timestamp: settled },
+      { ...add('b', 't2', 'Kenyon Sadiq', 2, { faabBid: 1 }), timestamp: settled + 400 },
+    ])!
+    expect(facts.adds.map((a) => a.playerName)).toEqual(['Devaughn Vele', 'Kenyon Sadiq'])
+    expect(facts.adds[0].faabBid).toBe(15)
+    // Stamped by the LATEST leg in the run — the week it reports into.
+    expect(facts.week).toBe(2)
+  })
+
+  it('leaves an older run behind even when its legs overlap', () => {
+    // Leg 1 also still holds claims that settled back in August. "The
+    // wire" is the most recent run, not every claim ever stamped with
+    // the same leg.
+    const august = 3 * 86_400_000
+    const today = 16 * 86_400_000
+    const facts = buildWireFacts([
+      { ...add('old', 't1', 'Preseason Pickup', 1, { faabBid: 7 }), timestamp: august },
+      { ...add('new', 't2', 'This Morning', 1, { faabBid: 2 }), timestamp: today },
+    ])!
+    expect(facts.adds.map((a) => a.playerName)).toEqual(['This Morning'])
   })
 
   it('sorts claims by bid when the league uses FAAB', () => {
@@ -111,7 +149,7 @@ describe('buildWireFacts', () => {
     // give the same answer, so the earlier version of this test passed
     // under either and proved nothing.
     const lopsided: LeagueTransaction = {
-      id: 'big', platform: 'sleeper', kind: 'trade', timestamp: 0, week: 3,
+      id: 'big', platform: 'sleeper', kind: 'trade', timestamp: 3 * 7 * 86_400_000, week: 3,
       teamIds: ['trader', 'other'],
       movements: [
         { playerId: 'a', playerName: 'A', fromTeamId: 'other', toTeamId: 'trader' },

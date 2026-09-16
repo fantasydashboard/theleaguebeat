@@ -127,7 +127,10 @@ describe('buildWeeklyIssue', () => {
     // week 6. Filtering the wire to the issue's own week would show
     // LAST Wednesday's claims — a week stale, and unmarked.
     const claim = (id: string, week: number, name: string, bid: number): LeagueTransaction => ({
-      id, platform: 'sleeper', kind: 'faab-add', timestamp: week, week,
+      // Timestamp has to agree with the week: the wire groups by the
+      // run that SETTLED, and `timestamp: week` put every fixture
+      // inside the same millisecond-wide day.
+      id, platform: 'sleeper', kind: 'faab-add', timestamp: week * 7 * 86_400_000, week,
       teamIds: ['a'], faabBid: bid,
       movements: [{ playerId: id, playerName: name, toTeamId: 'a', fromTeamId: 'waivers' }],
     })

@@ -512,7 +512,7 @@ async function buildSleeperTransactions(
   }
 }
 
-function normalizeSleeperTransaction(
+export function normalizeSleeperTransaction(
   t: any,
   currentWeek: number,
   playerDb: Record<string, any> | null,
@@ -563,8 +563,12 @@ function normalizeSleeperTransaction(
   }
   if (movements.length === 0) return null
 
-  // Sleeper timestamps are unix ms.
-  const timestamp = Number(t.created ?? t.status_updated ?? Date.now())
+  // Sleeper timestamps are unix ms. SETTLEMENT first, not creation:
+  // the contract says `timestamp` is when the transaction PROCESSED,
+  // and a waiver claim is submitted days before it runs. Reading
+  // `created` put a claim entered on the Tuesday into Tuesday's wire,
+  // when it did not actually move a player until Wednesday's run.
+  const timestamp = Number(t.status_updated ?? t.created ?? Date.now())
   const week = clampWeek(t.leg ?? currentWeek)
 
   return {

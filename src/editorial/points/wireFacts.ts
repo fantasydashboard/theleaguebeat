@@ -54,6 +54,38 @@ export interface WireFacts {
 }
 
 /**
+ * The claims that settled in the most recent waiver run.
+ *
+ * WHY NOT GROUP BY WEEK. Sleeper stamps a claim with the `leg` it was
+ * SUBMITTED in, and a waiver run settles everything outstanding at
+ * once. In the captured league one Wednesday run settled a $15 claim
+ * stamped leg 1 and a $1 claim stamped leg 2 in the same second —
+ * grouping by leg split one wire across two weeks and headlined the
+ * issue with the $1 half. Worse, leg 1 also still held claims that
+ * settled back in August, so "week 1's wire" mixed preseason with
+ * Sunday.
+ *
+ * A wire section is about what just landed, and what just landed is a
+ * run. Grouping by settlement day says exactly that and needs no
+ * week arithmetic, so no amount of leg drift can break it.
+ *
+ * A calendar DAY rather than an exact timestamp because platforms
+ * settle a batch over a few seconds, and a trade accepted the same
+ * morning belongs in the same column.
+ */
+export function latestWireRun(
+  transactions: readonly LeagueTransaction[] | undefined,
+): LeagueTransaction[] {
+  if (!transactions?.length) return []
+  // UTC rather than local: the grouping has to be stable wherever it
+  // renders, and a reader in Auckland must not see a different wire.
+  const day = (t: LeagueTransaction) => Math.floor(t.timestamp / 86_400_000)
+  const latest = Math.max(...transactions.map(day).filter(Number.isFinite))
+  if (!Number.isFinite(latest)) return []
+  return transactions.filter((t) => day(t) === latest)
+}
+
+/**
  * Reduce a week's transactions to the facts a deck can present.
  *
  * @param week the processing period to cover. Undefined takes the
@@ -68,12 +100,22 @@ export function buildWireFacts(
 ): WireFacts | null {
   if (!transactions || transactions.length === 0) return null
 
-  const targetWeek =
-    week ?? Math.max(...transactions.map((t) => t.week).filter(Number.isFinite))
-  if (!Number.isFinite(targetWeek)) return null
-
-  const inWeek = transactions.filter((t) => t.week === targetWeek)
+  // No week given means "the wire as it stands" — the most recent run,
+  // which is what a Wednesday-morning deck wants and what the issue
+  // asks for. An explicit week still filters by week, for callers
+  // reconstructing a past issue.
+  let inWeek: LeagueTransaction[]
+  if (week === undefined) {
+    inWeek = latestWireRun(transactions)
+  } else {
+    if (!Number.isFinite(week)) return null
+    inWeek = transactions.filter((t) => t.week === week)
+  }
   if (inWeek.length === 0) return null
+  // The week a run belongs to is whatever the claims in it say — they
+  // can disagree (a run settles claims submitted in different legs),
+  // so the latest wins: that is the week the wire is reporting into.
+  const targetWeek = Math.max(...inWeek.map((t) => t.week).filter(Number.isFinite))
 
   const adds: WireAdd[] = []
   const trades: WireTrade[] = []

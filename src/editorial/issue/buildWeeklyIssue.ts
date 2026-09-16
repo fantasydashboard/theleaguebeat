@@ -22,7 +22,7 @@ import { ordinal } from '../points/draftValue'
 import { tierFor } from '../points/rosterStrength'
 import type { PointsPowerRow } from '../points/powerScore'
 import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
-import { buildWireFacts, describeCost, type WireFacts } from '../points/wireFacts'
+import { buildWireFacts, latestWireRun, describeCost, type WireFacts } from '../points/wireFacts'
 import { detectUpsets } from '../points/upsets'
 import { buildWeeklyRecordBook } from '../points/recordWatch'
 import { seriesFor, describeSeries, type HeadToHead } from '../points/headToHead'
@@ -648,15 +648,36 @@ export function buildWeeklyIssue(input: WeeklyIssueInput): Issue | null {
     ...(input.transactions ?? []).map((t) => t.week).filter(Number.isFinite),
     -Infinity,
   )
-  // WAIT FOR THE WIRE. The issue covering week N publishes on the
-  // Tuesday of week N+1, before waivers have run — so reading "the
-  // most recent week with moves" printed week N's claims as though
-  // they were news, days after everyone had seen them. The wire is a
-  // Wednesday section; until this week's claims process there is
-  // nothing to report and the section stays away.
-  const wireWeek = input.week + 1
+  // THE MOST RECENT RUN, not a week. Sleeper stamps a claim with the
+  // `leg` it was submitted in, but a waiver run settles everything
+  // outstanding at once — one Wednesday run in the captured league
+  // settled a $15 claim stamped leg 1 and a $1 claim stamped leg 2 in
+  // the same second. Asking for `week + 1` got the $1 half and
+  // headlined the issue "$1 changed hands" on a week somebody had
+  // spent fifteen. See `latestWireRun`.
+  //
+  // WAIT FOR THE WIRE still holds: the issue covering week N publishes
+  // on the Tuesday of week N+1, before waivers have run. The guard is
+  // now freshness rather than week arithmetic — the run has to be
+  // newer than anything that had already settled when the week's games
+  // finished, which on a stale or archived league is never true.
   void latest
-  const wire = buildWireFacts(input.transactions, wireWeek)
+  // The run has to be THIS week's. A run reports into the week after
+  // the one being written about — claims answering week N's results
+  // settle on the Wednesday inside week N+1 — so that is the only run
+  // worth printing.
+  //
+  // Both ends matter. Without the lower bound the section fires on the
+  // Tuesday, reprinting claims everyone saw days ago as news. Without
+  // the upper bound an archived league reaches forward and puts week
+  // 17's playoff claims under a week 14 headline. A run is stamped by
+  // the LATEST week among its claims, because one run settles claims
+  // submitted across more than one leg.
+  const run = latestWireRun(input.transactions)
+  const runWeek = run.length
+    ? Math.max(...run.map((t) => t.week).filter(Number.isFinite))
+    : NaN
+  const wire = runWeek === input.week + 1 ? buildWireFacts(run) : null
 
   const sections = [
     resultsSection(input),
