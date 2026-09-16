@@ -646,6 +646,11 @@
     color: var(--gold); line-height: 1;
   }
   .xhl-over { font-size: 21px; color: var(--dim); font-weight: 600; line-height: 1.25; }
+  /* The duds card runs the same layout in the opposite direction. Red
+     rather than gold, and the face desaturated — a player having the
+     worst week of his season should not look like a highlight. */
+  .xhl-diff.is-down { color: oklch(0.65 0.21 25); }
+  .xhl-card.is-dud .xhl-face img { filter: grayscale(0.85) contrast(1.05); }
 
   /* ── X Monday night ─────────────────────────────────────────
      The sweat card: five faces still to play, each with a manager's
@@ -2021,6 +2026,96 @@ async function weekHeadliners(cfg, wk, n, pool = 'league') {
   return candidates.sort((a, b) => b.diff - a.diff).slice(0, n)
 }
 
+/**
+ * The other end of the same measurement: who was STARTED and did
+ * nothing.
+ *
+ *   ?view=x-duds&wk=1          (&lg=ffl for the second tier, &n=3)
+ *
+ * STARTED, NOT ROSTERED, and that is the whole point. A bad week from
+ * somebody's bench is not a story — nobody was hurt by it. A bad week
+ * from a player a manager chose to start is the most shareable fact
+ * the paper holds, because every reader has done it.
+ *
+ * Same baseline as the headliners card — the average of the position's
+ * startable universe that week, NFL-wide — so the two cards cannot
+ * quote different numbers about the same player.
+ */
+async function weekDuds(cfg, wk, n) {
+  const table = await rankedTeams(cfg)              // primes _prCache
+  const [league, rosters, , proj] = _prCache[cfg.id]
+
+  const [stats, ms] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${league.season}/${wk}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${wk}`).then((r) => r.json()),
+  ])
+
+  const meta = {}
+  for (const row of proj) {
+    meta[String(row.player_id)] = {
+      name: [row.player?.first_name, row.player?.last_name].filter(Boolean).join(' '),
+      pos: row.player?.position ?? '',
+    }
+  }
+
+  const byPos = { QB: [], RB: [], WR: [], TE: [] }
+  for (const [id, st] of Object.entries(stats)) {
+    const pos = meta[id]?.pos
+    const pts = st?.pts_half_ppr
+    if (byPos[pos] && typeof pts === 'number') byPos[pos].push(pts)
+  }
+  const baseline = {}
+  for (const [pos, arr] of Object.entries(byPos)) {
+    const top = arr.sort((a, b) => b - a).slice(0, STARTABLE[pos])
+    baseline[pos] = top.length ? top.reduce((t, x) => t + x, 0) / top.length : 0
+  }
+
+  const teamByOwner = Object.fromEntries(table.map((t) => [t.owner, t]))
+  const ownerOf = Object.fromEntries(rosters.map((r) => [String(r.roster_id), r.owner_id]))
+  const out = []
+  for (const m of ms) {
+    const team = teamByOwner[ownerOf[String(m.roster_id)]]
+    if (!team) continue
+    for (const id of m.starters || []) {
+      const mm = meta[id]
+      const pts = stats[id]?.pts_half_ppr
+      // A blank id is an empty lineup slot, not a player who scored 0.
+      if (!mm || !baseline[mm.pos] || typeof pts !== 'number') continue
+      out.push({ id, ...mm, pts, team, diff: pts - baseline[mm.pos], base: baseline[mm.pos] })
+    }
+  }
+  return out.sort((a, b) => a.diff - b.diff).slice(0, n)
+}
+
+async function loadXDuds() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  const wk = Number(params.get('wk') || 1)
+  const worst = await weekDuds(cfg, wk, Number(params.get('n') || 3))
+
+  const cards = worst.map((p) => `
+    <div class="xhl-card is-dud">
+      <div class="xhl-face">
+        <img src="https://sleepercdn.com/content/nfl/players/${p.id}.jpg" alt=""
+             onerror="this.remove()">
+      </div>
+      <div class="xhl-body">
+        <div class="xhl-name">${esc(p.name)}</div>
+        <div class="xhl-team">${xcAv(p.team.team, p.team.avatar)} ${esc(p.team.team)}</div>
+        <div class="xhl-stat">
+          <span class="xhl-diff is-down">${p.diff.toFixed(1)}</span>
+          <span class="xhl-over">under the average<br>starting ${esc(p.pos)} · ${p.pts.toFixed(1)} pts</span>
+        </div>
+      </div>
+    </div>`).join('')
+
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name,
+    title: params.get('title') || 'Started. Regretted.',
+    when: params.get('when') || `Week ${wk}`,
+    rows: `<div class="xhl-grid">${cards}</div>`,
+  })
+}
+
 async function loadXHeadliners() {
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   const wk = Number(params.get('wk') || 1)
@@ -2664,6 +2759,7 @@ function fit() {
     else if (view === 'x-record') await loadXRecord()
     else if (view === 'x-matchups') await loadXMatchups()
     else if (view === 'x-headliners') await loadXHeadliners()
+    else if (view === 'x-duds') await loadXDuds()
     else if (view === 'x-cover') await loadXCover()
     else if (view === 'x-mnf') await loadXMnf()
     else if (view === 'wk-intro') await loadWkIntro()
