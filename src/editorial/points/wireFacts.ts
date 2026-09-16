@@ -29,6 +29,21 @@ export interface WireAdd {
   /** Waiver priority spent, when it uses priority instead. */
   waiverPriority?: number
   kind: 'fa-add' | 'waiver-add' | 'faab-add'
+  /**
+   * What the claim was up against.
+   *
+   * RIVAL BIDS ONLY, and that is the whole subtlety. A manager may
+   * enter several claims on the same player at different prices — a
+   * $9 and an $8 on Denzel Boston, both from the same roster — and
+   * counting those as competition reports a nail-biting escape from
+   * a man bidding against himself. Only bids from OTHER teams count.
+   */
+  contest?: {
+    /** How many other teams bid on him. */
+    rivals: number
+    /** The best rival bid. Undefined when nobody else wanted him. */
+    nextBid?: number
+  }
 }
 
 export interface WireTrade {
@@ -121,7 +136,21 @@ export function buildWireFacts(
   const trades: WireTrade[] = []
   const moves = new Map<string, number>()
 
+  // Losing claims, grouped by player, so a winning bid can say what it
+  // beat. Kept out of every count below: nothing changed hands.
+  const lostFor = new Map<string, { teamId: string; bid: number }[]>()
   for (const tx of inWeek) {
+    if (tx.kind !== 'failed-claim') continue
+    for (const m of tx.movements) {
+      if (typeof tx.faabBid !== 'number') continue
+      const list = lostFor.get(m.playerId) ?? []
+      list.push({ teamId: m.toTeamId, bid: tx.faabBid })
+      lostFor.set(m.playerId, list)
+    }
+  }
+
+  for (const tx of inWeek) {
+    if (tx.kind === 'failed-claim') continue
     // A trade moves players in both directions, so counting it once
     // per involved team is what "most active" should mean — counting
     // per movement would rank a two-for-two swap above four pickups.
@@ -153,6 +182,9 @@ export function buildWireFacts(
       (m) => m.toTeamId !== 'fa' && m.toTeamId !== 'waivers',
     )
     if (!teamId || !arriving) continue
+    // Only OTHER teams count as competition. See `contest`.
+    const rivals = (lostFor.get(arriving.playerId) ?? []).filter((l) => l.teamId !== teamId)
+    const nextBid = rivals.length ? Math.max(...rivals.map((r) => r.bid)) : undefined
     adds.push({
       teamId,
       playerId: arriving.playerId,
@@ -161,6 +193,9 @@ export function buildWireFacts(
       faabBid: tx.faabBid,
       waiverPriority: tx.waiverPriority,
       kind: tx.kind,
+      ...(lostFor.has(arriving.playerId)
+        ? { contest: { rivals: new Set(rivals.map((r) => r.teamId)).size, nextBid } }
+        : {}),
     })
   }
 
@@ -191,3 +226,39 @@ export function describeCost(add: WireAdd): string {
   if (typeof add.waiverPriority === 'number') return `priority ${add.waiverPriority}`
   return add.kind === 'fa-add' ? 'free agency' : 'off waivers'
 }
+
+/**
+ * What a winning bid was actually up against, in one clause.
+ *
+ * Says nothing rather than something bland: a $0 claim nobody else
+ * wanted is not a story, and "held off 0 rivals" is worse than
+ * silence. The interesting shapes are a squeaker, a raid, and a
+ * player half the league wanted.
+ */
+export function describeContest(add: WireAdd): string | undefined {
+  const paid = add.faabBid
+  if (typeof paid !== 'number') return undefined
+  const c = add.contest
+  if (!c || c.rivals === 0) {
+    // Spending real money with nobody bidding against you is its own
+    // small embarrassment, and it is only worth saying when it is real
+    // money.
+    return paid >= 5 ? `Nobody else bid. ${money(paid)} unopposed.` : undefined
+  }
+  const next = c.nextBid
+  const others = c.rivals === 1 ? 'one other team' : `${c.rivals} other teams`
+  if (typeof next !== 'number') return `${cap(others)} wanted him.`
+  const margin = paid - next
+  if (margin <= 0) return `${cap(others)} wanted him.`
+  if (margin === 1) return `Won him by a dollar. ${others} bid, best of them ${money(next)}.`
+  if (c.rivals >= 4) return `${cap(others)} bid. Next best was ${money(next)}.`
+  if (margin >= 5 && margin >= next) {
+    // Paying double what it would have taken is the line everybody
+    // quotes back at the winner in October.
+    return `${money(margin)} more than he had to — next bid was ${money(next)}.`
+  }
+  return `Held off ${others}; next bid ${money(next)}.`
+}
+
+const money = (n: number) => `$${n}`
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)

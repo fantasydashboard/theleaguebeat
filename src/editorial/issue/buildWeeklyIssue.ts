@@ -22,7 +22,7 @@ import { ordinal } from '../points/draftValue'
 import { tierFor } from '../points/rosterStrength'
 import type { PointsPowerRow } from '../points/powerScore'
 import { describeLuck, readLuck, MIN_WEEKS_FOR_LUCK } from '../points/luck'
-import { buildWireFacts, latestWireRun, describeCost, type WireFacts } from '../points/wireFacts'
+import { buildWireFacts, latestWireRun, describeCost, describeContest, type WireFacts } from '../points/wireFacts'
 import { detectUpsets } from '../points/upsets'
 import { buildWeeklyRecordBook } from '../points/recordWatch'
 import { seriesFor, describeSeries, type HeadToHead } from '../points/headToHead'
@@ -511,15 +511,22 @@ function wireSection(input: WeeklyIssueInput, facts: WireFacts | null): IssueSec
         : `${facts.adds.length} claims went through.`,
     support:
       (facts.usesFaab
-        ? 'Winning bids, biggest first. No platform publishes the losing ones.'
+        ? 'Winning bids, biggest first — and what each one had to beat.'
         : 'Claims in the order they processed.') + period,
-    rows: facts.adds.slice(0, 8).map((a) => ({
-      label: a.playerName,
-      sub: `${input.teamName(a.teamId)}${a.position ? ` · ${a.position}` : ''}`,
-      value: describeCost(a),
-      imageUrl: input.playerImage?.(a.playerId) ?? undefined,
-      ...visual(input, a.teamId),
-    })),
+    rows: facts.adds.slice(0, 8).map((a) => {
+      // The team line is the row's identity; what the bid beat is the
+      // story. Both, when there is a story — the team alone when there
+      // is not, rather than padding every row to the same length.
+      const who = `${input.teamName(a.teamId)}${a.position ? ` · ${a.position}` : ''}`
+      const contest = describeContest(a)
+      return {
+        label: a.playerName,
+        sub: contest ? `${who} — ${contest}` : who,
+        value: describeCost(a),
+        imageUrl: input.playerImage?.(a.playerId) ?? undefined,
+        ...visual(input, a.teamId),
+      }
+    }),
     priority: 40,
   }
 }

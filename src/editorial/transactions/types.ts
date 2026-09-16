@@ -33,6 +33,12 @@ export type TransactionKind =
   | 'waiver-add'   // claim won via waiver priority
   | 'faab-add'     // claim won via FAAB blind bid
   | 'drop'         // standalone drop (no replacement)
+  // A claim that LOST. Not a move — nothing changed hands — so every
+  // consumer that counts activity must skip it. It is carried because
+  // the losing bids are the only way to say what a winning one cost:
+  // $15 is a lot or a steal depending entirely on what came second,
+  // and Sleeper publishes them.
+  | 'failed-claim'
 
 /** One player movement within a transaction. A trade has multiple;
  *  a simple add has one (fromTeamId='fa', toTeamId=acquirer). */

@@ -517,14 +517,22 @@ export function normalizeSleeperTransaction(
   currentWeek: number,
   playerDb: Record<string, any> | null,
 ): LeagueTransaction | null {
-  if (!t || t.status !== 'complete') return null
+  if (!t) return null
+  // A LOST claim is kept, flagged, and never counted as a move. The
+  // losing bids are the only thing that says what the winning one
+  // cost — $15 is a raid or a bargain depending entirely on what came
+  // second — and Sleeper is one of the few platforms that publishes
+  // them. Everything else is dropped as before.
+  const failed = t.status !== 'complete'
+  if (failed && t.type !== 'waiver') return null
 
   // Sleeper kinds: 'trade' | 'waiver' | 'free_agent'
   const settings = t.settings ?? {}
   const faabBid = typeof settings.waiver_bid === 'number' ? settings.waiver_bid : undefined
 
   let kind: TransactionKind | null = null
-  if (t.type === 'trade') kind = 'trade'
+  if (failed) kind = 'failed-claim'
+  else if (t.type === 'trade') kind = 'trade'
   else if (t.type === 'waiver') kind = typeof faabBid === 'number' && faabBid > 0 ? 'faab-add' : 'waiver-add'
   else if (t.type === 'free_agent') kind = 'fa-add'
   if (!kind) return null
