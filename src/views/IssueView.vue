@@ -373,6 +373,9 @@
                   <span v-else>{{ row.logoInitials }}</span>
                 </span>
                 <span class="issue-wire-copy">
+                  <!-- Identity first and smallest: it labels the row,
+                       it is not the point of it. -->
+                  <span v-if="row.sub" class="issue-wire-who">{{ row.sub }}</span>
                   <span class="issue-wire-name">{{ row.label }}</span>
                   <!-- A chase, drawn. "14 from 8,000" is arithmetic; a
                        bar is the same fact felt on sight.
@@ -389,7 +392,7 @@
                       :style="{ width: `${Math.min(100, (row.progress.value / row.progress.target) * 100)}%` }"
                     ></span>
                   </span>
-                  <span v-if="row.sub" class="issue-wire-sub">{{ row.sub }}</span>
+                  <span v-if="row.note" class="issue-wire-note">{{ row.note }}</span>
                 </span>
                 <span v-if="row.value" class="issue-wire-value">{{ row.value }}</span>
                 <!-- The team one rung up, AFTER the target — a separate
@@ -4403,19 +4406,38 @@ function collectUserIdentity() {
    Its own grid. The standings row is built for a rank, a crest and a
    record; forcing a player + team + bid through it truncated every
    name to three characters. */
-.issue-wire { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 8px; }
+/* A MEASURE, not the whole viewport. The section head has always been
+   capped at 720px; the rows were not, so on a wide screen a name and
+   its number sat 1,400px apart and the page read as two documents at
+   two different widths. Capping the rows is worth more than any
+   amount of extra type size — it shortens the distance the eye has to
+   travel to join a player to what he cost. */
+.issue-wire {
+  list-style: none; padding: 0; margin: 18px 0 0;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 900px;
+}
 .issue-wire-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 12px 16px; border-radius: 12px;
+  display: flex; align-items: center; gap: 18px;
+  padding: 16px 20px; border-radius: 14px;
   background: oklch(0.09 0.012 90); border: 1px solid oklch(0.18 0.015 90);
 }
 .issue-wire-logo {
-  width: 34px; height: 34px; border-radius: 9px; flex: none;
-  display: grid; place-items: center; overflow: hidden; font-size: 0.7rem; font-weight: 700;
+  width: 44px; height: 44px; border-radius: 11px; flex: none;
+  display: grid; place-items: center; overflow: hidden; font-size: 0.8rem; font-weight: 700;
 }
-.issue-wire-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.issue-wire-name { font-weight: 700; }
-.issue-wire-sub { font-size: 0.78rem; color: oklch(0.62 0.01 90); }
+.issue-wire-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Identity: the smallest thing in the row, because it is the label. */
+.issue-wire-who {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: oklch(0.62 0.01 90);
+}
+.issue-wire-name { font-weight: 700; font-size: 1.2rem; line-height: 1.15; }
+/* The row's one interesting sentence. Sized to be read, not skimmed
+   past — it used to sit at 12.5px in the same grey as the position. */
+.issue-wire-note { font-size: 0.95rem; color: oklch(0.78 0.01 90); }
+.issue-wire-sub { font-size: 0.95rem; color: oklch(0.78 0.01 90); }
 
 /* The chase bar. Deliberately thin: it is a feeling about how close
    somebody is, not a chart to read values off. Gold while chasing,
@@ -4513,7 +4535,10 @@ function collectUserIdentity() {
   flex: none; font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
   font-size: 0.95rem; color: oklch(0.85 0.008 90);
 }
-.issue-wire-value { font-weight: 800; font-size: 1.05rem; flex: none; }
+.issue-wire-value {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 1.6rem; flex: none; line-height: 1;
+}
 
 /* ── ISSUE SECTION DENSITY ──────────────────────────────────────────
    The cover is the loudest thing on the page and everything after it

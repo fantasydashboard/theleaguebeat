@@ -26,8 +26,16 @@ export interface IssueRow {
   label: string
   /** Right-aligned figure. */
   value?: string
-  /** Small line under the label. */
+  /** Small line under the label — identity. Who, and what position. */
   sub?: string
+  /**
+   * The row's one interesting sentence, set apart from `sub`.
+   *
+   * These were concatenated, which put "7 other teams bid, next best
+   * $10" at the same size, weight and colour as "WR". The label copy
+   * and the story are not the same thing and must not read as one.
+   */
+  note?: string
   teamId?: string
   logoUrl?: string
   logoColor?: string

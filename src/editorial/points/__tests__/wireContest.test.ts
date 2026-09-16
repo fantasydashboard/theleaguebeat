@@ -31,7 +31,15 @@ describe('what a winning bid was up against', () => {
 
   it('calls a one-dollar win a one-dollar win', () => {
     const add = addFor([won('Sadiq', 't3', 2), lost('Sadiq', 't1', 1)], 'Sadiq')
-    expect(describeContest(add)).toBe('Won him by a dollar. one other team bid, best of them $1.')
+    // A dash, not a full stop: a sentence cannot restart lowercase.
+    expect(describeContest(add)).toBe('Won him by a dollar — one other team bid, best of them $1.')
+  })
+
+  it('does not call beating a zero a bidding war', () => {
+    // $1 over $0 is a one-dollar margin and reads as nonsense: nobody
+    // put money up. Say that instead.
+    const add = addFor([won('Sadiq', 't3', 1), lost('Sadiq', 't1', 0)], 'Sadiq')
+    expect(describeContest(add)).toBe('One other team put a claim in, none of them money.')
   })
 
   it('names the crowd when half the league wanted him', () => {

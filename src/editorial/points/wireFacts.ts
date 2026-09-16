@@ -250,7 +250,11 @@ export function describeContest(add: WireAdd): string | undefined {
   if (typeof next !== 'number') return `${cap(others)} wanted him.`
   const margin = paid - next
   if (margin <= 0) return `${cap(others)} wanted him.`
-  if (margin === 1) return `Won him by a dollar. ${others} bid, best of them ${money(next)}.`
+  // Beating a zero is not a bidding war. "Won him by a dollar, best of
+  // them $0" is arithmetically true and reads as nonsense — nobody put
+  // money up, so say that instead.
+  if (next === 0) return `${cap(others)} put a claim in, none of them money.`
+  if (margin === 1) return `Won him by a dollar — ${others} bid, best of them ${money(next)}.`
   if (c.rivals >= 4) return `${cap(others)} bid. Next best was ${money(next)}.`
   if (margin >= 5 && margin >= next) {
     // Paying double what it would have taken is the line everybody

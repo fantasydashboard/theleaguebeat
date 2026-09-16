@@ -518,10 +518,10 @@ function wireSection(input: WeeklyIssueInput, facts: WireFacts | null): IssueSec
       // story. Both, when there is a story — the team alone when there
       // is not, rather than padding every row to the same length.
       const who = `${input.teamName(a.teamId)}${a.position ? ` · ${a.position}` : ''}`
-      const contest = describeContest(a)
       return {
         label: a.playerName,
-        sub: contest ? `${who} — ${contest}` : who,
+        sub: who,
+        note: describeContest(a),
         value: describeCost(a),
         imageUrl: input.playerImage?.(a.playerId) ?? undefined,
         ...visual(input, a.teamId),
