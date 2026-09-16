@@ -650,6 +650,12 @@
      rather than gold, and the face desaturated — a player having the
      worst week of his season should not look like a highlight. */
   .xhl-diff.is-down { color: oklch(0.65 0.21 25); }
+  .xhl-pos {
+    display: inline-block; padding: 3px 10px; border-radius: 7px;
+    background: oklch(0.26 0.02 90); color: var(--ink);
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 18px; letter-spacing: 0.1em; margin-right: 4px;
+  }
   .xhl-card.is-dud .xhl-face img { filter: grayscale(0.85) contrast(1.05); }
 
   /* ── X Monday night ─────────────────────────────────────────
@@ -2027,36 +2033,74 @@ async function weekHeadliners(cfg, wk, n, pool = 'league') {
 }
 
 /**
- * The other end of the same measurement: who was STARTED and did
- * nothing.
+ * The other end of the same measurement: the week's letdowns.
  *
- *   ?view=x-duds&wk=1          (&lg=ffl for the second tier, &n=3)
+ *   ?view=x-duds&wk=1              NFL-wide, for the main channel
+ *   ?view=x-duds&wk=1&pool=league  the house edition, by who STARTED them
  *
- * STARTED, NOT ROSTERED, and that is the whole point. A bad week from
- * somebody's bench is not a story — nobody was hurt by it. A bad week
- * from a player a manager chose to start is the most shareable fact
- * the paper holds, because every reader has done it.
+ * TWO POOLS, BECAUSE "DUD" MEANS TWO DIFFERENT THINGS.
  *
- * Same baseline as the headliners card — the average of the position's
- * startable universe that week, NFL-wide — so the two cards cannot
- * quote different numbers about the same player.
+ * `league` measures who was STARTED and did nothing, which is the most
+ * shareable fact a league paper holds — every reader has done it. But
+ * it only exists inside a league, and it puts that league's team names
+ * on the card, so it is the house edition and nothing else.
+ *
+ * `nfl` is the default and carries no league at all. Nobody can say
+ * who "started" a player league-wide, so the yardstick is the player's
+ * OWN line: season projection over seventeen, the same basis every
+ * other card in this file quotes. A letdown is a player the whole
+ * fantasy world drafted to start who then did not turn up.
+ *
+ * Restricted to the startable tier by PROJECTION — top 12 QB/TE, top
+ * 24 RB/WR — because a fourth-string running back scoring nothing is
+ * not news; he was not in anybody's lineup.
  */
-async function weekDuds(cfg, wk, n) {
+async function weekDuds(cfg, wk, n, pool = 'nfl') {
   const table = await rankedTeams(cfg)              // primes _prCache
   const [league, rosters, , proj] = _prCache[cfg.id]
 
-  const [stats, ms] = await Promise.all([
-    fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${league.season}/${wk}`).then((r) => r.json()),
-    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${wk}`).then((r) => r.json()),
-  ])
+  const stats = await fetch(
+    `https://api.sleeper.app/v1/stats/nfl/regular/${league.season}/${wk}`,
+  ).then((r) => r.json())
 
   const meta = {}
   for (const row of proj) {
     meta[String(row.player_id)] = {
       name: [row.player?.first_name, row.player?.last_name].filter(Boolean).join(' '),
       pos: row.player?.position ?? '',
+      nfl: row.player?.team ?? '',
+      // The line: season projection over seventeen, half-PPR.
+      line: (row.stats?.pts_half_ppr ?? 0) / 17,
     }
   }
+
+  if (pool === 'nfl') {
+    // Who the fantasy world drafted to start, by projection.
+    const ranked = { QB: [], RB: [], WR: [], TE: [] }
+    for (const [id, m] of Object.entries(meta)) {
+      if (ranked[m.pos] && m.line > 0) ranked[m.pos].push({ id, ...m })
+    }
+    const startable = new Set()
+    for (const [pos, arr] of Object.entries(ranked)) {
+      arr.sort((a, b) => b.line - a.line)
+      for (const p of arr.slice(0, STARTABLE[pos])) startable.add(p.id)
+    }
+    const out = []
+    for (const id of startable) {
+      const m = meta[id]
+      const pts = stats[id]?.pts_half_ppr
+      // No stat line at all is a bye or an inactive, not a bad game.
+      if (typeof pts !== 'number') continue
+      out.push({ id, ...m, pts, team: null, diff: pts - m.line, base: m.line })
+    }
+    return out.sort((a, b) => a.diff - b.diff).slice(0, n)
+  }
+
+  // House edition: who was actually started, against the position's
+  // startable average that week — same baseline as the headliners card.
+  const ms = await fetch(
+    `https://api.sleeper.app/v1/league/${cfg.id}/matchups/${wk}`,
+  ).then((r) => r.json())
 
   const byPos = { QB: [], RB: [], WR: [], TE: [] }
   for (const [id, st] of Object.entries(stats)) {
@@ -2090,7 +2134,8 @@ async function weekDuds(cfg, wk, n) {
 async function loadXDuds() {
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   const wk = Number(params.get('wk') || 1)
-  const worst = await weekDuds(cfg, wk, Number(params.get('n') || 3))
+  const pool = params.get('pool') === 'league' ? 'league' : 'nfl'
+  const worst = await weekDuds(cfg, wk, Number(params.get('n') || 3), pool)
 
   const cards = worst.map((p) => `
     <div class="xhl-card is-dud">
@@ -2100,17 +2145,22 @@ async function loadXDuds() {
       </div>
       <div class="xhl-body">
         <div class="xhl-name">${esc(p.name)}</div>
-        <div class="xhl-team">${xcAv(p.team.team, p.team.avatar)} ${esc(p.team.team)}</div>
+        <div class="xhl-team">${p.team
+          ? `${xcAv(p.team.team, p.team.avatar)} ${esc(p.team.team)}`
+          : `<span class="xhl-pos">${esc(p.pos)}</span> ${esc(p.nfl || '')}`}</div>
         <div class="xhl-stat">
           <span class="xhl-diff is-down">${p.diff.toFixed(1)}</span>
-          <span class="xhl-over">under the average<br>starting ${esc(p.pos)} · ${p.pts.toFixed(1)} pts</span>
+          <span class="xhl-over">${p.team
+            ? `under the average<br>starting ${esc(p.pos)} · ${p.pts.toFixed(1)} pts`
+            : `under his line of ${p.base.toFixed(1)}<br>${p.pts.toFixed(1)} pts`}</span>
         </div>
       </div>
     </div>`).join('')
 
+  // No league name on the NFL card — it is not about anybody's league.
   document.getElementById('safe').innerHTML = xcShell({
-    league: cfg.name,
-    title: params.get('title') || 'Started. Regretted.',
+    league: pool === 'league' ? cfg.name : 'Week in review',
+    title: params.get('title') || 'Drafted to start. Did not turn up.',
     when: params.get('when') || `Week ${wk}`,
     rows: `<div class="xhl-grid">${cards}</div>`,
   })
