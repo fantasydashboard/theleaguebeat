@@ -22,6 +22,7 @@
  */
 
 import { sleeperService } from '@/services/sleeper'
+import { buildH2H, type H2HGame } from '@/editorial/h2h/buildH2H'
 import type {
   SleeperLeague,
   SleeperRoster,
@@ -2303,6 +2304,49 @@ function buildSleeperCurrentWeekMatchups(
  * omitted rather than given an empty lineup — "nobody left to play"
  * and "we cannot read the lineup" must not look the same.
  */
+/**
+ * This season's head-to-head, for Your Rival.
+ *
+ * WHY IT WAS MISSING. `buildH2H` was wired into the ESPN and Yahoo
+ * points branches and never into this one, so `data.h2hRecords` came
+ * back undefined for every Sleeper football league — and `buildRival`
+ * returns undefined on an empty list. Your Column lost a whole block
+ * on the one platform this product renders server-side.
+ *
+ * Regular season only, decided games only: a bye has no opponent and a
+ * 0-0 week is a week that has not happened.
+ */
+function buildSleeperH2HRecords(
+  matchupsByWeek: Record<string, SleeperMatchup[]>,
+  throughWeek: number,
+): H2HRecord[] {
+  const games: H2HGame[] = []
+  for (let week = 1; week <= throughWeek; week++) {
+    const groups = new Map<number, SleeperMatchup[]>()
+    for (const m of matchupsByWeek[String(week)] ?? []) {
+      // `matchup_id` is null on a bye; grouping it invents a game.
+      if (m.matchup_id == null) continue
+      const list = groups.get(m.matchup_id) ?? []
+      list.push(m)
+      groups.set(m.matchup_id, list)
+    }
+    for (const pair of groups.values()) {
+      if (pair.length !== 2) continue
+      const [a, b] = pair
+      const pa = a.points ?? 0
+      const pb = b.points ?? 0
+      // Both on zero is an unplayed week, not a tie.
+      if (pa === 0 && pb === 0) continue
+      games.push({
+        a: String(a.roster_id),
+        b: String(b.roster_id),
+        winner: pa > pb ? 'a' : pb > pa ? 'b' : 'tie',
+      })
+    }
+  }
+  return buildH2H(games)
+}
+
 function buildSleeperCurrentWeekStarters(
   matchupsByWeek: Record<string, SleeperMatchup[]>,
   currentWeek: number,
@@ -2471,6 +2515,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
   const previousWeekMatchups = buildSleeperPreviousWeekMatchups(matchupsByWeek, currentWeek)
   const weeklyPointsAverage = computeWeeklyPointsAverage(matchupsByWeek)
   const weeklyScores = buildSleeperWeeklyScores(matchupsByWeek, regularSeasonBoundWeek, currentWeek)
+  const h2hRecords = buildSleeperH2HRecords(matchupsByWeek, regularSeasonBoundWeek)
   const draft = buildSleeperDraft(raw, currentSeason)
   const seasonHistory = buildSleeperPointsSeasonHistory(raw)
   const careerRecords = buildSleeperCareers(
@@ -2505,6 +2550,7 @@ export function buildSleeperPointsData(raw: SleeperPointsRaw): LeagueDataH2HPoin
     standings,
     seasonRankHistory,
     weeklyScores,
+    h2hRecords,
     draft,
     transactions: raw.transactions,
     seasonHistory,
