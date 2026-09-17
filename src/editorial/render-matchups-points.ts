@@ -77,7 +77,10 @@ function renderSubHeadline(matchups: LeagueDataPointsMatchup[]): string {
   }
   const upcoming = matchups.filter((m) => m.status === 'upcoming').length
   if (upcoming === matchups.length) {
-    return 'Weekly points. Kickoff hasn\'t happened yet. Check back once the games get going.'
+    // The cards below now carry a storyline each. Telling a reader to
+    // check back later, directly above the reason to read on, argues
+    // with the rest of the section.
+    return 'What is at stake in each one, before a ball is kicked.'
   }
   const live = matchups.filter((m) => m.status === 'live').length
   if (live === 0) {

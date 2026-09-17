@@ -235,11 +235,27 @@ describe('the upset section', () => {
     expect(upset.eyebrow).toBe('The upset')
     expect(upset.headline).toBe('No. 5 took down No. 2.')
     expect(upset.support).toContain('3 spots below')
-    // The row carries the scoreline and the margin. The headline and
-    // support already state the climb; repeating it here was the same
-    // sentence three times in one section.
-    expect(upset.rows[0].label).toBe('No. 5 Team e over No. 2 Team b')
-    expect(upset.rows[0].sub).toBe('by 11.3')
+    // NO ROWS. Every upset is already a row in the results section,
+    // with the same ranks and the same score, one screen above — and
+    // the lead one is this section's headline as well. Three prints of
+    // one result is the page losing its place, not emphasis.
+    expect(upset.rows).toBeUndefined()
+  })
+
+  it('gives a second upset a clause, never a duplicate row', () => {
+    const issue = buildWeeklyIssue({
+      ...withBoard,
+      results: [
+        final('1', 'e', 'b', 121.4, 110.1),   // No. 5 over No. 2
+        final('2', 'f', 'a', 130.0, 118.2),   // No. 6 over No. 1
+      ],
+    })!
+    const upset = issue.sections.find((s) => s.id === 'upset')!
+    expect(upset.rows).toBeUndefined()
+    // The bigger climb leads (No. 6 over No. 1, five spots), so the
+    // smaller one is the clause.
+    expect(upset.headline).toBe('No. 6 took down No. 1.')
+    expect(upset.support).toContain('No. 5 Team e did it to No. 2 Team b too')
   })
 
   it('escalates the eyebrow for a climb from the bottom', () => {

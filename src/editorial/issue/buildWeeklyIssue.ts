@@ -256,15 +256,17 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
   if (upsets.length === 0) return null
 
   const lead = upsets[0]
-  // The headline already says "No. 7 took down No. 1" and the support
-  // already says how far below they sat. Rows repeating both was the
-  // same sentence three times in one section.
-  const rows: IssueRow[] = upsets.map((u) => ({
-    label: `No. ${u.winnerRank} ${input.teamName(u.winnerId)} over No. ${u.loserRank} ${input.teamName(u.loserId)}`,
-    sub: `by ${round1(u.margin)}`,
-    value: `${round1(u.winnerPoints).toFixed(1)} – ${round1(u.loserPoints).toFixed(1)}`,
-    ...visual(input, u.winnerId),
-  }))
+  // NO ROWS. Every upset is already a row in the results section, with
+  // the same ranks and the same score, one screen above — and the lead
+  // one is the headline of this section as well. Three prints of one
+  // result is not emphasis, it is the page losing its place. The
+  // others get a clause instead.
+  const alsoRan = upsets.slice(1)
+  const others = alsoRan.length
+    ? ` ${alsoRan
+        .map((u) => `No. ${u.winnerRank} ${input.teamName(u.winnerId)} did it to No. ${u.loserRank} ${input.teamName(u.loserId)} too`)
+        .join(', and ')}.`
+    : ''
 
   return {
     id: 'upset',
@@ -274,8 +276,7 @@ function upsetSection(input: WeeklyIssueInput): IssueSection | null {
     support:
       `${input.teamName(lead.winnerId)} beat ${input.teamName(lead.loserId)} ` +
       `by ${round1(lead.margin)}, from ${lead.gap} spots below them on the board. ` +
-      `The board gets a rewrite this week.`,
-    rows,
+      `The board gets a rewrite this week.` + others,
     priority: 15,
   }
 }
@@ -303,7 +304,11 @@ function recordSection(input: WeeklyIssueInput): IssueSection | null {
   const rows: IssueRow[] = notes.map((n) => ({
     label: n.teamId ? input.teamName(n.teamId) : n.headline,
     value: n.headline,
-    sub: n.detail,
+    // `sub` is identity and renders as a small uppercase eyebrow. This
+    // is a two-clause sentence, so it belongs in `note` — put in `sub`
+    // it set "5 away, out of the 95 they average a week…" in 12px
+    // capitals, the least readable thing on the page.
+    note: n.detail,
     progress: n.progress
       ? {
           ...n.progress,

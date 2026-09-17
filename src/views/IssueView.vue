@@ -176,7 +176,7 @@
           </li>
           <li v-if="pointsSeasonStarted">
             <a href="#section-matchups">
-              {{ String(issueBody.length + 1).padStart(2, '0') }} — Matchups
+              {{ String(issueBody.length + 1).padStart(2, '0') }} — Storylines
             </a>
           </li>
         </ol>
@@ -185,7 +185,7 @@
         <p class="issue-toc-label">In this issue</p>
         <ol class="issue-toc-list" role="list">
           <li><a href="#points-section-power">01 — Power Rankings</a></li>
-          <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Matchups</a></li>
+          <li v-if="pointsSeasonStarted"><a href="#section-matchups">02 — Storylines</a></li>
           <li v-if="showPointsDraft"><a href="#points-section-draft">Draft night</a></li>
           <li v-if="pointsQuickReads.length">
             <a href="#points-section-departments">{{ showPointsDraft ? '04' : '03' }} — Departments</a>
@@ -515,7 +515,7 @@
       >
         <header class="section-head">
           <div class="issue-sec-bar">
-            <p class="section-eyebrow">{{ hasPointsPR ? '02 — Matchups' : 'Matchups' }}</p>
+            <p class="section-eyebrow">{{ hasPointsPR ? '02 — Storylines' : 'Storylines' }}</p>
             <!-- The ONE deck built live rather than from the issue.
                  By Monday night the issue is hours old and these
                  numbers are minutes old, so presenting the frozen
@@ -3753,14 +3753,24 @@ function collectUserIdentity() {
 .section-head {
   max-width: 720px;
 }
+/* THE SIGN ON THE SECTION. This is what a reader scans to find their
+   way down the page, and at 12.5px it was the smallest text in a
+   layout full of 26px numbers — invisible on a phone and illegible in
+   a screen recording. Sized to be seen from across a room, with the
+   tracking eased off because wide letterspacing fights legibility as
+   the type grows. */
 .section-eyebrow {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent-secondary);
-  margin: 0 0 12px;
+  margin: 0 0 14px;
+  line-height: 1;
+}
+@media (max-width: 640px) {
+  .section-eyebrow { font-size: 1.2rem; letter-spacing: 0.08em; }
 }
 .section-headline {
   font-family: 'Barlow Condensed', sans-serif;
