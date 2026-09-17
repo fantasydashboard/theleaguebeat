@@ -38,6 +38,16 @@ export interface WireAdd {
    * counting those as competition reports a nail-biting escape from
    * a man bidding against himself. Only bids from OTHER teams count.
    */
+  /**
+   * Undefined means UNKNOWN, not zero.
+   *
+   * Only some platforms publish losing claims. Sleeper does; ESPN and
+   * Yahoo drop anything that did not execute before it reaches the
+   * contract, so on those leagues we never learn who else bid. Present
+   * with `rivals: 0` means we saw the whole run and nobody did —
+   * absent means we were never told, and nothing may be said either
+   * way.
+   */
   contest?: {
     /** How many other teams bid on him. */
     rivals: number
@@ -139,8 +149,11 @@ export function buildWireFacts(
   // Losing claims, grouped by player, so a winning bid can say what it
   // beat. Kept out of every count below: nothing changed hands.
   const lostFor = new Map<string, { teamId: string; bid: number }[]>()
+  // Whether this platform publishes losing claims at all.
+  let sawLosingBids = false
   for (const tx of inWeek) {
     if (tx.kind !== 'failed-claim') continue
+    sawLosingBids = true
     for (const m of tx.movements) {
       if (typeof tx.faabBid !== 'number') continue
       const list = lostFor.get(m.playerId) ?? []
@@ -193,7 +206,10 @@ export function buildWireFacts(
       faabBid: tx.faabBid,
       waiverPriority: tx.waiverPriority,
       kind: tx.kind,
-      ...(lostFor.has(arriving.playerId)
+      // Set on EVERY add when this platform publishes losing claims,
+      // even at zero rivals — that is the difference between "nobody
+      // bid against him" and "we were never told who did".
+      ...(sawLosingBids
         ? { contest: { rivals: new Set(rivals.map((r) => r.teamId)).size, nextBid } }
         : {}),
     })
@@ -239,7 +255,11 @@ export function describeContest(add: WireAdd): string | undefined {
   const paid = add.faabBid
   if (typeof paid !== 'number') return undefined
   const c = add.contest
-  if (!c || c.rivals === 0) {
+  // No `contest` at all means the platform never published the losing
+  // claims, so nothing here is knowable. Saying "nobody else bid" would
+  // be reporting the shape of the feed as a fact about the league.
+  if (!c) return undefined
+  if (c.rivals === 0) {
     // Spending real money with nobody bidding against you is its own
     // small embarrassment, and it is only worth saying when it is real
     // money.

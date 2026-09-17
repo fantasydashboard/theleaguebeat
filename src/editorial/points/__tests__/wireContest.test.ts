@@ -82,6 +82,34 @@ describe('what a winning bid was up against', () => {
   })
 })
 
+describe('platforms that do not publish losing claims', () => {
+  it('says nothing about competition it was never told about', () => {
+    // ESPN and Yahoo drop anything that did not execute before it
+    // reaches the contract, so a $9 claim arrives with no losers
+    // attached — exactly as it would if nobody had bid. Reading that
+    // silence as "nobody else bid" reports the shape of the feed as a
+    // fact about the league.
+    const facts = buildWireFacts([won('Boston', 't4', 9)])!
+    const add = facts.adds[0]
+    expect(add.contest).toBeUndefined()
+    expect(describeContest(add)).toBeUndefined()
+  })
+
+  it('still says it when the platform DID publish them and there were none', () => {
+    // Same league, same $9 — but this run carried a losing claim on
+    // another player, so we know the feed reports them and can trust
+    // the silence on this one.
+    const facts = buildWireFacts([
+      won('Boston', 't4', 9),
+      won('Other', 't1', 3),
+      lost('Other', 't2', 2),
+    ])!
+    const boston = facts.adds.find((a) => a.playerName === 'Boston')!
+    expect(boston.contest).toEqual({ rivals: 0, nextBid: undefined })
+    expect(describeContest(boston)).toBe('Nobody else bid. $9 unopposed.')
+  })
+})
+
 describe('a lost claim is not a move', () => {
   it('never appears as a pickup', () => {
     const facts = buildWireFacts([won('Winner', 't1', 5), lost('Winner', 't2', 4)])!
