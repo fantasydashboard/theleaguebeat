@@ -1791,6 +1791,9 @@ const MARKERS = [
     label: 'Most wins, all time',
     owner: '414222972006453248', name: 'Mighty Mallards',
     value: '60', unit: 'wins',
+    // STALE BY DESIGN — this whole table is hand-written and dated
+    // "through 2025". It already went wrong: these two have been level
+    // on 60 since week 1 of 2026. Use `?view=x-race`, which counts.
     sub: 'Gridiron Man sits one back on 59. It can change hands in week 1.',
   },
   {
@@ -1812,6 +1815,122 @@ const MARKERS = [
     sub: '147 away. Seventh-highest scorer in league history.',
   },
 ]
+
+/**
+ * The all-time wins race, live.
+ *
+ *   ?view=x-race            (&lg=ffl for the second tier)
+ *
+ * WHY THIS IS NOT `x-record`. That card is baked — a hand-written
+ * MARKERS table, dated "through 2025". It has already gone stale: it
+ * still reads "Gridiron Man sits one back on 59" when the two of them
+ * have been level on 60 since Sunday. A record that is ABOUT to change
+ * hands cannot be served by a constant.
+ *
+ * So this walks the season chain and counts. Regular season only —
+ * `roster.settings.wins` excludes playoffs, which is the number a
+ * league argues about.
+ *
+ * KEYED ON OWNER. Team names move, roster ids are reassigned; the
+ * owner id is the only thing Sleeper keeps stable across seasons.
+ */
+async function careerWins(cfg) {
+  // Walk back through previous_league_id, oldest season last.
+  const chain = []
+  let id = cfg.id
+  for (let i = 0; i < 12 && id; i++) {
+    const lg = await fetch(`https://api.sleeper.app/v1/league/${id}`).then((r) => r.json())
+    if (!lg?.league_id) break
+    chain.push(lg)
+    id = lg.previous_league_id
+  }
+  const acc = {}
+  for (const lg of chain) {
+    const rosters = await fetch(
+      `https://api.sleeper.app/v1/league/${lg.league_id}/rosters`,
+    ).then((r) => r.json())
+    for (const r of rosters) {
+      if (!r.owner_id) continue
+      const st = r.settings || {}
+      const a = (acc[r.owner_id] ||= { wins: 0, losses: 0, pts: 0 })
+      a.wins += st.wins ?? 0
+      a.losses += st.losses ?? 0
+      a.pts += (st.fpts ?? 0) + (st.fpts_decimal ?? 0) / 100
+    }
+  }
+  return { acc, seasons: chain.length }
+}
+
+async function loadXRace() {
+  const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
+  const [{ acc, seasons }, rosters, users, matchups] = await Promise.all([
+    careerWins(cfg),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/rosters`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${cfg.id}/users`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/state/nfl`)
+      .then((r) => r.json())
+      .then((st) => fetch(`https://api.sleeper.app/v1/league/${cfg.id}/matchups/${st.week}`)
+        .then((r) => r.json()).then((ms) => ({ week: st.week, ms }))),
+  ])
+
+  const byId = Object.fromEntries(users.map((u) => [u.user_id, u]))
+  // Who is playing whom this week, so the card can say what is at stake.
+  const oppOf = {}
+  const groups = {}
+  for (const m of matchups.ms) {
+    if (m.matchup_id == null) continue
+    ;(groups[m.matchup_id] ||= []).push(m)
+  }
+  const ownerOfRoster = Object.fromEntries(rosters.map((r) => [String(r.roster_id), r.owner_id]))
+  for (const pair of Object.values(groups)) {
+    if (pair.length !== 2) continue
+    const [a, b] = pair.map((x) => ownerOfRoster[String(x.roster_id)])
+    if (a && b) { oppOf[a] = b; oppOf[b] = a }
+  }
+
+  const teamOf = (owner) => {
+    const u = byId[owner] || {}
+    const md = u.metadata || {}
+    // NEVER display_name — that is a Sleeper username.
+    return {
+      team: (md.team_name || 'Team').trim(),
+      avatar: md.avatar || (u.avatar ? `https://sleepercdn.com/avatars/${u.avatar}` : null),
+    }
+  }
+
+  const live = rosters.filter((r) => r.owner_id && acc[r.owner_id])
+    .map((r) => ({ owner: r.owner_id, ...acc[r.owner_id], ...teamOf(r.owner_id) }))
+    .sort((a, b) => b.wins - a.wins || b.pts - a.pts)
+
+  const top = live[0]?.wins ?? 0
+  const rows = live.slice(0, Number(params.get('n') || 4)).map((t) => {
+    const back = top - t.wins
+    const opp = oppOf[t.owner] ? teamOf(oppOf[t.owner]).team : null
+    const stake = back === 0
+      ? (live.filter((x) => x.wins === top).length > 1
+          ? 'Level at the top of the league’s history'
+          : 'The record, outright')
+      : `${back} back`
+    const sub = opp
+      ? `${stake} · plays ${opp} this week`
+      : `${stake} · idle this week`
+    return `<div class="xc-row">
+      ${xcAv(t.team, t.avatar)}
+      <span class="xc-lines">
+        <span class="xc-name">${esc(t.team)}</span>
+        <span class="xc-sub">${esc(sub)}</span>
+      </span>
+      ${xcStat(String(t.wins), 'wins')}
+    </div>`
+  }).join('')
+
+  document.getElementById('safe').innerHTML = xcShell({
+    league: cfg.name,
+    title: params.get('title') || 'The all-time wins record',
+    when: params.get('when') || `${seasons} seasons · week ${matchups.week}`,
+    rows,
+  })
+}
 
 async function loadXRecord() {
   const now = await currentFranchises()
@@ -2807,6 +2926,7 @@ function fit() {
     else if (view === 'x-rank') await loadXRank()
     else if (view === 'x-odds') await loadXOdds()
     else if (view === 'x-record') await loadXRecord()
+    else if (view === 'x-race') await loadXRace()
     else if (view === 'x-matchups') await loadXMatchups()
     else if (view === 'x-headliners') await loadXHeadliners()
     else if (view === 'x-duds') await loadXDuds()
