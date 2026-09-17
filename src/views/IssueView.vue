@@ -548,7 +548,9 @@
             :data-status="m.status"
           >
             <div class="points-matchup-eyebrow">
-              <span class="points-matchup-eyebrow-text">{{ pointsLine(m.id).eyebrow }}</span>
+              <span class="points-matchup-eyebrow-text">{{
+                m.id === heroMatchupId ? 'Match of the week' : pointsLine(m.id).eyebrow
+              }}</span>
             </div>
             <div class="points-matchup-row">
               <div class="points-matchup-side points-matchup-home">
@@ -575,7 +577,16 @@
                 </div>
               </div>
             </div>
-            <p class="points-matchup-status">{{ pointsLine(m.id).status }}</p>
+            <!-- The storylines, when the game has any. The old line
+                 read "X vs. Y. Kickoff hasn't happened yet." on every
+                 card — the absence of a story, set as one. Where there
+                 is nothing to say the card now says nothing. -->
+            <ul v-if="matchupStories.get(m.id)?.length" class="points-matchup-stories">
+              <li v-for="(line, li) in matchupStories.get(m.id)" :key="li">{{ line }}</li>
+            </ul>
+            <p v-else-if="pointsLine(m.id).status && m.status !== 'upcoming'" class="points-matchup-status">
+              {{ pointsLine(m.id).status }}
+            </p>
           </li>
         </ol>
       </section>
@@ -1098,7 +1109,8 @@ import {
   ASSUMED_SCORING,
 } from '@/editorial/points/sleeperProjections'
 import { rankRosterStrength } from '@/editorial/points/rosterStrength'
-import { foldSeason, type HeadToHead } from '@/editorial/points/headToHead'
+import { foldSeason, seriesFor, describeSeries, type HeadToHead } from '@/editorial/points/headToHead'
+import { buildMatchupStorylines } from '@/editorial/points/matchupStorylines'
 import { chooseHandoffs, handoffKeyFor } from '@/editorial/issue/handoff'
 import {
   isShareable,
@@ -1442,6 +1454,90 @@ const issueBoardRank = computed(() => {
     if (cards?.length) return new Map(cards.map((c) => [c.teamId, c.rank]))
   }
   return null
+})
+
+/**
+ * Why each game matters, before it is played.
+ *
+ * Assembled HERE rather than in `render-matchups-points` because two
+ * of the best rungs are not on the league contract: the power board is
+ * built by this view, and the all-time series arrives lazily after
+ * first paint. The ladder itself is pure and lives in
+ * `matchupStorylines`.
+ */
+const matchupStories = computed(() => {
+  const d = livePointsData.value
+  const games = d?.currentWeekMatchups ?? []
+  if (!d || games.length === 0) return new Map<string, string[]>()
+
+  const rank = issueBoardRank.value
+  const standing = new Map((d.standings ?? []).map((s) => [s.teamId, s]))
+  const ownerOf = new Map(d.teams.map((t) => [t.id, t.ownerId]))
+  const careers = d.careerRecords ?? []
+
+  // The all-time wins record, and everyone level on it. Shared records
+  // are the ones with something at stake this week.
+  const mostWins = careers.reduce((m, c) => Math.max(m, c.wins), 0)
+  const winsRecord = mostWins > 0
+    ? {
+        wins: mostWins,
+        holders: careers.filter((c) => c.wins === mostWins && c.teamId)
+          .map((c) => c.teamId as string),
+      }
+    : undefined
+  const careerWinsOf = new Map(
+    careers.filter((c) => c.teamId).map((c) => [c.teamId as string, c.wins]),
+  )
+
+  // Last closed week's scores, for the two-extremes rung.
+  const weeks = [...new Set((d.weeklyScores ?? []).map((w) => w.week))].sort((a, b) => a - b)
+  const lastWeek = weeks[weeks.length - 1]
+  const lastPoints = new Map(
+    (d.weeklyScores ?? []).filter((w) => w.week === lastWeek).map((w) => [w.teamId, w.points]),
+  )
+
+  const side = (teamId: string) => {
+    const st = standing.get(teamId)
+    return {
+      teamId,
+      name: lookupTeam(teamId).name,
+      rank: rank?.get(teamId),
+      wins: st?.catWins ?? 0,
+      losses: st?.catLosses ?? 0,
+      ties: st?.catTies ?? 0,
+      streak: st?.streak,
+      lastWeekPoints: lastPoints.get(teamId),
+      careerWins: careerWinsOf.get(teamId),
+    }
+  }
+
+  const stories = buildMatchupStorylines({
+    fieldSize: d.teams.length,
+    winsRecord,
+    matchups: games.map((m) => {
+      const s = seriesFor(headToHead.value ?? undefined, ownerOf.get(m.homeTeamId), ownerOf.get(m.awayTeamId))
+      return {
+        matchupId: m.id,
+        home: side(m.homeTeamId),
+        away: side(m.awayTeamId),
+        series: describeSeries(s, lookupTeam(m.homeTeamId).name),
+        // Null series covers "met once" as well, so a first meeting is
+        // only claimed when the history is genuinely empty — and only
+        // once the history has actually loaded.
+        neverMet: !!headToHead.value && s === null,
+      }
+    }),
+  })
+  return new Map(stories.map((st) => [st.matchupId, st.lines]))
+})
+
+/** The game with the best story. Null when nothing cleared a rung. */
+const heroMatchupId = computed(() => {
+  const d = livePointsData.value
+  if (!d?.currentWeekMatchups?.length) return null
+  const lines = matchupStories.value
+  const best = [...lines.entries()].find(([, l]) => l.length > 0)
+  return best?.[0] ?? null
 })
 
 const mondayDesk = computed(() => {
@@ -4538,6 +4634,22 @@ function collectUserIdentity() {
 .issue-wire-value {
   font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
   font-size: 1.6rem; flex: none; line-height: 1;
+}
+
+/* Storylines. One or two short claims, set to be read rather than
+   skimmed — this is the reason the card exists before kickoff. */
+.points-matchup-stories {
+  list-style: none; margin: 0.65rem 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+.points-matchup-stories li {
+  font-size: 0.95rem; line-height: 1.35; color: oklch(0.82 0.01 90);
+  padding-left: 0.85rem; position: relative;
+}
+.points-matchup-stories li::before {
+  content: ''; position: absolute; left: 0; top: 0.55em;
+  width: 4px; height: 4px; border-radius: 999px;
+  background: oklch(0.70 0.27 350);
 }
 
 /* ── ISSUE SECTION DENSITY ──────────────────────────────────────────
