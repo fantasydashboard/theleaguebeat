@@ -2794,11 +2794,17 @@ async function loadXWireNfl() {
            style="width:70%;height:70%;object-fit:contain;object-position:center" alt="" onerror="this.remove()"></span>`
       : `<span class="tp-face"><img src="https://sleepercdn.com/content/nfl/players/${esc(p.id)}.jpg"
            alt="" onerror="this.remove()"></span>`
+    // A defence already IS its logo in the portrait slot; repeating it
+    // in the badge prints the same mark twice on one row. The slot
+    // stays, empty, so the grid keeps its columns.
+    const badge = logoUrl && p.pos !== 'DEF'
+      ? `<img class="tp-logo" src="${esc(logoUrl)}" alt="" onerror="this.remove()">`
+      : '<span class="tp-logo"></span>'
     return `${rule}
       <div class="tp-row wide">
         <span class="tp-rank">${i + 1}</span>
         ${face}
-        ${logoUrl ? `<img class="tp-logo" src="${esc(logoUrl)}" alt="" onerror="this.remove()">` : '<span class="tp-logo"></span>'}
+        ${badge}
         <span class="tp-name">${esc(p.name)}</span>
         <span class="tp-vs">${esc(p.pos)}</span>
         <span class="tp-pts">${fmt(p.count)}</span>
