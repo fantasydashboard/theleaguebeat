@@ -1172,11 +1172,18 @@ const TITLES = CHAMPIONS.reduce((m, c) => (m[c.owner] = (m[c.owner] || 0) + 1, m
 const params = new URLSearchParams(location.search)
 const view = params.get('view') || 'lor'
 const exporting = params.has('export') || view === 'wk-sheet'
-// 16:9 is the X cards' native shape, so they never need ?ratio spelled out.
-if (view === 'x-top') document.body.dataset.ratio = params.get('ratio') || '1x1'
-else if (params.get('ratio') === '16x9' || view.startsWith('x-') || view.startsWith('wk-')) {
-  document.body.dataset.ratio = '16x9'
-}
+/* SQUARE IS THE X CARDS' SHAPE.
+ *
+ * 1:1 takes more vertical timeline than 16:9 and X shows it uncropped,
+ * so a name is legible at thumbnail instead of being letterboxed into
+ * a strip. `?ratio=16x9` still overrides for anything wanted wide, and
+ * the wk-* countdown stays wide because it is cut into video.
+ *
+ * Views that force their own shape (x-cover, x-mnf) set it later and
+ * win, since they run after this. */
+if (view.startsWith('wk-')) document.body.dataset.ratio = '16x9'
+else if (view.startsWith('x-')) document.body.dataset.ratio = params.get('ratio') || '1x1'
+else if (params.get('ratio') === '16x9') document.body.dataset.ratio = '16x9'
 if (exporting) { document.body.dataset.export = ''; document.documentElement.dataset.export = '' }
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -2770,7 +2777,7 @@ async function loadXMnf() {
   // The group chat. Dialogue is openly invented; the numbers are not.
   // No masthead: the artifact IS a chat screenshot, and branding on a
   // screenshot breaks the fiction. One dim domain line at the foot.
-  document.body.dataset.ratio = '4x5'
+  document.body.dataset.ratio = params.get('ratio') || '4x5'
   const surname = (p) => p.name.split(' ').slice(1).join(' ') || p.name
   // Mahomes' manager, not Mahomes's.
   const poss = (p) => surname(p) + (surname(p).endsWith('s') ? '’' : '’s')
@@ -2829,7 +2836,7 @@ async function loadXMnf() {
  *                        deserves better words than the template
  */
 async function loadXCover() {
-  document.body.dataset.ratio = '4x5'
+  document.body.dataset.ratio = params.get('ratio') || '4x5'
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   const wk = Number(params.get('wk') || 1)
   // NFL-wide by default: this is a marketing asset about the players
