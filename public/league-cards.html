@@ -718,6 +718,12 @@
     font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
     font-size: 40px; min-width: 96px; text-align: right; line-height: 1;
   }
+  /* Counts run to seven digits; points run to four. Same slot, two
+     appetites, so the wide case gets its own measure rather than
+     shrinking every card to fit the worst one. */
+  .tp-row.wide { grid-template-columns: 38px 52px 32px 1fr auto auto; }
+  .tp-row.wide .tp-pts { font-size: 34px; min-width: 176px; letter-spacing: -0.01em; }
+  .tp-row.wide .tp-name { font-size: 30px; }
   /* ONE rule, not a tier system: the biggest single drop in the list.
      A taxonomy of tiers is a projection tool's idea. A magazine points
      at the one place the week broke. */
@@ -2722,6 +2728,105 @@ async function loadXDevice() {
     </div>`
 }
 
+/**
+ * The wire, everywhere — what every league on earth is adding.
+ *
+ *   ?view=x-wire-nfl&hours=48&n=10   (&mode=drop for the other side)
+ *
+ * NFL-WIDE AND LEAGUE-FREE. Sleeper aggregates adds across every
+ * league it hosts, so this needs no league, no roster and no account —
+ * and the counts run to seven figures, which is a scale no single
+ * league can put on a card.
+ *
+ * Renders through the same row as the position board. One format, many
+ * cards: a reader learns the shape once and every card after it is
+ * free to read.
+ */
+async function loadXWireNfl() {
+  const hours = Number(params.get('hours') || 48)
+  const n = Number(params.get('n') || 10)
+  const mode = params.get('mode') === 'drop' ? 'drop' : 'add'
+
+  const [rows, other, state, db] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/players/nfl/trending/${mode}?lookback_hours=${hours}&limit=${n + 4}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/players/nfl/trending/${mode === 'add' ? 'drop' : 'add'}?lookback_hours=${hours}&limit=60`).then((r) => r.json()),
+    fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json()),
+    fetch('https://api.sleeper.app/v1/players/nfl').then((r) => r.json()),
+  ])
+  const wk = Number(params.get('wk') || state.week || 1)
+  const counter = Object.fromEntries((other || []).map((d) => [String(d.player_id), d.count]))
+
+  const list = (rows || []).slice(0, n).map((r) => {
+    const p = db[String(r.player_id)] || {}
+    return {
+      id: String(r.player_id),
+      name: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || String(r.player_id),
+      pos: p.position ?? '',
+      nfl: p.team ?? '',
+      count: r.count,
+      // A player being added AND dropped in the same 48 hours is the
+      // most interesting thing this feed knows.
+      against: counter[String(r.player_id)],
+    }
+  })
+  if (list.length === 0) {
+    document.getElementById('safe').innerHTML = '<div class="err">No trending data right now.</div>'
+    return
+  }
+
+  // Where the run breaks — the biggest fall between consecutive rows.
+  let breakAt = -1, gap = 0
+  for (let i = 1; i < list.length; i++) {
+    const g = list[i - 1].count - list[i].count
+    if (g > gap) { gap = g; breakAt = i }
+  }
+  // Only worth a rule when the drop is most of the row above it.
+  if (gap < list[0].count * 0.25) breakAt = -1
+
+  const fmt = (x) => x.toLocaleString('en-US')
+  const body = list.map((p, i) => {
+    const rule = i === breakAt
+      ? `<div class="tp-break">${fmt(gap)} fewer, and the run breaks</div>` : ''
+    // A defence has no headshot; its own logo is the portrait.
+    const logoUrl = p.nfl ? `https://sleepercdn.com/images/team_logos/nfl/${p.nfl.toLowerCase()}.png` : ''
+    const face = p.pos === 'DEF' && logoUrl
+      ? `<span class="tp-face" style="background:oklch(0.17 0.012 90)"><img src="${esc(logoUrl)}"
+           style="width:70%;height:70%;object-fit:contain;object-position:center" alt="" onerror="this.remove()"></span>`
+      : `<span class="tp-face"><img src="https://sleepercdn.com/content/nfl/players/${esc(p.id)}.jpg"
+           alt="" onerror="this.remove()"></span>`
+    return `${rule}
+      <div class="tp-row wide">
+        <span class="tp-rank">${i + 1}</span>
+        ${face}
+        ${logoUrl ? `<img class="tp-logo" src="${esc(logoUrl)}" alt="" onerror="this.remove()">` : '<span class="tp-logo"></span>'}
+        <span class="tp-name">${esc(p.name)}</span>
+        <span class="tp-vs">${esc(p.pos)}</span>
+        <span class="tp-pts">${fmt(p.count)}</span>
+      </div>`
+  }).join('')
+
+  const verb = mode === 'add' ? 'added' : 'dropped'
+  document.getElementById('safe').innerHTML = `
+    <div class="xc" style="height:100%">
+      <div class="xc-top">
+        <span class="xc-mark">The League Beat</span>
+        <span class="xc-league">Week ${wk}</span>
+      </div>
+      <div class="xc-rule"></div>
+      <div class="tp-head">
+        <div class="tp-chip">Week ${wk} · The wire</div>
+        <div class="tp-title">The ten most<br><em>${esc(verb)}</em> players in fantasy</div>
+        <div class="tp-sub">Leagues that ${esc(verb)} him in the last ${hours} hours — across every
+          Sleeper league on earth.</div>
+      </div>
+      <div class="tp-rows">${body}</div>
+      <div class="tp-foot">
+        <span class="l">theleaguebeat.com</span>
+        <span class="r">Your league, written up. Free.</span>
+      </div>
+    </div>`
+}
+
 async function loadXMnf() {
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   await rankedTeams(cfg)                      // primes _prCache
@@ -3330,6 +3435,7 @@ function fit() {
     else if (view === 'x-cover') await loadXCover()
     else if (view === 'x-mnf') await loadXMnf()
     else if (view === 'x-top') await loadXTop()
+    else if (view === 'x-wire-nfl') await loadXWireNfl()
     else if (view === 'x-device') await loadXDevice()
     else if (view === 'wk-intro') await loadWkIntro()
     else if (view === 'wk-rank') await loadWkRank()
