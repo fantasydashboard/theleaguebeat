@@ -740,6 +740,80 @@
   .tp-foot .l { color: var(--dim); }
   .tp-foot .r { color: var(--gold); }
 
+
+  /* ── Device frame ─────────────────────────────────────────────
+     A REAL SCREENSHOT of the product, not a drawing of one. The hero
+     card's phone renders a hand-built mini UI; that is fine as an ad
+     but it is a mockup, and "look what this does" is a claim a mockup
+     cannot make. These frame an actual capture of an actual page.
+
+     Points at the public demo, which needs no account and is not
+     anybody's private league — anyone can open the same URL and see
+     the same thing, which is the whole point of showing it. */
+  .dv { position: relative; height: 100%; display: flex; flex-direction: column; }
+  .dv-top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 26px; letter-spacing: 0.2em; text-transform: uppercase;
+  }
+  .dv-top .l { color: var(--ink); }
+  .dv-top .r { color: var(--muted); }
+  .dv-rule { height: 1px; background: var(--line); margin: 14px 0 26px; }
+  .dv-h1 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 76px; line-height: 0.94; text-transform: uppercase;
+    letter-spacing: -0.01em; max-width: 15ch;
+  }
+  .dv-h1 em { font-style: normal; color: var(--gold); }
+  .dv-sub { margin-top: 14px; font-size: 26px; color: var(--muted); max-width: 42ch; font-weight: 600; }
+  .dv-plat {
+    margin-top: 22px; font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
+  }
+  .dv-stage { flex: 1; position: relative; min-height: 0; margin-top: 26px; }
+
+  /* Desktop: browser chrome, tilted just enough to read as an object. */
+  .dv-win {
+    position: absolute; right: -60px; bottom: 10px; width: 1180px;
+    border-radius: 16px; overflow: hidden;
+    background: oklch(0.13 0.012 90);
+    border: 1px solid var(--line);
+    box-shadow: 0 50px 120px oklch(0 0 0 / 0.65);
+    transform: perspective(2000px) rotateY(-9deg) rotateX(3deg);
+    transform-origin: right center;
+  }
+  .dv-bar {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    background: oklch(0.17 0.012 90); border-bottom: 1px solid var(--line);
+  }
+  .dv-dot { width: 12px; height: 12px; border-radius: 999px; background: oklch(0.34 0.02 90); }
+  .dv-url {
+    flex: 1; margin-left: 10px; padding: 6px 14px; border-radius: 999px;
+    background: oklch(0.11 0.012 90); color: var(--muted);
+    font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.02em;
+  }
+  .dv-win img { display: block; width: 100%; }
+
+  /* Phone: same capture, portrait crop. */
+  .dv-phone {
+    position: absolute; right: 60px; bottom: 10px; width: 430px;
+    border-radius: 44px; padding: 12px; background: oklch(0.20 0.012 90);
+    border: 1px solid var(--line);
+    box-shadow: 0 50px 110px oklch(0 0 0 / 0.7);
+    transform: perspective(2000px) rotateY(-10deg);
+  }
+  .dv-phone-screen { border-radius: 34px; overflow: hidden; background: var(--bg); }
+  .dv-phone-screen img { display: block; width: 100%; }
+
+  .dv-foot {
+    position: relative; z-index: 2;   /* the device overhangs; this stays legible */
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .dv-foot .l { color: var(--dim); }
+  .dv-foot .r { color: var(--gold); }
+
   /* ── X Monday night ─────────────────────────────────────────
      The sweat card: five faces still to play, each with a manager's
      ask floating over their head like a group-chat bubble. The
@@ -2538,6 +2612,60 @@ async function loadXTop() {
     </div>`
 }
 
+/**
+ * The product, on a device.
+ *
+ *   ?view=x-device&shot=demo-desktop-pr&mode=desktop
+ *   ?view=x-device&shot=demo-phone-pr&mode=phone&h1=...&sub=...
+ *
+ * A REAL capture, not a drawing. `x-hero` renders a hand-built mini UI
+ * inside its phone, which is honest enough for an ad but cannot carry
+ * the claim "this is what it does" — a mockup proves nothing.
+ *
+ * Shots live in /public/shots and are captured from the PUBLIC DEMO,
+ * which needs no account and belongs to nobody. Anyone can open the
+ * same URL and see the same page, which is what makes showing it worth
+ * anything.
+ */
+async function loadXDevice() {
+  const shot = params.get('shot') || 'demo-desktop-pr'
+  const mode = params.get('mode') === 'phone' ? 'phone' : 'desktop'
+  const h1 = (params.get('h1') || 'Your league|already has|a magazine').split('|')
+  const sub = params.get('sub')
+    || 'Power rankings, the record book, the wire, and what every team needs to win. Written every week, for free.'
+  const url = params.get('url') || 'theleaguebeat.com'
+
+  const device = mode === 'phone'
+    ? `<div class="dv-phone"><div class="dv-phone-screen">
+         <img src="/shots/${esc(shot)}.png" alt="" onerror="this.remove()">
+       </div></div>`
+    : `<div class="dv-win">
+         <div class="dv-bar">
+           <span class="dv-dot"></span><span class="dv-dot"></span><span class="dv-dot"></span>
+           <span class="dv-url">${esc(url)}</span>
+         </div>
+         <img src="/shots/${esc(shot)}.png" alt="" onerror="this.remove()">
+       </div>`
+
+  document.getElementById('safe').innerHTML = `
+    <div class="dv">
+      <div class="dv-top">
+        <span class="l">The League Beat</span>
+        <span class="r">${esc(params.get('when') || 'Free, for any league')}</span>
+      </div>
+      <div class="dv-rule"></div>
+      <div class="dv-h1">${h1.map((l, i) =>
+        i === h1.length - 1 ? `<em>${esc(l)}</em>` : esc(l)).join('<br>')}</div>
+      <div class="dv-sub">${esc(sub)}</div>
+      <div class="dv-plat">${esc(params.get('plat') || 'Sleeper · Yahoo · ESPN')}</div>
+      <div class="dv-stage">${device}</div>
+      <div class="dv-foot">
+        <span class="l">theleaguebeat.com</span>
+        <span class="r">${esc(params.get('cta') || 'Connect your league')}</span>
+      </div>
+    </div>`
+}
+
 async function loadXMnf() {
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   await rankedTeams(cfg)                      // primes _prCache
@@ -3146,6 +3274,7 @@ function fit() {
     else if (view === 'x-cover') await loadXCover()
     else if (view === 'x-mnf') await loadXMnf()
     else if (view === 'x-top') await loadXTop()
+    else if (view === 'x-device') await loadXDevice()
     else if (view === 'wk-intro') await loadWkIntro()
     else if (view === 'wk-rank') await loadWkRank()
     else if (view === 'wk-sheet') await loadWkSheet()
