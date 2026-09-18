@@ -68,6 +68,7 @@
   body[data-ratio="16x9"] .frame { width: 1920px; height: 1080px; }
   /* Magazine-cover shape: 4:5, the largest portrait X shows uncropped. */
   body[data-ratio="4x5"] .frame { width: 1080px; height: 1350px; }
+  body[data-ratio="1x1"] .frame { width: 1200px; height: 1200px; }
   /* Full bleed. `.safe` insets to 83% x 81% because the VIDEO cards
      are overlays with a presenter and a caption strip to clear — a
      print cover has neither, and inheriting that inset left every
@@ -75,6 +76,7 @@
      That was the dead band under the cover and the chat card, and it
      read as a layout choice rather than the bug it was. */
   body[data-ratio="4x5"] .safe { left: 0; top: 0; width: 100%; height: 100%; }
+  body[data-ratio="1x1"] .safe { left: 5%; top: 5%; width: 90%; height: 90%; }
 
   /* Taller than the ground-rules card: a full roster is the content, not
      an overlay, so it uses more of the screen. Still clear of the caption
@@ -658,6 +660,86 @@
   }
   .xhl-card.is-dud .xhl-face img { filter: grayscale(0.85) contrast(1.05); }
 
+
+  /* ── The position board ───────────────────────────────────────
+     A ranked list of real players, which is the only thing on this
+     account that travels: nobody searches a fantasy team's name and a
+     hundred thousand people search a receiver's.
+
+     RESULTS, NOT PROJECTIONS. The sibling product ranks what a player
+     WILL do — it is a dashboard. This is a magazine: it reports the
+     week that happened, and the editorial number is how far clear of
+     the position a man finished, not where he sits in a tier. */
+  .tp-head { margin-bottom: 18px; }
+  .tp-chip {
+    display: inline-block; padding: 8px 16px; border-radius: 10px;
+    background: var(--gold); color: oklch(0.15 0.02 92);
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 19px; letter-spacing: 0.16em; text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .tp-title {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 58px; line-height: 0.94; letter-spacing: -0.01em;
+    text-transform: uppercase;
+  }
+  .tp-title em { font-style: normal; color: var(--gold); }
+  .tp-sub {
+    margin-top: 10px; font-size: 19px; color: var(--muted); font-weight: 600;
+  }
+  .tp-rows { display: flex; flex-direction: column; }
+  .tp-row {
+    display: grid;
+    grid-template-columns: 38px 52px 32px 1fr auto auto;
+    align-items: center; gap: 0 14px;
+    padding: 5px 0;
+  }
+  .tp-rank {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 28px; color: var(--dim); text-align: right;
+  }
+  .tp-face {
+    width: 52px; height: 52px; border-radius: 999px; overflow: hidden;
+    background: var(--panel); display: grid; place-items: center;
+  }
+  /* Sleeper headshots carry a lot of empty space above the head. */
+  .tp-face img { width: 118%; height: 118%; object-fit: cover; object-position: 50% 16%; }
+  .tp-logo { width: 32px; height: 32px; object-fit: contain; }
+  .tp-name {
+    font-size: 32px; font-weight: 800; letter-spacing: -0.015em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tp-vs {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+    font-size: 19px; letter-spacing: 0.12em; color: var(--dim);
+    text-transform: uppercase; padding-right: 6px;
+  }
+  .tp-pts {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+    font-size: 40px; min-width: 96px; text-align: right; line-height: 1;
+  }
+  /* ONE rule, not a tier system: the biggest single drop in the list.
+     A taxonomy of tiers is a projection tool's idea. A magazine points
+     at the one place the week broke. */
+  .tp-break {
+    display: flex; align-items: center; gap: 16px;
+    margin: 4px 0 4px 38px;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 18px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--pink);
+  }
+  .tp-break::before, .tp-break::after {
+    content: ''; height: 1px; background: oklch(0.38 0.10 350); flex: 1;
+  }
+  .tp-foot {
+    margin-top: auto; padding-top: 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 19px; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .tp-foot .l { color: var(--dim); }
+  .tp-foot .r { color: var(--gold); }
+
   /* ── X Monday night ─────────────────────────────────────────
      The sweat card: five faces still to play, each with a manager's
      ask floating over their head like a group-chat bubble. The
@@ -1000,7 +1082,8 @@ const params = new URLSearchParams(location.search)
 const view = params.get('view') || 'lor'
 const exporting = params.has('export') || view === 'wk-sheet'
 // 16:9 is the X cards' native shape, so they never need ?ratio spelled out.
-if (params.get('ratio') === '16x9' || view.startsWith('x-') || view.startsWith('wk-')) {
+if (view === 'x-top') document.body.dataset.ratio = params.get('ratio') || '1x1'
+else if (params.get('ratio') === '16x9' || view.startsWith('x-') || view.startsWith('wk-')) {
   document.body.dataset.ratio = '16x9'
 }
 if (exporting) { document.body.dataset.export = ''; document.documentElement.dataset.export = '' }
@@ -2325,6 +2408,136 @@ async function loadXHeadliners() {
  * quote different numbers for the same player. Matchups come from
  * the real schedule: any game this week dated a Monday.
  */
+/**
+ * The position board — the week's best at one position, by name.
+ *
+ *   ?view=x-top&pos=TE&wk=2          (&n=10, &ratio=1x1 by default)
+ *
+ * WHY THIS EXISTS. It is the only format on the account that travels.
+ * Nobody searches a fantasy team's name; a hundred thousand people a
+ * week search a tight end's. Every row is a real player, a real
+ * headshot and a real number, and the whole card is league-agnostic —
+ * it says nothing about anybody's roster.
+ *
+ * RESULTS, NOT PROJECTIONS, which is the line between this and the
+ * sibling dashboard. That product ranks what a player WILL do and
+ * sorts him into tiers. This is a magazine: it reports the week that
+ * happened, and the number that matters is how far clear of his own
+ * position a man finished.
+ *
+ * ONE BREAK, NOT A TIER SYSTEM. A taxonomy of tiers belongs to a
+ * projection tool. A paper points at the single place the week broke —
+ * the biggest drop between two consecutive finishers.
+ */
+const POS_LABEL = {
+  QB: ['quarterback', 'quarterbacks'],
+  RB: ['running back', 'running backs'],
+  WR: ['receiver', 'receivers'],
+  TE: ['tight end', 'tight ends'],
+}
+const NUM_WORD = ['zero','one','two','three','four','five','six','seven','eight','nine','ten']
+
+async function loadXTop() {
+  const pos = (params.get('pos') || 'TE').toUpperCase()
+  const n = Number(params.get('n') || 10)
+  const cfg = LEAGUES.lor                       // only used to prime the projections sweep
+  await rankedTeams(cfg)
+  const [league, , , proj] = _prCache[cfg.id]
+  const state = await fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json())
+  const wk = Number(params.get('wk') || state.week || 1)
+
+  const [stats, sched] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${league.season}/${wk}`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/schedule/nfl/regular/${league.season}`)
+      .then((r) => r.json()).catch(() => []),
+  ])
+
+  // Who each team played that week, so a row can carry the fixture.
+  const oppOf = {}
+  for (const g of Array.isArray(sched) ? sched : []) {
+    if (Number(g.week) !== wk) continue
+    if (g.home) oppOf[g.home] = g.away
+    if (g.away) oppOf[g.away] = `@${g.home}`
+  }
+
+  const meta = {}
+  for (const row of proj) {
+    meta[String(row.player_id)] = {
+      name: [row.player?.first_name, row.player?.last_name].filter(Boolean).join(' '),
+      pos: row.player?.position ?? '',
+      nfl: row.player?.team ?? '',
+    }
+  }
+
+  const all = []
+  for (const [id, st] of Object.entries(stats)) {
+    const m = meta[id]
+    const pts = st?.pts_half_ppr
+    if (!m || m.pos !== pos || typeof pts !== 'number') continue
+    all.push({ id, ...m, pts })
+  }
+  all.sort((a, b) => b.pts - a.pts)
+  if (all.length === 0) {
+    document.getElementById('safe').innerHTML =
+      `<div class="err">No ${esc(pos)} stats for week ${wk} yet.</div>`
+    return
+  }
+
+  // What a startable player at this position actually returned.
+  const startable = all.slice(0, STARTABLE[pos] ?? 12)
+  const avg = startable.reduce((t, p) => t + p.pts, 0) / startable.length
+
+  const top = all.slice(0, n)
+  // The single biggest drop inside the list — where the week broke.
+  let breakAt = -1, breakGap = 0
+  for (let i = 1; i < top.length; i++) {
+    const gap = top[i - 1].pts - top[i].pts
+    if (gap > breakGap) { breakGap = gap; breakAt = i }
+  }
+  // A gap has to be worth a rule. Below this it is just the next name.
+  if (breakGap < 2) breakAt = -1
+
+  const rows = top.map((p, i) => {
+    const rule = i === breakAt
+      ? `<div class="tp-break">${breakGap.toFixed(1)} points, and the week breaks</div>`
+      : ''
+    const logo = p.nfl
+      ? `<img class="tp-logo" src="https://sleepercdn.com/images/team_logos/nfl/${esc(p.nfl.toLowerCase())}.png" alt="" onerror="this.remove()">`
+      : '<span class="tp-logo"></span>'
+    return `${rule}
+      <div class="tp-row">
+        <span class="tp-rank">${i + 1}</span>
+        <span class="tp-face"><img src="https://sleepercdn.com/content/nfl/players/${esc(p.id)}.jpg"
+          alt="" onerror="this.remove()"></span>
+        ${logo}
+        <span class="tp-name">${esc(p.name)}</span>
+        <span class="tp-vs">${esc(oppOf[p.nfl] || '')}</span>
+        <span class="tp-pts">${p.pts.toFixed(1)}</span>
+      </div>`
+  }).join('')
+
+  const [one, many] = POS_LABEL[pos] || [pos, pos]
+  document.getElementById('safe').innerHTML = `
+    <div class="xc" style="height:100%">
+      <div class="xc-top">
+        <span class="xc-mark">The League Beat</span>
+        <span class="xc-league">Week ${wk}</span>
+      </div>
+      <div class="xc-rule"></div>
+      <div class="tp-head">
+        <div class="tp-chip">Week ${wk} · ${esc(pos)}</div>
+        <div class="tp-title">The ${esc(NUM_WORD[n] || n)} best<br><em>${esc(many)}</em> of the week</div>
+        <div class="tp-sub">The average starting ${esc(one)} scored ${avg.toFixed(1)}.
+          Half-PPR, top ${STARTABLE[pos] ?? 12} at the position.</div>
+      </div>
+      <div class="tp-rows">${rows}</div>
+      <div class="tp-foot">
+        <span class="l">theleaguebeat.com</span>
+        <span class="r">Your league, written up. Free.</span>
+      </div>
+    </div>`
+}
+
 async function loadXMnf() {
   const cfg = LEAGUES[params.get('lg') === 'ffl' ? 'ffl' : 'lor']
   await rankedTeams(cfg)                      // primes _prCache
@@ -2932,6 +3145,7 @@ function fit() {
     else if (view === 'x-duds') await loadXDuds()
     else if (view === 'x-cover') await loadXCover()
     else if (view === 'x-mnf') await loadXMnf()
+    else if (view === 'x-top') await loadXTop()
     else if (view === 'wk-intro') await loadWkIntro()
     else if (view === 'wk-rank') await loadWkRank()
     else if (view === 'wk-sheet') await loadWkSheet()
