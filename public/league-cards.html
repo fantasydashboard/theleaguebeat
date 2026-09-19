@@ -724,6 +724,14 @@
   .tp-row.wide { grid-template-columns: 38px 52px 32px 1fr auto auto; }
   .tp-row.wide .tp-pts { font-size: 34px; min-width: 176px; letter-spacing: -0.01em; }
   .tp-row.wide .tp-name { font-size: 30px; }
+  /* Reversals carry two figures — the exodus and the return — so the
+     context slot stops being a position label and becomes a number. */
+  .tp-row.rev .tp-vs {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 27px; letter-spacing: 0; color: oklch(0.65 0.21 25);
+    text-transform: none;
+  }
+  .tp-row.rev .tp-pts { color: oklch(0.74 0.18 145); }
   /* ONE rule, not a tier system: the biggest single drop in the list.
      A taxonomy of tiers is a projection tool's idea. A magazine points
      at the one place the week broke. */
@@ -2745,7 +2753,85 @@ async function loadXDevice() {
 async function loadXWireNfl() {
   const hours = Number(params.get('hours') || 48)
   const n = Number(params.get('n') || 10)
-  const mode = params.get('mode') === 'drop' ? 'drop' : 'add'
+  const raw = params.get('mode')
+  const mode = raw === 'drop' ? 'drop' : raw === 'reversal' ? 'reversal' : 'add'
+
+  /* REVERSALS — the one thing only an aggregate feed can see.
+   *
+   * A player dropped in bulk over two days and then bought back in
+   * one is the whole league changing its mind out loud. No single
+   * league can observe it; across every league on Sleeper it is a
+   * measurable event. */
+  if (mode === 'reversal') {
+    const [dropped, added, state, db] = await Promise.all([
+      fetch('https://api.sleeper.app/v1/players/nfl/trending/drop?lookback_hours=48&limit=200').then((r) => r.json()),
+      fetch('https://api.sleeper.app/v1/players/nfl/trending/add?lookback_hours=24&limit=200').then((r) => r.json()),
+      fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json()),
+      fetch('https://api.sleeper.app/v1/players/nfl').then((r) => r.json()),
+    ])
+    const wk = Number(params.get('wk') || state.week || 1)
+    const dropMap = Object.fromEntries((dropped || []).map((d) => [String(d.player_id), d.count]))
+    const floor = Number(params.get('floor') || 20000)
+
+    const rows = (added || [])
+      .map((a) => ({ id: String(a.player_id), back: a.count, gone: dropMap[String(a.player_id)] ?? 0 }))
+      // Only a genuine about-face: more left than came back, and at a
+      // scale worth reporting. A small add on a small drop is noise.
+      .filter((x) => x.gone > x.back && x.back >= floor)
+      .sort((a, b) => b.back - a.back)
+      .slice(0, n)
+      .map((x) => {
+        const p = db[x.id] || {}
+        return { ...x, name: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || x.id,
+                 pos: p.position ?? '', nfl: p.team ?? '' }
+      })
+
+    if (rows.length === 0) {
+      document.getElementById('safe').innerHTML = '<div class="err">Nobody reversed hard enough today.</div>'
+      return
+    }
+    const fmt = (v) => v.toLocaleString('en-US')
+    const body = rows.map((p, i) => {
+      const logoUrl = p.nfl ? `https://sleepercdn.com/images/team_logos/nfl/${p.nfl.toLowerCase()}.png` : ''
+      const face = p.pos === 'DEF' && logoUrl
+        ? `<span class="tp-face" style="background:oklch(0.17 0.012 90)"><img src="${esc(logoUrl)}"
+             style="width:70%;height:70%;object-fit:contain" alt="" onerror="this.remove()"></span>`
+        : `<span class="tp-face"><img src="https://sleepercdn.com/content/nfl/players/${esc(p.id)}.jpg"
+             alt="" onerror="this.remove()"></span>`
+      const badge = logoUrl && p.pos !== 'DEF'
+        ? `<img class="tp-logo" src="${esc(logoUrl)}" alt="" onerror="this.remove()">`
+        : '<span class="tp-logo"></span>'
+      return `<div class="tp-row wide rev">
+          <span class="tp-rank">${i + 1}</span>
+          ${face}
+          ${badge}
+          <span class="tp-name">${esc(p.name)}</span>
+          <span class="tp-vs">−${fmt(p.gone)}</span>
+          <span class="tp-pts">+${fmt(p.back)}</span>
+        </div>`
+    }).join('')
+
+    document.getElementById('safe').innerHTML = `
+      <div class="xc" style="height:100%">
+        <div class="xc-top">
+          <span class="xc-mark">The League Beat</span>
+          <span class="xc-league">Week ${wk}</span>
+        </div>
+        <div class="xc-rule"></div>
+        <div class="tp-head">
+          <div class="tp-chip">Week ${wk} · The wire</div>
+          <div class="tp-title">Fantasy football<br><em>changed its mind</em></div>
+          <div class="tp-sub">Dropped over the last two days — then bought straight back in over the
+            last one. Red is what left, green is what returned.</div>
+        </div>
+        <div class="tp-rows">${body}</div>
+        <div class="tp-foot">
+          <span class="l">theleaguebeat.com</span>
+          <span class="r">Your league, written up. Free.</span>
+        </div>
+      </div>`
+    return
+  }
 
   const [rows, other, state, db] = await Promise.all([
     fetch(`https://api.sleeper.app/v1/players/nfl/trending/${mode}?lookback_hours=${hours}&limit=${n + 4}`).then((r) => r.json()),
