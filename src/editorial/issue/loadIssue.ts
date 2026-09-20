@@ -124,7 +124,19 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
       losses: s.catLosses,
       ties: s.catTies,
     })),
-    results: data.previousWeekMatchups,
+    // The one place that knows this is a points league: platform
+    // matchups become normalised results here, so no section below has
+    // to ask what sport it is describing. A category adapter maps
+    // catWins into the same shape with render: 'categories'.
+    results: (data.previousWeekMatchups ?? []).map((m) => ({
+      id: m.id,
+      homeTeamId: m.homeTeamId,
+      awayTeamId: m.awayTeamId,
+      status: m.status,
+      homeScore: m.homePoints,
+      awayScore: m.awayPoints,
+      render: 'points' as const,
+    })),
     transactions: data.transactions,
     careers: data.careerRecords,
     careersBefore,

@@ -19,6 +19,71 @@
  * belongs in one of those.
  */
 
+/**
+ * One finished (or in-flight) game, in the shape the Issue consumes.
+ *
+ * WHY THIS EXISTS. A points league reports `homePoints / awayPoints`; a
+ * category league reports `homeCatWins / awayCatWins / ties`. Every
+ * section downstream wants the same three facts out of either — who
+ * won, by how much, and was it close — so normalising here means no
+ * section ever has to ask what sport it is describing.
+ *
+ * `render` is the one thing that does differ, and it is a PRESENTATION
+ * fact rather than a sport one: 151.9 wants a decimal and a dash,
+ * 7-3-1 wants a record. Sections branch on that, which keeps the
+ * branch where it belongs — in formatting — instead of spreading a
+ * sport check through the editorial logic.
+ */
+export interface IssueResult {
+  id: string
+  homeTeamId: string
+  awayTeamId: string
+  status: 'upcoming' | 'live' | 'final'
+  /** What each side put up: points scored, or categories won. */
+  homeScore: number
+  awayScore: number
+  /** How the figures should be written. */
+  render: 'points' | 'categories'
+  /** Categories neither side won. Only meaningful when render is
+   *  'categories' — a points game cannot tie a component. */
+  ties?: number
+}
+
+/**
+ * The scoreline, written the way its sport writes it.
+ *
+ * Points: "151.9 – 142.0". Categories: "7-3-1", which is one figure
+ * rather than two because that is how a category week is quoted.
+ */
+export function formatResultScore(r: IssueResult): string {
+  const hi = Math.max(r.homeScore, r.awayScore)
+  const lo = Math.min(r.homeScore, r.awayScore)
+  if (r.render === 'categories') {
+    return r.ties ? `${hi}-${lo}-${r.ties}` : `${hi}-${lo}`
+  }
+  // ROUND BEFORE FORMATTING, both steps, deliberately. `toFixed(1)`
+  // alone disagrees with round-then-fix on every exact half: 151.95
+  // has no float representation, lands a hair below, and prints
+  // "151.9" where the rest of the product prints "152.0". Measured at
+  // 1,000 disagreements between 0 and 250 at hundredth steps. The
+  // scoreline has to match the margin beside it.
+  const r1 = (n: number) => Math.round(n * 10) / 10
+  return `${r1(hi).toFixed(1)} – ${r1(lo).toFixed(1)}`
+}
+
+/**
+ * The margin, as a clause. "by 31.7" reads right for points; a
+ * category week is won by a count of categories, so it says so.
+ */
+export function formatResultMargin(r: IssueResult): string {
+  const margin = Math.abs(r.homeScore - r.awayScore)
+  if (margin === 0) return 'Tied'
+  if (r.render === 'categories') {
+    return `by ${margin} categor${margin === 1 ? 'y' : 'ies'}`
+  }
+  return `by ${Math.round(margin * 10) / 10}`
+}
+
 /** One row of tabular content — a claim per line. */
 export interface IssueRow {
   /** Left gutter: a rank, a slot, a grade. */

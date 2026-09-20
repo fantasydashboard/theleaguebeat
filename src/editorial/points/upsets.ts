@@ -32,11 +32,11 @@
  * beat the No. 1 team and you climb past them, and the gap vanishes.
  */
 
-import type { LeagueDataPointsMatchup } from '../types'
+import type { IssueResult } from '../issue/types'
 
 export interface UpsetDetectInput {
   /** The covered week's games; only finals are read. */
-  results?: readonly LeagueDataPointsMatchup[]
+  results?: readonly IssueResult[]
   /** Board rank BEFORE this week. Teams the board cannot place are
    *  skipped rather than assumed. */
   priorRank: (teamId: string) => number | undefined
@@ -94,9 +94,9 @@ export function detectUpsets(input: UpsetDetectInput): Upset[] {
   const out: Upset[] = []
   for (const m of input.results ?? []) {
     if (m.status !== 'final') continue
-    if (m.homePoints === m.awayPoints) continue
+    if (m.homeScore === m.awayScore) continue
 
-    const homeWon = m.homePoints > m.awayPoints
+    const homeWon = m.homeScore > m.awayScore
     const winnerId = homeWon ? m.homeTeamId : m.awayTeamId
     const loserId = homeWon ? m.awayTeamId : m.homeTeamId
     const winnerRank = input.priorRank(winnerId)
@@ -104,8 +104,8 @@ export function detectUpsets(input: UpsetDetectInput): Upset[] {
     const verdict = upsetGap(winnerRank, loserRank, input.fieldSize)
     if (!verdict || !winnerRank || !loserRank) continue
 
-    const winnerPoints = homeWon ? m.homePoints : m.awayPoints
-    const loserPoints = homeWon ? m.awayPoints : m.homePoints
+    const winnerPoints = homeWon ? m.homeScore : m.awayScore
+    const loserPoints = homeWon ? m.awayScore : m.homeScore
     out.push({
       matchupId: m.id,
       winnerId,

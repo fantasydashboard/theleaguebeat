@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { detectUpsets, upsetThresholds, MIN_UPSET_GAP } from '../upsets'
-import type { LeagueDataPointsMatchup } from '@/editorial/types'
+import type { IssueResult } from '../../issue/types'
 
 const final = (
   id: string, home: string, away: string, hp: number, ap: number,
-): LeagueDataPointsMatchup => ({
+): IssueResult => ({
   id, homeTeamId: home, awayTeamId: away, status: 'final',
-  homePoints: hp, awayPoints: ap,
+  homeScore: hp, awayScore: ap,
 })
 
 /** The real League of Record board going into week 1. */

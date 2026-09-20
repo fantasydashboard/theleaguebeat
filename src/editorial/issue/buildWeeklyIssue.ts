@@ -28,9 +28,8 @@ import { buildWeeklyRecordBook } from '../points/recordWatch'
 import { seriesFor, describeSeries, type HeadToHead } from '../points/headToHead'
 import type { CareerRecord } from '../points/recordBook'
 import type { LeagueTransaction } from '../transactions/types'
-import type { LeagueDataPointsMatchup } from '../types'
-import type { Issue, IssueCard, IssueRow, IssueSection } from './types'
-import { orderSections } from './types'
+import type { Issue, IssueCard, IssueRow, IssueSection, IssueResult } from './types'
+import { orderSections, formatResultScore, formatResultMargin } from './types'
 
 export interface WeeklyIssueTeam {
   name: string
@@ -54,7 +53,7 @@ export interface WeeklyIssueInput {
   /** Actual records. */
   records?: { teamId: string; wins: number; losses: number; ties: number }[]
   /** The week's finished games. */
-  results?: readonly LeagueDataPointsMatchup[]
+  results?: readonly IssueResult[]
   /** Everything that moved. */
   transactions?: readonly LeagueTransaction[]
   /** Power ranking as of last week, for movement. */
@@ -143,19 +142,19 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
   if (finals.length === 0) return null
 
   const scores = [...finals.flatMap((m) => [
-    { teamId: m.homeTeamId, points: m.homePoints, won: m.homePoints >= m.awayPoints },
-    { teamId: m.awayTeamId, points: m.awayPoints, won: m.awayPoints > m.homePoints },
+    { teamId: m.homeTeamId, points: m.homeScore, won: m.homeScore >= m.awayScore },
+    { teamId: m.awayTeamId, points: m.awayScore, won: m.awayScore > m.homeScore },
   ])].sort((a, b) => b.points - a.points)
   const top = scores[0]
   const byMargin = [...finals].sort(
-    (a, b) => Math.abs(a.homePoints - a.awayPoints) - Math.abs(b.homePoints - b.awayPoints),
+    (a, b) => Math.abs(a.homeScore - a.awayScore) - Math.abs(b.homeScore - b.awayScore),
   )
   const closest = byMargin[0]
   const widest = byMargin[byMargin.length - 1]
-  const closestMargin = round1(Math.abs(closest.homePoints - closest.awayPoints))
-  const widestMargin = round1(Math.abs(widest.homePoints - widest.awayPoints))
-  const nameOf = (m: LeagueDataPointsMatchup, wantWinner: boolean) => {
-    const homeWon = m.homePoints >= m.awayPoints
+  const closestMargin = round1(Math.abs(closest.homeScore - closest.awayScore))
+  const widestMargin = round1(Math.abs(widest.homeScore - widest.awayScore))
+  const nameOf = (m: IssueResult, wantWinner: boolean) => {
+    const homeWon = m.homeScore >= m.awayScore
     return input.teamName(homeWon === wantWinner ? m.homeTeamId : m.awayTeamId)
   }
 
@@ -191,10 +190,9 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
   // stat label there printed "margin" down the left edge of every
   // list slide. The margin belongs in the sentence.
   const rows: IssueRow[] = finals.map((m) => {
-    const homeWon = m.homePoints >= m.awayPoints
+    const homeWon = m.homeScore >= m.awayScore
     const winner = homeWon ? m.homeTeamId : m.awayTeamId
     const loser = homeWon ? m.awayTeamId : m.homeTeamId
-    const margin = round1(Math.abs(m.homePoints - m.awayPoints))
     // Rank going INTO the week. Using the board this result produced
     // would let a win quietly justify its own number.
     const wr = priorRank(input, winner)
@@ -209,22 +207,22 @@ function resultsSection(input: WeeklyIssueInput): IssueSection | null {
       seriesFor(input.headToHead, input.ownerOf?.(winner), input.ownerOf?.(loser)),
       input.teamName(winner),
     )
-    const marginText = margin === 0 ? 'Tied' : `by ${margin}`
+    const marginText = formatResultMargin(m)
     return {
       label: named,
       sub: rivalry ? `${marginText} · ${rivalry}` : marginText,
-      value: `${round1(Math.max(m.homePoints, m.awayPoints)).toFixed(1)} – ${round1(Math.min(m.homePoints, m.awayPoints)).toFixed(1)}`,
+      value: formatResultScore(m),
       ...visual(input, winner),
     }
   })
 
   const subject =
     closestMargin < 1
-      ? (closest.homePoints >= closest.awayPoints ? closest.homeTeamId : closest.awayTeamId)
+      ? (closest.homeScore >= closest.awayScore ? closest.homeTeamId : closest.awayTeamId)
       : unlucky
         ? unlucky.teamId
         : widestMargin >= 60
-          ? (widest.homePoints >= widest.awayPoints ? widest.homeTeamId : widest.awayTeamId)
+          ? (widest.homeScore >= widest.awayScore ? widest.homeTeamId : widest.awayTeamId)
           : top.teamId
   return {
     id: 'results',
@@ -624,7 +622,7 @@ function playoffSection(input: WeeklyIssueInput): IssueSection | null {
  */
 function promoteCover(sections: IssueSection[], input: WeeklyIssueInput): void {
   const finals = (input.results ?? []).filter((m) => m.status === 'final')
-  const margins = finals.map((m) => Math.abs(m.homePoints - m.awayPoints))
+  const margins = finals.map((m) => Math.abs(m.homeScore - m.awayScore))
   const closest = margins.length ? Math.min(...margins) : Infinity
   const widest = margins.length ? Math.max(...margins) : 0
 

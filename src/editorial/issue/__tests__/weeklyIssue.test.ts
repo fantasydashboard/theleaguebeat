@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { buildWeeklyIssue } from '../buildWeeklyIssue'
 import { deckFromIssue } from '../toSlides'
 import type { PointsPowerRow } from '@/editorial/points/powerScore'
-import type { LeagueDataPointsMatchup } from '@/editorial/types'
 import type { LeagueTransaction } from '@/editorial/transactions/types'
+import type { IssueResult } from '../types'
+import { formatResultScore, formatResultMargin } from '../types'
 
 const power = (spec: [string, number][], weeksPlayed = 5): PointsPowerRow[] =>
   spec.map(([teamId, score], i) => ({
@@ -17,11 +18,14 @@ const power = (spec: [string, number][], weeksPlayed = 5): PointsPowerRow[] =>
     weeksPlayed,
   }))
 
+// The Issue consumes a normalised result, not a platform matchup —
+// `render` is what tells it whether 141.2 wants a decimal or 7-3-1
+// wants a record. Football is 'points'.
 const final = (
   id: string, home: string, away: string, hp: number, ap: number,
-): LeagueDataPointsMatchup => ({
+): IssueResult => ({
   id, homeTeamId: home, awayTeamId: away, status: 'final',
-  homePoints: hp, awayPoints: ap,
+  homeScore: hp, awayScore: ap, render: 'points',
 })
 
 const base = {
@@ -217,6 +221,37 @@ describe('buildWeeklyIssue', () => {
       const ranks = deck.slides.filter((s) => s.kind === 'team-card').map((s) => (s as { rank: number }).rank)
       expect(ranks).toEqual([6, 5, 4, 3, 2, 1])
     }
+  })
+})
+
+describe('the scoreline', () => {
+  it('rounds before formatting, on the half', () => {
+    // toFixed(1) alone disagrees with round-then-fix on every exact
+    // half — 151.95 has no float representation and lands a hair
+    // below, printing "151.9" where the margin beside it says 152.0.
+    // 1,000 disagreements between 0 and 250 at hundredth steps.
+    const r: IssueResult = {
+      id: 'x', homeTeamId: 'a', awayTeamId: 'b', status: 'final',
+      homeScore: 151.95, awayScore: 100.05, render: 'points',
+    }
+    expect(formatResultScore(r)).toBe('152.0 – 100.1')
+  })
+
+  it('writes a category week as a record, not a decimal', () => {
+    const r: IssueResult = {
+      id: 'x', homeTeamId: 'a', awayTeamId: 'b', status: 'final',
+      homeScore: 7, awayScore: 3, ties: 1, render: 'categories',
+    }
+    expect(formatResultScore(r)).toBe('7-3-1')
+    expect(formatResultMargin(r)).toBe('by 4 categories')
+  })
+
+  it('says "by 1 category", singular', () => {
+    const r: IssueResult = {
+      id: 'x', homeTeamId: 'a', awayTeamId: 'b', status: 'final',
+      homeScore: 6, awayScore: 5, render: 'categories',
+    }
+    expect(formatResultMargin(r)).toBe('by 1 category')
   })
 })
 
