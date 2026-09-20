@@ -102,71 +102,106 @@ from day one and gets funnier every week.
 
 ---
 
-## Resolved 19 Sept — Sleeper does hockey, and it is category-shaped
+## Corrected 19 Sept — hockey is ESPN and Yahoo. Not Sleeper.
 
-**Sleeper supports NHL leagues.** Both probes pass:
+**I got this wrong earlier today and the error is worth recording.** I
+probed `/v1/user/{id}/leagues/nhl/2026`, got `200 []`, and read "the
+endpoint parses the sport" as "Sleeper hosts hockey leagues." It does
+not. An empty array for a user with no hockey league says nothing about
+whether the platform runs the sport at all. Sleeper carries NHL player
+and score data; it does not run fantasy hockey.
+
+### The consequence that matters most
+
+**Hockey cannot render server-side.** CLAUDE.md is explicit about why
+football can:
+
+> Sleeper's API is public and unauthenticated, so football can render
+> **server-side** — unlike ESPN, whose auth is browser-cookie-bound.
+> This is what makes the cron and the Weekly Reel viable for football.
+
+Hockey has no Sleeper path, so it inherits ESPN's and Yahoo's
+constraints instead:
+
+| | football (Sleeper) | hockey (ESPN / Yahoo) |
+|---|---|---|
+| Auth | none — public API | cookie-bound / OAuth |
+| Renders server-side | yes | **no** |
+| Monday delivery cron | yes | **no** |
+| Weekly Reel video | yes | **no** |
+| Issue in the browser | yes | yes |
+
+So hockey ships as a **read-in-the-browser product**, and the
+distribution layer — the cron, the reel, anything that needs to run
+without the user present — does not come with it. That is a product
+decision to take deliberately, not a bug to fix later.
+
+### What is already wired
+
+More than expected. Both services know the sport:
 
 ```
-/v1/state/nhl                       200  week 1, pre, season_start 2026-09-19
-/v1/user/{id}/leagues/nhl/2026      200  [] — a valid empty list, not an error
+espn.ts    SPORT_MAP            hockey: 'fhl'          ✓
+espn.ts    league discovery     scans fhl              ✓
+espn.ts    season start month   hockey: 9 (Sept)       ✓
+espnAdapter                     takes sport, defaults
+                                to 'baseball'          ✓ parameterised
+yahoo.ts   SPORT_KEYS           hockey: 'nhl'          ✓
+yahoo.ts   GAME_KEYS.hockey     2010–2024              ✓ partial
 ```
 
-An empty array means the endpoint understands the sport and that user
-has no hockey league — not that the sport is unsupported. **So hockey
-renders server-side, the way football does, and the cron and the
-Weekly Reel are available to it.** That was the single biggest fork and
-it went the good way.
+The ESPN editorial adapter is already sport-parameterised — it takes
+`opts.sport` and only defaults to baseball — so it does not need
+restructuring, it needs a hockey category dictionary.
 
-**But Sleeper computes NO fantasy points for hockey.** The stats feed
-carries raw counting stats only:
+### The concrete gaps
 
-```
-skater  36 keys: goals, points, hits, blocked_shots, shots, plus_minus,
-                 takeaways, giveaways, faceoffs_won, powerplay_*,
-                 seconds_on_ice_*, shooting_pct, winning_goal …
-goalie  15 keys: goalie_win, goalie_saves, goalie_saves_pct,
-                 goalie_goals_against, goalie_shots_against …
-pts_*            NONE
-```
+1. **Yahoo has no NHL game key past 2024.** The table stops at
+   `2024: '427'` with a note that 2025 was never published. Without a
+   2026 key, Yahoo hockey discovery cannot run. Keys are assigned by
+   Yahoo and must be READ from `/games;game_codes=nhl` once
+   authenticated — **do not extrapolate the sequence.** The gaps run
+   8, 8, 8, 7, so a guess looks reasonable and would be wrong often
+   enough to be dangerous.
 
-Football and baseball both expose `pts_half_ppr`. Hockey exposes
-nothing of the kind. Three consequences, and they change the plan:
+2. **Hockey category dictionaries** for ESPN and Yahoo. ESPN's is a
+   numeric stat-id map; hockey has its own ids. Transcription against a
+   real league, not design.
 
-1. **Hockey is a category sport on this platform**, which is the good
-   case — it is the engine that is already generic.
-2. **Every card and helper that reads `pts_half_ppr` is football-only**
-   and will silently return nothing for hockey: `x-top`, `x-duds`,
-   `x-cover`, `x-headliners`, `weekHeadliners`, `expectedWeekly`. They
-   need a per-sport stat accessor, not a copy.
-3. **A points hockey league would need us to compute points ourselves**
-   from the league's `scoring_settings` against raw stats. Doable, but
-   it is work football never needed.
+3. **`CatSide = 'hit' | 'pit'`** still needs generalising to a role.
 
-The raw stats map cleanly onto standard hockey categories — G, A
-(points − goals), PTS, PPP, SOG, HIT, BLK on the skater side; W, SV,
-SV%, GAA, SHO on the goalie side. `lowerIsBetter` already exists for
-GAA. Nothing here needs inventing.
+4. **A per-sport stat accessor.** Still true and still a week-1
+   blocker: `x-top`, `x-duds`, `x-cover`, `x-headliners`,
+   `weekHeadliners` and `expectedWeekly` all read `pts_half_ppr`, which
+   is a Sleeper-football field. None of them work for hockey as written.
+
+5. **Player nights** come from `api-web.nhle.com` directly — already
+   called in `supabase/functions/nhl-scraper/`. Ownership matching now
+   has to bridge ESPN/Yahoo player ids to NHL players by name, the way
+   baseball already does for those two platforms.
 
 ### Still unverified
 
-- **A real Sleeper NHL league's `scoring_settings`.** Confirms category
-  vs points and gives the exact category ids. Needs one league id.
-- **Yahoo and ESPN hockey stat ids** — only if we support those
-  platforms for hockey at launch. Sleeper alone is a defensible v1.
-- **Whether `assists` is derivable everywhere.** The feed gives `goals`
-  and `points` but no explicit assists key; A = PTS − G holds, but
-  should be confirmed against a box score rather than assumed.
+- **The Yahoo 2026 NHL game key.** Needs one authenticated call.
+- **ESPN hockey stat ids.** Needs one real `fhl` league.
+- **Category vs points split in real hockey leagues.** Both platforms
+  support both. Category reuses the generic engine; points needs the
+  football engine plus our own scoring computation.
 
 ---
 
 ## Two-week plan
 
 **Week 1 — make one real hockey league render.**
-1. Generalise `CatSide` to a role union, with per-sport labels.
-2. Hockey category dictionaries for whichever platform we can test
-   against first.
-3. Season shape: hockey stages, start date, week cadence.
-4. Prove it: one real league through `buildIssue` end to end.
+1. Read the Yahoo 2026 NHL game key and add it. Blocks Yahoo entirely.
+2. Per-sport stat accessor, so the card layer stops assuming
+   `pts_half_ppr`.
+3. Generalise `CatSide` to a role union, with per-sport labels.
+4. Hockey category dictionary for whichever platform we can test
+   against first — ESPN is the likelier one, since its discovery
+   already scans `fhl`.
+5. Season shape: hockey stages, start date, week cadence.
+6. Prove it: one real league through `buildIssue` end to end.
 
 **Week 2 — make it sound like hockey.**
 5. `buildHockeyNights` off `api-web.nhle.com`.
@@ -177,13 +212,9 @@ GAA. Nothing here needs inventing.
 8. Correct `CLAUDE.md`.
 
 **Explicitly out of scope for two weeks:** hockey-specific detectors
-(not needed), the full variant rewrite, a hockey demo league, and
-Yahoo/ESPN hockey. Sleeper-only is a defensible v1 and it is the
-platform that renders server-side.
-
-**Added by the 19 Sept findings:** a per-sport stat accessor, because
-`pts_half_ppr` is hardcoded through the card layer and hockey has no
-such field. That is now a week-1 item — it blocks every player card.
+(not needed), the full variant rewrite, a hockey demo league, the
+Monday cron and the Weekly Reel — the last two are not deferred, they
+are **unavailable** to hockey while it lives on ESPN and Yahoo.
 
 ---
 
@@ -195,5 +226,7 @@ read a real league before 2 Oct. That is the thing to resolve first,
 because everything in week 1 depends on having one real league to test
 against.
 
-**Fastest way to de-risk: get one real hockey league id — any platform
-— this week.**
+**Fastest way to de-risk: one real ESPN `fhl` league and one real Yahoo
+`nhl` league, connected, this week.** Between them they give the stat
+ids, the 2026 game key, and the category-vs-points answer — which is
+every remaining unknown in one go.
