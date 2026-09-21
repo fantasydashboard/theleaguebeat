@@ -22,6 +22,60 @@ const split = [
   }),
 ]
 
+describe('the upset alert', () => {
+  /** The real case: No. 8 trails No. 1 by 4.4 in a 12-team league,
+   *  with one receiver left to play. A 7-spot gap clears the 5 a
+   *  12-team upset needs. */
+  const live = [
+    m('done', 'x', 'y', { status: 'final', homePoints: 110, awayPoints: 90 }),
+    m('race', 'ucdust', 'haze', { homePoints: 90.2, awayPoints: 85.8 }),
+  ]
+  const opts = {
+    matchups: live,
+    teamName: names,
+    fieldSize: 12,
+    priorRank: priors({ ucdust: 1, haze: 8, x: 4, y: 9 }),
+    stillToPlay: (id: string) =>
+      id === 'haze' ? [{ name: 'Malik Nabers', points: 12.4 }] : [],
+  }
+
+  it('flags an upset that could still happen', () => {
+    const desk = buildMondayDesk(opts)!
+    const row = desk.alive.find((r) => r.matchupId === 'race')!
+    expect(row.upsetAlert).toBe('upset')
+    // Not `watch` — nothing has been upset yet. The favourite leads.
+    expect(row.watch).toBeUndefined()
+  })
+
+  it('drops the alert once the underdog has nobody left', () => {
+    // Same scoreline, no players to come: not available, just losing.
+    const desk = buildMondayDesk({ ...opts, stillToPlay: () => [] })!
+    const row = desk.alive.find((r) => r.matchupId === 'race')
+    expect(row?.upsetAlert).toBeUndefined()
+  })
+
+  it('does not alert when the favourite is the one trailing', () => {
+    // No. 1 behind No. 8 is not an upset in the making, it is an upset
+    // already happening — that is `watch`, and it must not double up.
+    const flipped = [
+      live[0],
+      m('race', 'ucdust', 'haze', { homePoints: 85.8, awayPoints: 90.2 }),
+    ]
+    const desk = buildMondayDesk({ ...opts, matchups: flipped })!
+    const row = desk.alive.find((r) => r.matchupId === 'race')!
+    expect(row.watch).toBe('upset')
+    expect(row.upsetAlert).toBeUndefined()
+  })
+
+  it('stays quiet when the two sides are close on the board', () => {
+    const desk = buildMondayDesk({
+      ...opts,
+      priorRank: priors({ ucdust: 5, haze: 7, x: 4, y: 9 }),
+    })!
+    expect(desk.alive.find((r) => r.matchupId === 'race')?.upsetAlert).toBeUndefined()
+  })
+})
+
 describe('the desk gate', () => {
   it('shows only when the week is genuinely split', () => {
     expect(buildMondayDesk({ matchups: split, teamName: names })).not.toBeNull()

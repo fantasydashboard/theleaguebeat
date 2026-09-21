@@ -85,7 +85,20 @@ export interface MondayDeskRow {
   /** The story. The names live on the sides, so this is only what
    *  the scoreline cannot say by itself. */
   sub: string
+  /** An upset HAPPENING: the lower-ranked side is ahead right now. */
   watch?: 'upset' | 'heist'
+  /**
+   * An upset that could still happen: the lower-ranked side is behind
+   * but has somebody left to play.
+   *
+   * Deliberately separate from `watch`, because they are different
+   * claims. `watch` says a thing is true at this moment. This says a
+   * thing is available — and the desk's whole job on a Monday night is
+   * to tell a reader which games can still turn, so an underdog
+   * needing 4.4 from one receiver is the most interesting row on the
+   * page and used to render as an ordinary one.
+   */
+  upsetAlert?: 'upset' | 'heist'
 }
 
 export interface MondayDesk {
@@ -208,6 +221,18 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
         ? Math.max(0, round1(leaderProjected - trailerPts))
         : undefined
     const watch = watchFor(m)
+    // The mirror of `watch`: could the side that is BEHIND pull off an
+    // upset if it lands? Only worth flagging while they still have a
+    // player on the field — otherwise it is not available, it is over.
+    const alertFor = ((): 'upset' | 'heist' | undefined => {
+      if (watch || !input.priorRank || !input.fieldSize) return undefined
+      const lr = input.priorRank(leaderId)
+      const tr = input.priorRank(trailerId)
+      if (!lr || !tr) return undefined
+      if ((input.stillToPlay?.(trailerId) ?? []).length === 0) return undefined
+      const verdict = upsetGap(tr, lr, input.fieldSize)
+      return verdict ? (verdict.heist ? 'heist' : 'upset') : undefined
+    })()
 
     // Who each side is still waiting on.
     const trailerLeft = namePending(trailerId)
@@ -242,13 +267,14 @@ export function buildMondayDesk(input: MondayDeskInput): MondayDesk | null {
       story = `${input.teamName(trailerId)} need ${behind}`
     }
 
-    if (watch) {
+    if (watch || alertFor) {
       return {
         matchupId: m.id,
         left: side(leaderId, leaderPts, !tied),
         right: side(trailerId, trailerPts, false),
         sub: story,
-        watch: watch.level,
+        watch: watch?.level,
+        upsetAlert: alertFor,
       }
     }
 

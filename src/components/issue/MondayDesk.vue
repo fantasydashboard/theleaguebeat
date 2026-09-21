@@ -68,6 +68,14 @@ defineProps<{ desk: MondayDesk }>()
             </span>
           </span>
           <span class="desk-story">
+            <!-- Two different claims, worded apart on purpose. `watch`
+                 is an upset HAPPENING — the underdog is ahead right now.
+                 `upsetAlert` is one AVAILABLE — behind, but with somebody
+                 still on the field. Collapsing them into one pill would
+                 tell a reader a thing is true when it is only possible. -->
+            <span v-if="r.upsetAlert" class="desk-pill is-alert">
+              {{ r.upsetAlert === 'heist' ? 'Heist in play' : 'Upset in play' }}
+            </span>
             <span v-if="r.watch" class="desk-pill" :class="`is-${r.watch}`">
               {{ r.watch === 'heist' ? 'Heist watch' : 'Upset watch' }}
             </span>
@@ -223,5 +231,12 @@ defineProps<{ desk: MondayDesk }>()
   background: oklch(0.85 0.17 92); color: oklch(0.15 0.02 90);
 }
 .desk-pill.is-heist { background: #c81a4b; color: oklch(0.97 0.005 90); }
+/* A possibility, not a result — so it is outlined rather than filled.
+   The solid pills mean "this is happening"; this one means "this can
+   happen", and they must not look like the same statement. */
+.desk-pill.is-alert {
+  background: transparent; color: oklch(0.85 0.17 92);
+  border: 1px solid oklch(0.48 0.11 92);
+}
 .desk-note { margin: 1rem 0 0; font-size: 0.8rem; color: oklch(0.48 0.01 90); }
 </style>
