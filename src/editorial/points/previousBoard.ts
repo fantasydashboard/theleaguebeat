@@ -31,6 +31,19 @@ import type { CategoryLeagueDataStanding, LeagueDataH2HPoints } from '../types'
  */
 export function previousPowerRanks(
   data: LeagueDataH2HPoints,
+  /**
+   * The SAME projection the current board is built with.
+   *
+   * Required for the movement to mean anything. Without it this
+   * rebuilt a results-only board and compared it against a blended
+   * one, so the arrow reported the difference between two measures
+   * rather than a week of football: a team that projects well and
+   * performs modestly showed "up three" while it had in fact dropped
+   * a place. Passing it reproduces last week's board as published —
+   * including the heavier projection weight that applied then, which
+   * `computePointsPowerScores` derives from the shortened score list.
+   */
+  projectedStrength?: (teamId: string) => number | undefined,
 ): Map<string, number> | null {
   const scores = data.weeklyScores ?? []
   const weeks = [...new Set(scores.map((s) => s.week))].sort((a, b) => a - b)
@@ -81,7 +94,10 @@ export function previousPowerRanks(
     }
   }
 
-  const board = computePointsPowerScores({ ...data, weeklyScores: before, standings })
+  const board = computePointsPowerScores(
+    { ...data, weeklyScores: before, standings },
+    { projectedStrength },
+  )
   if (board.length === 0) return null
 
   const ranked = [...board].sort((a, b) => b.score - a.score)

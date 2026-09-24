@@ -145,7 +145,9 @@ export async function loadIssue(args: LoadIssueArgs): Promise<Issue | null> {
     ownerOf: (teamId) => data.teams.find((t) => t.id === teamId)?.ownerId,
     seasonsPlayed: (data.seasonHistory ?? []).length,
     previousPowerRank: (() => {
-      const prior = previousPowerRanks(data)
+      // Same projection as the current board, or the arrows compare
+      // two different models. See previousPowerRanks.
+      const prior = previousPowerRanks(data, args.projectedStrength)
       return prior ? (id: string) => prior.get(id) : undefined
     })(),
     teamName: args.teamName,

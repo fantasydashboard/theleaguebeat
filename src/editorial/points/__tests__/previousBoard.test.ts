@@ -128,3 +128,68 @@ describe('previousPowerRanks', () => {
     expect(prior.get('a')).toBe(1)
   })
 })
+
+describe('the prior board must use the same model as the current one', () => {
+  /**
+   * THE REAL BUG. The current board is built with the projection
+   * component; the prior board was built without one, because nothing
+   * passed `projectedStrength` through. So "up three" was not movement
+   * at all — it was the difference between two different measures.
+   *
+   * This fixture makes a team that projects brilliantly and performs
+   * modestly. With the projection it ranks high in both weeks and has
+   * barely moved. Without it, last week's board drops it several
+   * places and the arrow invents a climb.
+   */
+  const projector = (): LeagueDataH2HPoints => league({
+    weeklyScores: [
+      // `a` scores least but projects best — the UCDUST shape.
+      { teamId: 'a', week: 1, points: 100 }, { teamId: 'b', week: 1, points: 140 },
+      { teamId: 'c', week: 1, points: 130 }, { teamId: 'd', week: 1, points: 120 },
+      { teamId: 'a', week: 2, points: 100 }, { teamId: 'b', week: 2, points: 140 },
+      { teamId: 'c', week: 2, points: 130 }, { teamId: 'd', week: 2, points: 120 },
+    ],
+  })
+  const strength = (id: string) => (id === 'a' ? 1 : 0)
+
+  it('reproduces the board exactly as it was published last week', () => {
+    // The real contract. Not "prior equals current" — the projection
+    // weight DECAYS as weeks accumulate, so a projection-heavy team
+    // legitimately drifts down even scoring identically, and that is
+    // the model working rather than a fault. What must hold is that
+    // the rewind matches what the board actually showed a week ago.
+    const data = projector()
+    const weekOneOnly = {
+      ...data,
+      weeklyScores: (data.weeklyScores ?? []).filter((w) => w.week === 1),
+    }
+    const asPublished = [...computePointsPowerScores(weekOneOnly, { projectedStrength: strength })]
+      .sort((x, y) => y.score - x.score)
+      .map((r) => r.teamId)
+    const prior = previousPowerRanks(data, strength)!
+    const priorOrder = [...prior.entries()].sort((x, y) => x[1] - y[1]).map(([id]) => id)
+    expect(priorOrder).toEqual(asPublished)
+  })
+
+  it('lets the projection decay move a team, which is not a fault', () => {
+    // Same scores both weeks, yet `a` slips: at one week played the
+    // projection carries half the score, at two weeks a third. Worth
+    // pinning so nobody later "fixes" it back into a constant.
+    const data = projector()
+    const prior = previousPowerRanks(data, strength)!
+    const current = [...computePointsPowerScores(data, { projectedStrength: strength })]
+      .sort((x, y) => y.score - x.score)
+      .map((r) => r.teamId)
+    expect(prior.get('a')).toBe(1)
+    expect(current.indexOf('a')).toBe(1)   // second now
+  })
+
+  it('without the projection the prior board disagrees — which is the bug', () => {
+    const data = projector()
+    const withProj = previousPowerRanks(data, strength)!
+    const without = previousPowerRanks(data)!
+    // `a` is the projection darling. Drop the projection and it falls.
+    expect(withProj.get('a')).toBe(1)
+    expect(without.get('a')).toBeGreaterThan(1)
+  })
+})
