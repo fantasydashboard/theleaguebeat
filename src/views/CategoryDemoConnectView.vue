@@ -253,7 +253,7 @@
           class="form-input"
           autocomplete="off"
           spellcheck="false"
-          placeholder="e.g. stuckabuc"
+          placeholder="Username or league ID"
           required
         />
         <p class="form-help">
