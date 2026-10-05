@@ -8,7 +8,12 @@
  */
 import type { MondayDesk } from '@/editorial/issue/buildMondayDesk'
 
-defineProps<{ desk: MondayDesk }>()
+defineProps<{
+  desk: MondayDesk
+  /** League id, when the viewer can present. Omitted on surfaces with
+   *  no present route — the public share and snapshots. */
+  leagueId?: string
+}>()
 </script>
 
 <template>
@@ -20,6 +25,14 @@ defineProps<{ desk: MondayDesk }>()
       </p>
       <h2 class="desk-headline">{{ desk.headline }}</h2>
       <p class="desk-support">{{ desk.support }}</p>
+      <!-- The commissioner's version: the same desk, ordered as an
+           argument — upsets first, decided games last — and sized for
+           a room rather than a scroll. -->
+      <RouterLink
+        v-if="leagueId"
+        :to="`/leagues/${leagueId}/present/night`"
+        class="desk-present"
+      >▶ Present the Night Desk</RouterLink>
     </header>
 
     <div class="desk-group">
@@ -154,6 +167,15 @@ defineProps<{ desk: MondayDesk }>()
     radial-gradient(120% 80% at 50% 0%, oklch(0.18 0.035 92 / 0.45), transparent 65%),
     oklch(0.12 0.014 90);
 }
+.desk-present {
+  display: inline-block; margin-top: 0.9rem;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 0.95rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: oklch(0.85 0.17 92); text-decoration: none;
+  border: 1px solid oklch(0.45 0.11 92); border-radius: 999px;
+  padding: 0.4rem 1rem;
+}
+.desk-present:hover { background: oklch(0.22 0.06 92); }
 .desk-eyebrow {
   display: flex; align-items: center; gap: 0.5rem;
   font-family: 'Barlow Condensed', sans-serif; font-weight: 800;

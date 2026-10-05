@@ -315,6 +315,8 @@ import {
 } from '@/editorial/present/exportSlides'
 import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
+import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
+import { buildNightDeck } from '@/editorial/issue/buildNightDeck'
 
 const route = useRoute()
 const leaguesStore = useLeaguesStore()
@@ -718,6 +720,79 @@ async function load(): Promise<void> {
     // old. Presenting the frozen version would read out numbers that
     // have already moved, which is the one thing a live deck exists
     // not to do.
+    /* THE NIGHT DESK.
+     *
+     * Monday night, presented: upsets first, then what is still live,
+     * decided games last. Built from `buildMondayDesk` — the same
+     * function the page uses — so the deck and the page can never
+     * disagree about who is still alive.
+     *
+     * The ranks come from the issue's own board rather than a fresh
+     * power computation, for the reason the page gives: a board
+     * recomputed here could put a team in a different place from the
+     * one the reader just scrolled past.
+     */
+    if (deckId === 'night' && points) {
+      const issueForBoard = await assembleIssue({
+        data: points,
+        leagueName: record.league_name || data.leagueName,
+        platform: record.platform,
+        platformLeagueId: id,
+        teamName,
+        team: teamVisual,
+      }).catch(() => null)
+      const cards =
+        issueForBoard?.sections.find((sec) => sec.id === 'power-rankings' || sec.id === 'the-field')
+          ?.cards ?? []
+      const board = new Map(cards.map((c) => [c.teamId, c.rank]))
+
+      const desk = buildMondayDesk({
+        matchups: points.currentWeekMatchups ?? [],
+        priorRank: board.size ? (tid: string) => board.get(tid) : undefined,
+        fieldSize: board.size || undefined,
+        recordOf: (tid: string) => {
+          const st = (points.standings ?? []).find((r) => r.teamId === tid)
+          return st ? { wins: st.catWins, losses: st.catLosses, ties: st.catTies } : undefined
+        },
+        teamName,
+        team: teamVisual,
+      })
+      if (!desk) throw new Error('Nothing is in flight this week.')
+
+      /* THIS SEASON'S series, and said so.
+       *
+       * `h2hRecords` is built from the current season's matchups only.
+       * The all-time version needs a walk back through every previous
+       * league id — ~140 requests — which is not something to do on a
+       * route somebody opened to present from. So the clause says
+       * "this season" rather than borrowing `describeSeries`, whose
+       * wording claims all-time and would be a lie here. */
+      const seriesBetween = (a: string, b: string): string | null => {
+        const rec = (points.h2hRecords ?? []).find(
+          (r) => r.teamId === a && r.opponentId === b,
+        )
+        // One meeting is a result, not a series.
+        if (!rec || rec.meetings < 2) return null
+        if (rec.wins === rec.losses) return `Level this season at ${rec.wins}-${rec.losses}`
+        const [lead, w, l] =
+          rec.wins > rec.losses ? [teamName(a), rec.wins, rec.losses] : [teamName(b), rec.losses, rec.wins]
+        return `${lead} lead this season ${w}-${l}`
+      }
+
+      const night = buildNightDeck({
+        desk,
+        week: points.currentWeek,
+        leagueName: record.league_name || data.leagueName,
+        seriesBetween,
+      })
+      if (night) {
+        deck.value = night
+        loading.value = false
+        return
+      }
+      throw new Error('Nothing is in flight this week.')
+    }
+
     if (deckId === 'live' && points) {
       const live = buildLiveDeck({
         leagueName: record.league_name || data.leagueName,

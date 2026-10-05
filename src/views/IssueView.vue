@@ -138,7 +138,7 @@
       <!-- The Monday desk: live endgame, only while the week is
            split. Authenticated page only — the desk describes a
            moment, and every archived surface describes a week. -->
-      <MondayDesk v-if="mondayDesk" :desk="mondayDesk" />
+      <MondayDesk v-if="mondayDesk" :desk="mondayDesk" :league-id="routeLeagueId || undefined" />
 
       <!-- Share. Sleeper only: a public reader has none of the
            cookies the ESPN and Yahoo adapters need, so those links
