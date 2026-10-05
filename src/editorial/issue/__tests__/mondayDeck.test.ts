@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildNightDeck } from '../buildNightDeck'
+import { buildMondayDeck } from '../buildMondayDeck'
 import type { MondayDesk, MondayDeskRow } from '../buildMondayDesk'
 
 const side = (teamId: string, name: string, points: number, rank?: number, record = '2-1') =>
@@ -31,7 +31,7 @@ describe('the order is the argument', () => {
         }),
       ],
     })
-    const deck = buildNightDeck({ ...base, desk: d })!
+    const deck = buildMondayDeck({ ...base, desk: d })!
     // cold open, then the upset, then the ordinary game.
     expect(deck.slides[1].kind).toBe('statement')
     expect((deck.slides[1] as any).eyebrow).toBe('Upset alert')
@@ -45,7 +45,7 @@ describe('the order is the argument', () => {
         row({ matchupId: 'happening', watch: 'heist' }),
       ],
     })
-    const deck = buildNightDeck({ ...base, desk: d })!
+    const deck = buildMondayDeck({ ...base, desk: d })!
     expect((deck.slides[1] as any).headline).toContain('are beating')
     expect((deck.slides[2] as any).headline).toContain('can still take down')
   })
@@ -54,14 +54,14 @@ describe('the order is the argument', () => {
     // An upset HAPPENING names the underdog as the one in front. One
     // only AVAILABLE names them as the one who could come back. Those
     // are different nights and must not share a sentence.
-    const happening = buildNightDeck({
+    const happening = buildMondayDeck({
       ...base,
       desk: desk({ alive: [row({ matchupId: 'm', watch: 'upset' })] }),
     })!
     expect((happening.slides[1] as any).headline)
       .toBe('No. 2 Alpha are beating No. 7 Bravo.')
 
-    const available = buildNightDeck({
+    const available = buildMondayDeck({
       ...base,
       desk: desk({ alive: [row({ matchupId: 'm', upsetAlert: 'upset' })] }),
     })!
@@ -74,7 +74,7 @@ describe('the order is the argument', () => {
       alive: [row({ matchupId: 'live' })],
       decided: [row({ matchupId: 'over', sub: 'Nothing left' })],
     })
-    const deck = buildNightDeck({ ...base, desk: d })!
+    const deck = buildMondayDeck({ ...base, desk: d })!
     const kinds = deck.slides.map((s) => s.kind)
     expect(kinds[0]).toBe('cold-open')
     expect(kinds[kinds.length - 1]).toBe('sign-off')
@@ -86,7 +86,7 @@ describe('the order is the argument', () => {
 
 describe('storylines', () => {
   it('carries the all-time series and what is at stake', () => {
-    const deck = buildNightDeck({
+    const deck = buildMondayDeck({
       ...base,
       desk: desk({ alive: [row({ matchupId: 'm' })] }),
       seriesBetween: () => 'Alpha lead the all-time series 4-2',
@@ -98,7 +98,7 @@ describe('storylines', () => {
   })
 
   it('never prints the same stake twice', () => {
-    const deck = buildNightDeck({
+    const deck = buildMondayDeck({
       ...base,
       desk: desk({ alive: [row({ matchupId: 'm' })] }),
       stakeFor: () => 'Both are chasing the same record',
@@ -108,13 +108,13 @@ describe('storylines', () => {
   })
 
   it('says nothing rather than something empty', () => {
-    const deck = buildNightDeck({ ...base, desk: desk({ alive: [row({ matchupId: 'm' })] }) })!
+    const deck = buildMondayDeck({ ...base, desk: desk({ alive: [row({ matchupId: 'm' })] }) })!
     expect((deck.slides[1] as any).support).toBeUndefined()
   })
 })
 
 describe('what it refuses to do', () => {
   it('returns null on an empty week', () => {
-    expect(buildNightDeck({ ...base, desk: desk() })).toBeNull()
+    expect(buildMondayDeck({ ...base, desk: desk() })).toBeNull()
   })
 })

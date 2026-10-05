@@ -20,6 +20,9 @@ export interface ColdOpenSlide {
   subtitle: string
   /** e.g. "2026 · 140 picks" */
   meta?: string
+  /** The league's crest. A cover with the league's own badge on it
+   *  reads as theirs; one without reads as a template. */
+  logoUrl?: string
 }
 
 /** One claim, optionally with supporting prose and a few figures. */

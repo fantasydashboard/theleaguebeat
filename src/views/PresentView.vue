@@ -24,6 +24,7 @@
       <header class="present-chrome">
         <span class="present-chrome-brand">Drop Zone League</span>
         <span class="present-chrome-deck">{{ deck.title }} · {{ deck.slides.length }} slides</span>
+        <button type="button" class="present-go-btn" @click="present(0)">▶ Present</button>
         <button
           type="button"
           class="present-export-btn"
@@ -35,21 +36,47 @@
         <router-link :to="backLink" class="present-chrome-exit">Exit</router-link>
       </header>
 
+      <!-- Presenting chrome: position, and the way out. Deliberately
+           thin — anything else on screen competes with the slide. -->
+      <div v-if="presenting" class="stage-bar">
+        <button type="button" class="stage-nav" :disabled="slideIdx === 0" @click.stop="stepPresent(-1)">←</button>
+        <span class="stage-count">{{ slideIdx + 1 }} / {{ slideCount }}</span>
+        <button
+          type="button"
+          class="stage-nav"
+          :disabled="slideIdx >= slideCount - 1"
+          @click.stop="stepPresent(1)"
+        >→</button>
+        <button type="button" class="stage-exit" @click.stop="presenting = false">Esc</button>
+      </div>
+
       <p v-if="exportNote" class="present-note" :data-tone="exportTone">{{ exportNote }}</p>
 
       <!-- Every slide, laid out to scroll. Each frame is a true
            1080x1920 and only SCALED for preview, so what is captured is
            what ships rather than whatever size the window happens to be. -->
-      <div class="sheet">
+      <div class="sheet" :class="{ 'sheet-presenting': presenting }">
         <figure
           v-for="(slide, si) in deck.slides"
+          v-show="!presenting || si === slideIdx"
           :key="si"
           class="sheet-item"
+          @click="presenting && stepPresent(1)"
         >
           <div class="frame" :ref="(el) => setFrame(el, si)">
             <main class="present-stage">
         <!-- COLD OPEN -->
         <section v-if="slide.kind === 'cold-open'" class="slide slide-cold">
+          <!-- The league's own crest, when the platform gave us one.
+               A cover carrying the league's badge reads as theirs; one
+               without reads as a template. -->
+          <img
+            v-if="slide.logoUrl"
+            class="cold-crest"
+            :src="slide.logoUrl"
+            alt=""
+            @error="($event.target as HTMLImageElement).remove()"
+          />
           <p class="cold-brand">Drop Zone League</p>
           <h1 class="cold-title">{{ slide.title }}</h1>
           <p class="cold-sub">{{ slide.subtitle }}</p>
@@ -255,7 +282,7 @@
         </section>
       </main>
           </div>
-          <figcaption class="sheet-cap">
+          <figcaption v-if="!presenting" class="sheet-cap">
             <span class="sheet-num">{{ String(si + 1).padStart(2, '0') }}</span>
             <span class="sheet-name">{{ slideLabel(slide) }}</span>
             <button type="button" class="sheet-one" @click="exportOne(si)">Save</button>
@@ -267,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
@@ -316,7 +343,7 @@ import {
 import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
-import { buildNightDeck } from '@/editorial/issue/buildNightDeck'
+import { buildMondayDeck } from '@/editorial/issue/buildMondayDeck'
 import {
   projectSides,
   buildRemainingIndex,
@@ -342,6 +369,44 @@ const deck = ref<PresentDeck | null>(null)
  * view has an opinion.
  */
 const format: PresentFormat = 'vertical'
+
+/* PRESENTING, as opposed to exporting.
+ *
+ * This screen was reduced to an image exporter — a contact sheet with
+ * a Save under every card — and the route kept the name "present"
+ * while no longer presenting anything. A commissioner opening it to
+ * talk a room through Monday night got a grid of thumbnails.
+ *
+ * So the sheet stays (the cards are still worth exporting) and a
+ * presenting mode sits over it: one slide, full bleed, advanced by
+ * key or click. Same deck, same slides, different surface. */
+const presenting = ref(false)
+const slideIdx = ref(0)
+
+const slideCount = computed(() => deck.value?.slides.length ?? 0)
+
+function present(from = 0) {
+  slideIdx.value = from
+  presenting.value = true
+}
+function stepPresent(delta: number) {
+  if (!presenting.value) return
+  const next = slideIdx.value + delta
+  // Stop at both ends rather than wrapping: a deck that loops back to
+  // the cover mid-sentence reads as a bug from the back of a room.
+  slideIdx.value = Math.min(Math.max(next, 0), Math.max(0, slideCount.value - 1))
+}
+function onPresentKey(e: KeyboardEvent) {
+  if (!presenting.value) return
+  if (e.key === 'Escape') { presenting.value = false; return }
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+    e.preventDefault(); stepPresent(1)
+  } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault(); stepPresent(-1)
+  }
+}
+onMounted(() => window.addEventListener('keydown', onPresentKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onPresentKey))
 
 const backLink = computed(() => {
   const id = route.params.leagueId
@@ -739,7 +804,7 @@ async function load(): Promise<void> {
      * recomputed here could put a team in a different place from the
      * one the reader just scrolled past.
      */
-    if (deckId === 'night' && points) {
+    if (deckId === 'monday' && points) {
       const issueForBoard = await assembleIssue({
         data: points,
         leagueName: record.league_name || data.leagueName,
@@ -831,10 +896,11 @@ async function load(): Promise<void> {
         return `${lead} lead this season ${w}-${l}`
       }
 
-      const night = buildNightDeck({
+      const night = buildMondayDeck({
         desk,
         week: points.currentWeek,
         leagueName: record.league_name || data.leagueName,
+        leagueLogoUrl: points.leagueAvatarUrl,
         seriesBetween,
       })
       if (night) {
@@ -1672,6 +1738,47 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   display: flex; flex-wrap: wrap; gap: 40px;
   justify-content: center; align-items: flex-start;
   padding: 28px 20px;
+}
+/* PRESENTING. The sheet's own scale transform still sizes the frame,
+   so the stage only has to centre it and get everything else out of
+   the way. */
+.sheet-presenting {
+  position: fixed; inset: 0; z-index: 60;
+  margin: 0; padding: 0; gap: 0;
+  background: #000;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.stage-bar {
+  position: fixed; z-index: 61; left: 50%; bottom: 22px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 14px; border-radius: 999px;
+  background: oklch(0.18 0.01 90 / 0.86);
+  border: 1px solid oklch(0.32 0.02 90);
+}
+.stage-nav, .stage-exit {
+  background: none; border: 0; cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: oklch(0.90 0.01 90); font-size: 1rem; padding: 0 6px;
+}
+.stage-nav:disabled { opacity: 0.3; cursor: default; }
+.stage-exit { color: oklch(0.85 0.17 92); }
+.stage-count {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 0.9rem; letter-spacing: 0.14em; color: oklch(0.62 0.01 90);
+}
+.cold-crest {
+  width: 300px; height: 300px; object-fit: contain;
+  border-radius: 48px; margin: 0 auto 48px; display: block;
+}
+.present-go-btn {
+  background: oklch(0.85 0.17 92); color: oklch(0.15 0.02 90);
+  border: 0; border-radius: 999px; cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 0.85rem; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0.4rem 1rem; margin-left: auto;
 }
 .sheet-item { margin: 0; }
 /* The frame is full size; the wrapper shrinks it visually. Width and

@@ -1,11 +1,10 @@
 /**
- * The Night Desk — Monday night, presented.
+ * What Everyone Needs — Monday night's live matchups, presented.
  *
- * A newsroom's night desk works the story while it is still moving,
- * before the morning edition goes out. That is exactly what Monday
- * night is to Tuesday's issue, and it is a different job from the
- * page: a commissioner stands up in front of the league and talks
- * through what is still live.
+ * Named for the question it answers. "The Night Desk" was a nicer
+ * phrase and told a reader nothing: the whole point of standing up in
+ * front of a league on a Monday is to go round the room and say what
+ * each team still needs, so the deck is called that.
  *
  * WHY NOT `buildLiveDeck`. That emits one list of rows sorted by
  * margin — fine as a scoreboard, useless as a presentation. It cannot
@@ -28,7 +27,7 @@
 import type { MondayDesk, MondayDeskRow } from './buildMondayDesk'
 import type { PresentDeck, PresentSlide } from '../present/types'
 
-export interface NightDeckInput {
+export interface MondayDeckInput {
   desk: MondayDesk
   week: number
   leagueName: string
@@ -39,6 +38,8 @@ export interface NightDeckInput {
    * owner-id plumbing. Null when they have not met enough.
    */
   seriesBetween?: (teamIdA: string, teamIdB: string) => string | null
+  /** The league's crest, for the cover. */
+  leagueLogoUrl?: string
   /**
    * Anything the issue would report about this team tomorrow: a
    * record in reach, a streak, a milestone. One clause, already
@@ -48,7 +49,7 @@ export interface NightDeckInput {
 }
 
 /** Every storyline we can attach to one game, best first, de-duped. */
-function storylines(row: MondayDeskRow, input: NightDeckInput): string[] {
+function storylines(row: MondayDeskRow, input: MondayDeckInput): string[] {
   const out: string[] = []
   const series = input.seriesBetween?.(row.left.teamId, row.right.teamId)
   if (series) out.push(series)
@@ -65,7 +66,7 @@ const standing = (s: MondayDeskRow['left']): string =>
 
 function gameSlide(
   row: MondayDeskRow,
-  input: NightDeckInput,
+  input: MondayDeckInput,
   eyebrow: string,
 ): PresentSlide {
   const lines = storylines(row, input)
@@ -85,7 +86,7 @@ function gameSlide(
   }
 }
 
-export function buildNightDeck(input: NightDeckInput): PresentDeck | null {
+export function buildMondayDeck(input: MondayDeckInput): PresentDeck | null {
   const { desk } = input
   if (desk.alive.length === 0 && desk.decided.length === 0) return null
 
@@ -99,12 +100,13 @@ export function buildNightDeck(input: NightDeckInput): PresentDeck | null {
   const slides: PresentSlide[] = [
     {
       kind: 'cold-open',
-      title: 'The Night Desk',
+      title: 'What everyone needs',
       subtitle:
         desk.alive.length === 1
-          ? 'One game still alive.'
-          : `${desk.alive.length} games still alive.`,
+          ? 'One game still alive on Monday night.'
+          : `${desk.alive.length} games still alive on Monday night.`,
       meta: `${input.leagueName} · Week ${input.week}`,
+      logoUrl: input.leagueLogoUrl,
     },
   ]
 
@@ -151,9 +153,9 @@ export function buildNightDeck(input: NightDeckInput): PresentDeck | null {
 
   slides.push({
     kind: 'sign-off',
-    headline: 'That is the desk.',
+    headline: 'That is the Monday.',
     support: 'Live numbers — they move until the last whistle. The issue lands tomorrow.',
   })
 
-  return { id: 'night', title: 'The Night Desk', slides }
+  return { id: 'monday', title: 'What everyone needs', slides }
 }

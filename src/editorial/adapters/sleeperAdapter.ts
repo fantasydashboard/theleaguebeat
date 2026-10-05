@@ -342,6 +342,11 @@ export async function sleeperLeagueToCategoryData(
     format: 'h2h-category',
     leagueId,
     leagueName: league.name || 'Sleeper League',
+    // Sleeper stores a bare hash; the CDN path is the same shape it
+    // uses for user avatars.
+    leagueAvatarUrl: league.avatar
+      ? `https://sleepercdn.com/avatars/${league.avatar}`
+      : undefined,
     currentWeek,
     currentSeason,
     playoffCutoff,

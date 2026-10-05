@@ -596,6 +596,12 @@ export interface LeagueDataH2HPoints {
    */
   rosterPositions?: string[]
 
+  /** The league's own crest, when the platform has one. Sleeper
+   *  exposes `league.avatar`; it was never carried through, so every
+   *  surface that wanted to show whose league this is had nothing to
+   *  show. */
+  leagueAvatarUrl?: string
+
   /**
    * Every manager's career in this league, across every season the
    * platform will give us. Feeds the preseason record book — the only

@@ -26,13 +26,13 @@ defineProps<{
       <h2 class="desk-headline">{{ desk.headline }}</h2>
       <p class="desk-support">{{ desk.support }}</p>
       <!-- The commissioner's version: the same desk, ordered as an
-           argument — upsets first, decided games last — and sized for
-           a room rather than a scroll. -->
+           argument — upsets first, decided games last — full screen
+           and advanced a slide at a time. -->
       <RouterLink
         v-if="leagueId"
-        :to="`/leagues/${leagueId}/present/night`"
+        :to="`/leagues/${leagueId}/present/monday`"
         class="desk-present"
-      >▶ Present the Night Desk</RouterLink>
+      >▶ Present what everyone needs</RouterLink>
     </header>
 
     <div class="desk-group">
