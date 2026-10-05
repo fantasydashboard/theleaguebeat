@@ -60,6 +60,15 @@ function storylines(row: MondayDeskRow, input: MondayDeckInput): string[] {
   return out
 }
 
+/** Both sides' badges, in the order the row draws them. */
+const crestsOf = (row: MondayDeskRow) =>
+  [row.left, row.right].map((s) => ({
+    name: s.name,
+    logoUrl: s.logoUrl,
+    logoColor: s.logoColor,
+    logoInitials: s.logoInitials,
+  }))
+
 /** "No. 5 · 2-1" — who they are on the board, in one line. */
 const standing = (s: MondayDeskRow['left']): string =>
   [s.rank ? `No. ${s.rank}` : null, s.record].filter(Boolean).join(' · ')
@@ -77,6 +86,7 @@ function gameSlide(
     // what has to happen — because that is what a room argues about.
     headline: row.sub,
     support: lines.length ? lines.join(' · ') : undefined,
+    crests: crestsOf(row),
     chips: [
       { value: `${row.left.points.toFixed(1)}`, label: row.left.name },
       { value: `${row.right.points.toFixed(1)}`, label: row.right.name },
@@ -122,6 +132,7 @@ export function buildMondayDeck(input: MondayDeckInput): PresentDeck | null {
         ? `No. ${row.left.rank} ${row.left.name} are beating No. ${row.right.rank} ${row.right.name}.`
         : `No. ${row.right.rank} ${row.right.name} can still take down No. ${row.left.rank} ${row.left.name}.`,
       support: [row.sub, ...storylines(row, input)].filter(Boolean).join(' · '),
+      crests: crestsOf(row),
       chips: [
         { value: `${row.left.points.toFixed(1)}`, label: row.left.name },
         { value: `${row.right.points.toFixed(1)}`, label: row.right.name },

@@ -55,7 +55,11 @@
       <!-- Every slide, laid out to scroll. Each frame is a true
            1080x1920 and only SCALED for preview, so what is captured is
            what ships rather than whatever size the window happens to be. -->
-      <div class="sheet" :class="{ 'sheet-presenting': presenting }">
+      <div
+        class="sheet"
+        :class="{ 'sheet-presenting': presenting }"
+        :style="presenting ? { '--stage-scale': String(stageScale) } : undefined"
+      >
         <figure
           v-for="(slide, si) in deck.slides"
           v-show="!presenting || si === slideIdx"
@@ -85,6 +89,18 @@
 
         <!-- STATEMENT -->
         <section v-else-if="slide.kind === 'statement'" class="slide slide-statement">
+          <!-- Who the claim is about, before the claim. -->
+          <div v-if="slide.crests?.length" class="stmt-crests">
+            <span
+              v-for="(c, ci) in slide.crests"
+              :key="ci"
+              class="stmt-crest"
+              :style="{ background: c.logoColor ? `linear-gradient(135deg, ${c.logoColor})` : undefined }"
+            >
+              <img v-if="c.logoUrl" :src="c.logoUrl" alt="" @error="($event.target as HTMLImageElement).remove()" />
+              <span v-else>{{ c.logoInitials || c.name.slice(0, 2).toUpperCase() }}</span>
+            </span>
+          </div>
           <p class="slide-eyebrow">{{ slide.eyebrow }}</p>
           <h2 class="slide-headline">{{ slide.headline }}</h2>
           <p v-if="slide.support" class="slide-support">{{ slide.support }}</p>
@@ -294,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { espnSportFor } from '@/utils/espnSport'
 import { useLeaguesStore } from '@/stores/leaguesNew'
@@ -382,6 +398,40 @@ const format: PresentFormat = 'vertical'
  * key or click. Same deck, same slides, different surface. */
 const presenting = ref(false)
 const slideIdx = ref(0)
+
+/* FIT THE SCREEN, and in the screen's own shape.
+ *
+ * Two things were wrong and the second is the real one.
+ *
+ * The frame is scaled by a flat `scale(0.24)` — correct for a contact
+ * sheet of thumbnails, and presenting inherited it, so a slide
+ * rendered at 259x461 in the middle of a monitor.
+ *
+ * But scaling that frame up would still be wrong, because the deck is
+ * cut 1080x1920. That is a phone shape, chosen when this screen became
+ * a social-card exporter. A 9:16 slide on a 16:9 screen can only ever
+ * fill about a third of the width however well it is scaled, and this
+ * is for presenting to a league over video. So presenting switches the
+ * frame to 1920x1080 and scales THAT to fit.
+ *
+ * Export keeps 1080x1920 — the cards are still for phones.
+ */
+const STAGE_W = 1920
+const STAGE_H = 1080
+const stageScale = ref(1)
+function fitStage() {
+  if (!presenting.value) return
+  // Leave room for the control bar rather than letting it sit on the
+  // slide's last line.
+  const pad = 96
+  stageScale.value = Math.min(
+    (window.innerWidth - 32) / STAGE_W,
+    (window.innerHeight - pad) / STAGE_H,
+  )
+}
+watch(presenting, (on) => { if (on) nextTick(fitStage) })
+onMounted(() => window.addEventListener('resize', fitStage))
+onBeforeUnmount(() => window.removeEventListener('resize', fitStage))
 
 const slideCount = computed(() => deck.value?.slides.length ?? 0)
 
@@ -1767,6 +1817,20 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   align-items: center; justify-content: center;
   cursor: pointer;
 }
+/* Landscape, and sized to the window. `transform-origin: center` so
+   the scaled box stays centred; the wrapper is given the SCALED
+   dimensions so the flex centring has something real to centre. */
+.sheet-presenting .sheet-item {
+  width: calc(1920px * var(--stage-scale));
+  height: calc(1080px * var(--stage-scale));
+  display: grid; place-items: center;
+}
+.sheet-presenting .frame {
+  width: 1920px; height: 1080px;
+  transform: scale(var(--stage-scale));
+  transform-origin: center;
+  border-radius: 0;
+}
 .stage-bar {
   position: fixed; z-index: 61; left: 50%; bottom: 22px;
   transform: translateX(-50%);
@@ -1787,6 +1851,18 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
   font-size: 0.9rem; letter-spacing: 0.14em; color: oklch(0.62 0.01 90);
 }
+.stmt-crests {
+  display: flex; align-items: center; justify-content: center;
+  gap: 40px; margin-bottom: 56px;
+}
+.stmt-crest {
+  width: 160px; height: 160px; border-radius: 34px; overflow: hidden;
+  display: grid; place-items: center; flex: none;
+  background: oklch(0.20 0.02 90);
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: 54px; color: oklch(0.72 0.01 90);
+}
+.stmt-crest img { width: 100%; height: 100%; object-fit: cover; }
 .cold-crest {
   width: 300px; height: 300px; object-fit: contain;
   border-radius: 48px; margin: 0 auto 48px; display: block;

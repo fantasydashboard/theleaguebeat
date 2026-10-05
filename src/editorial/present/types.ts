@@ -32,6 +32,14 @@ export interface StatementSlide {
   headline: string
   support?: string
   chips?: { value: string; label: string }[]
+  /**
+   * The teams the claim is about, drawn as crests.
+   *
+   * A slide saying "No. 8 are beating No. 2" with no badges on it
+   * makes a room work out who that is from the names alone. Two
+   * crests answer it before the sentence is read.
+   */
+  crests?: { name: string; logoUrl?: string; logoColor?: string; logoInitials?: string }[]
 }
 
 /**
