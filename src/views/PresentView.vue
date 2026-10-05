@@ -317,6 +317,13 @@ import { loadIssue as assembleIssue } from '@/editorial/issue/loadIssue'
 import { buildLiveDeck } from '@/editorial/issue/buildLiveDeck'
 import { buildMondayDesk } from '@/editorial/issue/buildMondayDesk'
 import { buildNightDeck } from '@/editorial/issue/buildNightDeck'
+import {
+  projectSides,
+  buildRemainingIndex,
+  buildPendingIndex,
+  teamsStillPlaying,
+  scheduleUrl,
+} from '@/editorial/points/liveRemaining'
 
 const route = useRoute()
 const leaguesStore = useLeaguesStore()
@@ -746,8 +753,53 @@ async function load(): Promise<void> {
           ?.cards ?? []
       const board = new Map(cards.map((c) => [c.teamId, c.rank]))
 
+      /* HYDRATE THE PROJECTIONS FIRST.
+       *
+       * `isDecided` reads `homeProjected`/`awayProjected` to tell a
+       * finished game from one with players still to come. Sleeper's
+       * raw matchups carry neither, so every game looks alive, nothing
+       * looks decided, and the desk's split-week gate returns null —
+       * which is exactly how this route first shipped saying "nothing
+       * is in flight" on a Monday with three games live.
+       *
+       * The page does this lazily after first paint. A present route
+       * has nothing to paint until the deck exists, so it waits. */
+      let liveMatchups = points.currentWeekMatchups ?? []
+      let pendingByTeam: Record<string, { name: string; points: number }[]> = {}
+      const starters = points.currentWeekStarters
+      if (starters && Object.keys(starters).length > 0) {
+        try {
+          const [schedule, projections] = await Promise.all([
+            fetch(scheduleUrl(points.currentSeason)).then((r) => (r.ok ? r.json() : [])),
+            fetch(projectionsUrl(Number(points.currentSeason))).then((r) => (r.ok ? r.json() : [])),
+          ])
+          const playing = teamsStillPlaying(
+            Array.isArray(schedule) ? schedule : [],
+            points.currentWeek,
+          )
+          const proj = Array.isArray(projections) ? projections : []
+          liveMatchups = projectSides({
+            matchups: liveMatchups,
+            startersByTeam: starters,
+            remainingFor: buildRemainingIndex(proj, playing),
+          })
+          const pendingOf = buildPendingIndex(proj, playing)
+          for (const [teamId, ids] of Object.entries(starters)) {
+            const waiting = (ids ?? [])
+              .map((pid) => pendingOf(pid))
+              .filter((x): x is { name: string; points: number } => !!x)
+            if (waiting.length) pendingByTeam[teamId] = waiting
+          }
+        } catch {
+          // Projections are an enrichment, not a precondition for the
+          // rest of the route. Fall through on the raw matchups and let
+          // the desk's own gate decide.
+        }
+      }
+
       const desk = buildMondayDesk({
-        matchups: points.currentWeekMatchups ?? [],
+        matchups: liveMatchups,
+        stillToPlay: (tid: string) => pendingByTeam[tid],
         priorRank: board.size ? (tid: string) => board.get(tid) : undefined,
         fieldSize: board.size || undefined,
         recordOf: (tid: string) => {
