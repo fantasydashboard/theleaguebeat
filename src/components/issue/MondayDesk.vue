@@ -30,7 +30,7 @@ defineProps<{
            and advanced a slide at a time. -->
       <RouterLink
         v-if="leagueId"
-        :to="`/leagues/${leagueId}/present/monday`"
+        :to="`/leagues/${leagueId}/present/monday?present=1`"
         class="desk-present"
       >▶ Present what everyone needs</RouterLink>
     </header>

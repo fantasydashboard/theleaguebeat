@@ -385,9 +385,27 @@ const slideIdx = ref(0)
 
 const slideCount = computed(() => deck.value?.slides.length ?? 0)
 
+// Applied wherever the deck lands rather than at each of the five
+// return points, so a new deck type cannot forget it.
+watch(deck, (d) => {
+  if (d && wantsPresenting()) present(0)
+})
+
 function present(from = 0) {
   slideIdx.value = from
   presenting.value = true
+}
+
+/* ?present=1 — open presenting rather than on the export sheet.
+ *
+ * Both surfaces are wanted: the sheet produces the cards, the stage
+ * runs the room. But a link labelled "Present what everyone needs"
+ * landing on a grid of thumbnails with Save buttons under them is the
+ * wrong answer to its own label, so the desk's link carries the flag
+ * and the export route stays the bare URL. */
+const wantsPresenting = () => {
+  const q = route.query.present
+  return q === '1' || q === 'true' || q === ''
 }
 function stepPresent(delta: number) {
   if (!presenting.value) return
