@@ -56,18 +56,17 @@
            1080x1920 and only SCALED for preview, so what is captured is
            what ships rather than whatever size the window happens to be. -->
       <div
-        class="sheet"
-        :class="{ 'sheet-presenting': presenting }"
+        :class="presenting ? 'stage' : 'sheet'"
         :style="presenting ? { '--stage-scale': String(stageScale) } : undefined"
       >
         <figure
           v-for="(slide, si) in deck.slides"
           v-show="!presenting || si === slideIdx"
           :key="si"
-          class="sheet-item"
+          :class="presenting ? 'stage-item' : 'sheet-item'"
           @click="presenting && stepPresent(1)"
         >
-          <div class="frame" :ref="(el) => setFrame(el, si)">
+          <div :class="presenting ? 'stage-frame' : 'frame'" :ref="(el) => setFrame(el, si)">
             <main class="present-stage">
         <!-- COLD OPEN -->
         <section v-if="slide.kind === 'cold-open'" class="slide slide-cold">
@@ -1807,29 +1806,40 @@ watch(() => [route.params.leagueId, route.params.deckId], () => void load())
   justify-content: center; align-items: flex-start;
   padding: 28px 20px;
 }
-/* PRESENTING. The sheet's own scale transform still sizes the frame,
-   so the stage only has to centre it and get everything else out of
-   the way. */
-.sheet-presenting {
+/* ── PRESENTING ─────────────────────────────────────────────────
+   Its own class names, deliberately.
+
+   The first attempt reused `.sheet-item` and `.frame` and tried to
+   beat them with !important — `flex: 0 0 259px`, `overflow: hidden`
+   and a -1459px bottom margin are all tuned for a grid of shrunken
+   portrait thumbnails, and every one of them had to be undone. Three
+   !importants in a row is the sign you are fighting a layout built
+   for something else, so presenting now shares no rules with the
+   sheet and inherits none of its assumptions.
+
+   Landscape, because this is presented to a room over video: a 9:16
+   slide on a 16:9 screen fills a third of the width however well it
+   is scaled. Export keeps the portrait frame — those cards are for
+   phones. */
+.stage {
   position: fixed; inset: 0; z-index: 60;
-  margin: 0; padding: 0; gap: 0;
+  display: grid; place-items: center;
   background: #000;
-  align-items: center; justify-content: center;
   cursor: pointer;
 }
-/* Landscape, and sized to the window. `transform-origin: center` so
-   the scaled box stays centred; the wrapper is given the SCALED
-   dimensions so the flex centring has something real to centre. */
-.sheet-presenting .sheet-item {
-  width: calc(1920px * var(--stage-scale));
-  height: calc(1080px * var(--stage-scale));
+.stage-item {
+  margin: 0;
+  width: calc(1920px * var(--stage-scale, 1));
+  height: calc(1080px * var(--stage-scale, 1));
   display: grid; place-items: center;
 }
-.sheet-presenting .frame {
+.stage-frame {
+  position: relative;
   width: 1920px; height: 1080px;
-  transform: scale(var(--stage-scale));
+  background: oklch(0.06 0.014 90);
+  overflow: hidden;
+  transform: scale(var(--stage-scale, 1));
   transform-origin: center;
-  border-radius: 0;
 }
 .stage-bar {
   position: fixed; z-index: 61; left: 50%; bottom: 22px;
